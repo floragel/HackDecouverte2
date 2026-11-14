@@ -5,7 +5,7 @@
 Lync has two halves that live in one Android app:
 
 - **Network**: a campus-only social app (Instagram × LinkedIn × Snap Map). Feed, stories, classmates, clubs, events, live friends map and a holographic student card.
-- **Maps**: indoor navigation down to the room. Pick `MB-2.255`, and the phone guides you there floor by floor, using step counting instead of GPS.
+- **Maps**: door-to-door navigation down to the room. Pick `MB-2.255` (or tap a class in your calendar): Lync walks you there through the streets like Google Maps, then switches by itself to the indoor floor plan when you enter the building, detects your floor from altitude and guides you floor by floor with step counting.
 
 Built for the HackDécouverte hackathon, starting with Concordia University (Montréal). Bilingual English (default) / French. Android first (Kotlin + Jetpack Compose), iOS later (SwiftUI, same structure).
 
@@ -13,7 +13,7 @@ Built for the HackDécouverte hackathon, starting with Concordia University (Mon
 |---|---|
 | Buildings mapped | John Molson (MB), floors 1 to 7 |
 | Navigation graph | 761 points, about 300 rooms, stairs and elevators linked between floors |
-| Unit tests | 101, all passing |
+| Unit tests | 120, all passing |
 | Backend | Supabase (optional: the app runs offline on demo data) |
 
 ---
@@ -23,15 +23,16 @@ Built for the HackDécouverte hackathon, starting with Concordia University (Mon
 1. [Run it](#run-it)
 2. [Features](#features)
 3. [How indoor navigation works](#how-indoor-navigation-works)
-4. [Where the MB floor plans come from](#where-the-mb-floor-plans-come-from)
-5. [Architecture](#architecture)
-6. [Project layout](#project-layout)
-7. [Supabase](#supabase)
-8. [Tests](#tests)
-9. [Privacy](#privacy)
-10. [Branches](#branches)
-11. [Known limits](#known-limits)
-12. [Credits](#credits)
+4. [Door to door: outside, then inside](#door-to-door-outside-then-inside)
+5. [Where the MB floor plans come from](#where-the-mb-floor-plans-come-from)
+6. [Architecture](#architecture)
+7. [Project layout](#project-layout)
+8. [Supabase](#supabase)
+9. [Tests](#tests)
+10. [Privacy](#privacy)
+11. [Branches](#branches)
+12. [Known limits](#known-limits)
+13. [Credits](#credits)
 
 ---
 
@@ -62,7 +63,16 @@ sdk.dir=C:/Users/<you>/AppData/Local/Android/Sdk
 > Use forward slashes in `sdk.dir` on Windows: backslashes must be doubled in a `.properties` file.
 > Don't keep the project in an iCloud- or OneDrive-synced folder: synced copies like `file 2.kt` break the build.
 
-### Try indoor navigation
+### Try door-to-door navigation
+
+1. **Calendar tab** › tap a class › **Get walking directions**, or **Map tab** › search a room (`2.210`, `MB-1.437`, `H-920`…) › **Directions**.
+2. Outside: the walking route, time and arrival appear. Press **Start** for turn-by-turn guidance ("In 80 m, turn right onto Rue Guy").
+3. Walk into the John Molson building: the map turns into the floor plan by itself, says which floor you're on and keeps guiding you to the room.
+4. Already inside? Press **I'm already inside**, pick where you stand (a room, stairs, elevator or exit): that is your starting point, then your steps move the dot. **Change** it any time if the dot drifts.
+
+Far from campus (more than 8 km), the app offers to open the phone's Maps app for the metro or bus, and takes over at the door.
+
+### Try indoor navigation only
 
 **Map tab › Find a room** opens the MB plan.
 
@@ -89,7 +99,10 @@ sdk.dir=C:/Users/<you>/AppData/Local/Android/Sdk
 
 ### Maps
 
-- **Campus map**: friends and classmates live, ghost mode, **"Qui est là ?"** (friends grouped by building), room search.
+- **Door-to-door directions** from any room, building or calendar class: walking route on the street map, then the indoor plan inside MB, with a trip bar *Outside → MB → 2.210*.
+- **Floor from altitude**: the barometer pressure measured in the street is compared to the pressure inside to find your floor.
+- **Set your own position** inside: choose the room you stand at, the pedometer takes it from there.
+- **Campus map**: friends and classmates live, ghost mode, **"Qui est là ?"** (friends grouped by building), search over every real MB room and Concordia building.
 - **Indoor plan of MB**: 7 floors, room search, turn-by-turn directions in English or French, step-free routes, elevator / stairs / exit icons.
 - **Light and dark mode** button right on the map (same setting as Settings › Appearance).
 - **Developer menu** (Settings › Developer › Indoor navigation test): the raw test screens of the navigation engine, with step count, heading and sensor status.
@@ -110,9 +123,28 @@ The full explanation (sensors, clocks, formulas) is in [`ALGORITHM.md`](ALGORITH
 
 ---
 
+## Door to door: outside, then inside
+
+One screen (`ui/go/GoScreen.kt`) handles the whole trip.
+
+1. **Where to?** `CampusPlaces` reads free text from the calendar or the search: `JMSB, MB-2.210` → MB, floor 2, room 2.210; `H-920` → Hall building, floor 9.
+2. **Outside.** The walking route comes from the free OpenStreetMap routing service (OSRM, foot profile, no key), towards the MB door closest to you. The screen shows time, distance and arrival time, then follows you with a tilted camera and turn-by-turn cards. It recalculates when you are more than 35 m off route. Offline, it falls back to a straight line.
+3. **Entering MB.** The screen switches to the floor plan when:
+   - GPS places you inside the building twice in a row, or
+   - you were at a door and GPS suddenly gets much less accurate, or stops for 12 s (walls block the sky).
+
+   Step tracking then starts at the door you came through, and the route continues on the MB graph up to the room.
+4. **Which floor?** A phone barometer reads absolute pressure, and the weather shifts that by about ±20 hPa (±170 m), so pressure alone can't give a floor. Lync samples the pressure **in the street** next to MB. Inside, the height above the street is `h = 44330 · (1 − (p / p₀)^(1/5.255))`, matched to the nearest floor (ground floor at street level, +5 m for floor 2, then +4 m per floor). Without a street sample, it assumes the ground floor if you came from outside, or asks you. Stair and elevator climbs are then followed by the barometer as before.
+5. **Your own reference.** Inside, you can set your position yourself: pick the room, stairs or door next to you. That point becomes the origin and each step moves you from it.
+6. **Leaving.** Three clean GPS fixes more than 30 m outside the building bring back the street map, unless you chose "I'm already inside" by hand.
+
+Code: `data/places/` (place parser, OSRM client, route progress), `pdr/AltitudeFloorEstimator.kt`, `IndoorNavigationBackend.enterBuilding()`.
+
+---
+
 ## Where the MB floor plans come from
 
-Concordia does not publish detailed floor plans, so we made our own. The tools are on the [`mb-floor-plans`](https://github.com/floragel/HackDecouverte2/tree/mb-floor-plans) branch.
+Concordia does not publish detailed floor plans, so we made our own. The sources and the graph editor are in [`floor-plans/MB/`](floor-plans/MB/README.md) (run `python floor-plans/MB/editor_server.py`, then open the page it prints).
 
 1. **Photos**: we photographed the evacuation plan on each floor.
 2. **Vectorization**: a Python script straightens the photo, removes the red evacuation layer and traces the walls as SVG.
@@ -174,13 +206,16 @@ app/src/main/
 │   ├── AppContainer.kt           picks DemoRepository or SupabaseRepository
 │   ├── code/                     Lync code (encoder, renderer) + NFC
 │   ├── data/                     models, CampusRepository, demo/, supabase/,
-│   │                             location/, calendar/, Buildings, Rooms
+│   │                             location/, calendar/, places/ (place parser,
+│   │                             walking router, room directory), Buildings
 │   └── ui/                       one folder per screen: feed/, network/, map/,
 │                                 calendar/, profile/, card/, scan/, settings/,
-│                                 indoor/ (MB plan), theme/, components/, motion/
+│                                 go/ (door-to-door trip), indoor/ (MB plan),
+│                                 theme/, components/, motion/
 ├── java/com/hackdecouverte/      the indoor navigation engine
 │   ├── backend/                  IndoorNavigationBackend (the facade), OSM loader
-│   ├── pdr/                      step detection, heading, PdrTracker (pure Kotlin)
+│   ├── pdr/                      step detection, heading, PdrTracker, barometer
+│   │                             floors, AltitudeFloorEstimator (pure Kotlin)
 │   ├── map/                      FloorPlan, BuildingGraph, GeoReference, SVG parser
 │   ├── sensor/                   Android sensors and GPS adapters
 │   └── ui/                       the engine's own test screens (developer menu)
@@ -189,6 +224,7 @@ app/src/main/
 │   ├── floor-plans/MB/           MB-floor-01..07.svg (aligned walls)
 │   └── osm/                      streets and buildings around MB
 └── res/                          strings (EN/FR), fonts, icons
+floor-plans/MB/                   graph source (MB-graph.json), aligned SVGs, graph editor
 supabase/                         schema.sql, migrations/, seed/
 design/                           style guide, logo, app icon, fonts
 ```
@@ -228,9 +264,10 @@ To force the offline demo even with keys: `lync.demo=true` in `local.properties`
 ./gradlew :app:testDebugUnitTest
 ```
 
-101 unit tests, run on the computer without a phone:
+120 unit tests, run on the computer without a phone:
 
 - **Navigation engine**: step detection and its accelerometer fallback, heading, true-north alignment, path smoothing, routes across floors, a corridor-turn regression, MB plan and OpenStreetMap parsing.
+- **Door to door**: floor from altitude, place parsing (`JMSB, MB-2.210`, `H-920`…), OSRM route parsing and route progress.
 - **Lync**: Lync code encoding and decoding, calendar `.ics` parsing.
 
 ---
@@ -251,18 +288,20 @@ Users are 16 to 24, and some are minors.
 
 | Branch | What it holds |
 |---|---|
-| `main` | The merged app: Lync + indoor navigation + MB plans |
+| `main` | Everything: Lync + door-to-door navigation + indoor engine + MB plans and graph editor |
 | [`lync-network`](https://github.com/floragel/HackDecouverte2/tree/lync-network) | The Lync app (network, design, Supabase, map, calendar) |
 | [`algorythme`](https://github.com/floragel/HackDecouverte2/tree/algorythme) | The indoor navigation engine and its test app |
 | [`mb-floor-plans`](https://github.com/floragel/HackDecouverte2/tree/mb-floor-plans) | MB floor plans: photos to SVG, alignment, graph editor, exports |
-| [`lync-algorythme`](https://github.com/floragel/HackDecouverte2/tree/lync-algorythme) | Where the merge was prepared |
+| [`lync-algorythme`](https://github.com/floragel/HackDecouverte2/tree/lync-algorythme) | Working branch of the merged app (same as `main`) |
 
 ---
 
 ## Known limits
 
 - **One building**: only MB is mapped so far. Adding one takes about 3 hours with the same tools, plus the photos.
-- **Drift**: step counting gets less accurate with distance. Restarting from a known room resets it.
+- **Drift**: step counting gets less accurate with distance. Setting your position again from a known room resets it.
+- **Floor from altitude** needs a barometer and a street sample taken near MB; floor heights (5 m, then 4 m) are estimates still to be checked on site.
+- **Outdoor routes** depend on the public OSRM server (straight line when offline).
 - **Plans come from photos**: furniture stays visible as a light background; room numbers are redrawn cleanly from the graph.
 - **Android only** for now. iPhones can read NFC but not act as an NFC card, so on iOS the card will show the Lync code to scan.
 - Indoor navigation needs more real walking tests in the building.
