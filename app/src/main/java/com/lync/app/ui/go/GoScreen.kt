@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -68,6 +69,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -82,6 +84,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.hackdecouverte.backend.IndoorNavigationBackend
 import com.hackdecouverte.backend.NavigationSnapshot
@@ -140,6 +143,9 @@ private const val ARRIVED_OUTDOOR_M = 18.0
 private const val INDOOR_WALK_SPEED_MPS = 1.2
 /** Beyond this, walking directions make no sense: offer the system Maps app (transit, car…). */
 private const val FAR_FROM_CAMPUS_M = 8_000.0
+/** Last clean outdoor fix this close to the building, then GPS degrades / stops = you went in. */
+private const val DOOR_RADIUS_M = 15.0
+private const val GPS_LOST_AT_DOOR_S = 12.0
 
 /**
  * One trip, door to door: "Y aller" from the calendar, the map search or a room.
@@ -226,9 +232,14 @@ private fun GoTrip(place: Place, backend: IndoorNavigationBackend, snap: Navigat
     /** "Set my position": pick the room / stairs / door you stand at, then the pedometer takes over from there. */
     var pickPosition by remember { mutableStateOf(false) }
     val indoorCamera = remember { IndoorCamera() }
+    /** Indoors the pedometer should run; started as soon as the compass heading is usable (it is not, right after the sensors restart). */
+    var wantTracking by remember { mutableStateOf(false) }
+    /** How far outside the footprint the last clean outdoor fix was (to catch "GPS died at the door"). */
+    var lastOutsideByM by remember { mutableStateOf(Double.MAX_VALUE) }
 
     val fix = snap.latestGpsFix
     val me = fix?.wgs84?.let { GeoPoint(it.latitude, it.longitude) }
+    val latestFix by rememberUpdatedState(fix)
 
     fun enterIndoor(manual: Boolean = false) {
         if (!place.hasIndoorMap) return
@@ -237,9 +248,9 @@ private fun GoTrip(place: Place, backend: IndoorNavigationBackend, snap: Navigat
         val floorId = "MB-${estimate.floorNumber}".takeIf { id -> snap.floors.any { it.floorId == id } } ?: "MB-1"
         destKey?.let(backend::setDestination)
         backend.enterBuilding(floorId, lastOutdoorM ?: fix?.eastNorthM)
+        wantTracking = true
         indoorCamera.recenter()
         welcome = estimate
-        // Opened the trip already inside, with no street pressure to compare: ask instead of guessing
         // Entered by hand or no street pressure to compare: let the user set their own reference point
         pickPosition = manual
         askFloor = !manual && estimate.source == AltitudeFloorSource.ENTRANCE_ASSUMED && lastOutdoorM == null
@@ -251,21 +262,44 @@ private fun GoTrip(place: Place, backend: IndoorNavigationBackend, snap: Navigat
     LaunchedEffect(fix?.elapsedRealtimeNs) {
         val f = fix ?: return@LaunchedEffect
         val out = outsideBy(f.eastNorthM)
-        if (out > 0.0 && f.accuracyM <= 25.0) lastOutdoorM = f.eastNorthM
+        if (out > 0.0 && f.accuracyM <= 25.0) { lastOutdoorM = f.eastNorthM; lastOutsideByM = out }
         when (mode) {
             GoMode.Outdoor -> if (place.hasIndoorMap && autoIndoor) {
-                insideStreak = if (out == 0.0 && f.accuracyM <= 35.0) insideStreak + 1 else 0
-                if (insideStreak >= 2) enterIndoor()
+                // Indoors GPS gets coarse: accept a wide fix as long as it is centred in the building
+                insideStreak = if (out == 0.0 && f.accuracyM <= 60.0) insideStreak + 1 else 0
+                // Right at a door and the fix suddenly degrades: walls block the sky, you just went in
+                val degradedAtDoor = lastOutsideByM <= DOOR_RADIUS_M && f.accuracyM > 30.0 && out <= DOOR_RADIUS_M + f.accuracyM
+                if (insideStreak >= 2 || degradedAtDoor) enterIndoor()
             }
             GoMode.Indoor -> if (!manualIndoor) {
                 outsideStreak = if (out > LEAVE_DISTANCE_M && f.accuracyM <= 10.0) outsideStreak + 1 else 0
                 if (outsideStreak >= 3) {
                     outsideStreak = 0; insideStreak = 0
                     backend.stopToSetup()
+                    wantTracking = false
                     mode = GoMode.Outdoor
                     camera = if (started) OutdoorCamera.Follow else OutdoorCamera.Overview
                 }
             }
+        }
+    }
+    // GPS often stops completely inside: no fix for a while right after being at a door = inside
+    LaunchedEffect(mode, autoIndoor, lastOutsideByM) {
+        if (mode != GoMode.Outdoor || !autoIndoor || !place.hasIndoorMap || lastOutsideByM > DOOR_RADIUS_M) return@LaunchedEffect
+        while (true) {
+            delay(2_000)
+            val last = latestFix ?: continue
+            val ageS = (android.os.SystemClock.elapsedRealtimeNanos() - last.elapsedRealtimeNs) / 1e9
+            if (ageS >= GPS_LOST_AT_DOOR_S && outsideBy(last.eastNorthM) <= DOOR_RADIUS_M) { enterIndoor(); break }
+        }
+    }
+    // Start the pedometer as soon as it can (heading valid, phone flat enough), and stop asking once it runs
+    LaunchedEffect(mode, wantTracking, snap.pdr.canStart, snap.pdr.phase) {
+        if (mode != GoMode.Indoor || !wantTracking) return@LaunchedEffect
+        when (snap.pdr.phase) {
+            PdrPhase.TRACKING, PdrPhase.CALIBRATING, PdrPhase.SETTLING -> wantTracking = false
+            PdrPhase.IDLE -> if (snap.pdr.canStart && backend.startWithSavedOrDefaultStepLength()) wantTracking = false
+            PdrPhase.PAUSED -> Unit
         }
     }
     LaunchedEffect(welcome) { if (welcome != null) { delay(5_000); welcome = null } }
@@ -339,7 +373,7 @@ private fun GoTrip(place: Place, backend: IndoorNavigationBackend, snap: Navigat
                     ManeuverCard(indoorIcon(indoorRoute), indoorDistance(indoorRoute), instructionText(indoorRoute), null, arrived = indoorRoute.isArrived)
                 mode == GoMode.Outdoor && started && progress != null && !arrivedOutside -> {
                     val next = progress.nextStep
-                    val then = route?.let { r -> r.steps.getOrNull(r.steps.indexOf(next) + 1) }
+                    val then = next?.let { n -> route?.let { r -> r.steps.indexOf(n).takeIf { it >= 0 }?.let { r.steps.getOrNull(it + 1) } } }
                     ManeuverCard(
                         icon = maneuverIcon(next?.maneuver ?: Maneuver.STRAIGHT),
                         distance = formatDistance(progress.distanceToNextStepM),
@@ -369,7 +403,7 @@ private fun GoTrip(place: Place, backend: IndoorNavigationBackend, snap: Navigat
                 floors = snap.floors.map { it.floorId },
                 active = snap.activeFloorId,
                 onPick = { haptics.tick(); backend.switchActiveFloor(it) },
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 12.dp),
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = 12.dp).offset { IntOffset(0, topPx.toInt() + 8.dp.roundToPx()) },
             )
         }
 
@@ -419,6 +453,7 @@ private fun GoTrip(place: Place, backend: IndoorNavigationBackend, snap: Navigat
                             haptics.tick()
                             autoIndoor = false
                             backend.stopToSetup()
+                            wantTracking = false
                             mode = GoMode.Outdoor
                             camera = OutdoorCamera.Overview
                         },
@@ -442,7 +477,7 @@ private fun GoTrip(place: Place, backend: IndoorNavigationBackend, snap: Navigat
                 haptics.confirm()
                 // The picked spot becomes the reference; every detected step moves you from there
                 backend.setStartPose(item.floorId, item.nodeId)
-                if (snap.pdr.phase == PdrPhase.IDLE) backend.startWithSavedOrDefaultStepLength()
+                wantTracking = true
                 indoorCamera.recenter()
                 pickPosition = false; askFloor = false; welcome = null
             },
@@ -591,11 +626,18 @@ private fun IndoorSheet(
             s.phase == PdrPhase.SETTLING -> Text(stringResource(R.string.indoor_settling), style = MaterialTheme.typography.titleMedium, color = c.text)
             s.phase == PdrPhase.IDLE || s.phase == PdrPhase.CALIBRATING -> {
                 Text(place.title, style = MaterialTheme.typography.titleLarge, color = c.text)
-                PrimaryButton(stringResource(R.string.go_indoor_start), { backend.startWithSavedOrDefaultStepLength() }, enabled = s.canStart)
+                PrimaryButton(
+                    stringResource(if (s.canStart || s.headingValid) R.string.go_indoor_start else R.string.indoor_heading_wait),
+                    { backend.startWithSavedOrDefaultStepLength() }, enabled = s.canStart,
+                )
             }
             s.phase == PdrPhase.PAUSED -> {
                 Text(stringResource(R.string.indoor_paused), style = MaterialTheme.typography.titleMedium, color = c.text)
-                PrimaryButton(stringResource(R.string.indoor_resume), { if (s.headingValid && !s.tilted) backend.resumeFromPause() })
+                // A pause resets the compass frame: resume starts a new trace from the last reference point (start room or floor landing)
+                PrimaryButton(
+                    stringResource(if (s.headingValid && !s.tilted) R.string.indoor_resume else R.string.indoor_heading_wait),
+                    backend::resumeFromPause, enabled = s.headingValid && !s.tilted,
+                )
             }
             route != null -> {
                 val seconds = route.totalDistanceM / INDOOR_WALK_SPEED_MPS
