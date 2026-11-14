@@ -147,6 +147,30 @@ ramène à `IDLE` en remettant tout à zéro (y compris la source).
 - Le cône se fige en gris quand le cap devient invalide ; `headingRadians`
   garde la dernière valeur affichée plutôt que de retomber à 0.
 
+### Ancrage plan (optionnel)
+
+`map/FloorPlan.kt` charge `assets/floorplan.json` : un graphe de nœuds
+(`corridor` / `room` / `stairs` / `elevator` …) et d'arêtes (`accessible`
+ou non) en coordonnées normalisées `[0,1]`, multipliées par les dimensions
+estimées du plan (axe **y plan = sud**, vers le bas). L'utilisateur choisit
+un nœud de départ puis une orientation (`ψ` : voisin adjacent via
+`facingPsi`, ou cardinal plan 0/90/180/270°) sur l'écran de calibration.
+
+`map/MapAnchor.kt` projette le repère PDR local sur le plan :
+
+```
+f = (sin ψ, −cos ψ)   avant ;   r = (cos ψ, sin ψ)   droite
+toMap(p) = originM + r·p.x + f·p.y
+cap plan affiché = wrap(ψ + headingRadians)
+```
+
+ψ = 0 → face au nord du plan (+y local → −y plan) ; ψ = π/2 → face à l'est.
+Chaque point du tracé, borne et position est passé par `toMap` avant
+`MapTransform` ; le plan (arêtes, nœuds, étiquettes) est dessiné dans le
+même repère monde. `PdrTracker` n'est jamais modifié : l'ancrage est une
+pure couche d'affichage, indépendante de la phase PDR — un Reset repart
+naturellement du nœud ancré. Sans ancre, le rendu local est inchangé.
+
 ## 9. Précision attendue et limites connues
 
 - Erreur de boucle typique mesurée : **~1–2 %** du parcours (ex. ~1 m sur un
@@ -156,8 +180,10 @@ ramène à `IDLE` en remettant tout à zéro (y compris la source).
 - `STEP_DETECTOR` rapporte la **pose du pied** ; `SensorEvent.timestamp` est
   supposé sur `elapsedRealtimeNanos` partout.
 - Foreground only : la mise en arrière-plan efface la trame (section 7).
-- Pas de GPS, pas de carte, pas de fusion : toute contrainte externe
-  (snap 90°, ZUPT visuel, repères) devra venir en amont de `PdrTracker`.
+- Pas de GPS, pas de fusion : le plan d'étage est un simple habillage
+  visuel (ancrage manuel, aucune contrainte sur le tracé) ; toute
+  contrainte externe (snap 90°, ZUPT visuel, repères) devra venir en amont
+  de `PdrTracker`.
 
 ## 10. Où modifier quoi
 
@@ -170,6 +196,8 @@ ramène à `IDLE` en remettant tout à zéro (y compris la source).
 | Délai de drain des pas retardés | `PdrViewModel.SETTLING_DELAY_MS` (2 s) |
 | Échelle initiale, limites de zoom | `TelemetryScreen` (56 dp/m, 0.2–12) |
 
-Tests : `app/src/test/java/com/hackdecouverte/` (61 tests : `pdr/` + `ui/MapTransformTest`) couvrent les
+Tests : `app/src/test/java/com/hackdecouverte/` (74 tests : `pdr/`,
+`ui/MapTransformTest`, `map/FloorPlanTest`, `map/MapAnchorTest`) couvrent les
 cas ±180°, cap retardé, invalidité verticale, intervalles de calibration,
-coupures de trame, repli et géométrie.
+coupures de trame, repli, géométrie, parsing du plan réel et projection
+d'ancrage.

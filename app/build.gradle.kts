@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 android {
@@ -23,6 +24,12 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    sourceSets {
+        getByName("test") {
+            resources.srcDir("src/main/assets")
+        }
+    }
 }
 
 dependencies {
@@ -38,6 +45,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.2.10")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")

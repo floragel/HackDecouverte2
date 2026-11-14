@@ -66,6 +66,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun PdrApp(viewModel: PdrViewModel, onRequestActivityPermission: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val mapState by viewModel.mapState.collectAsStateWithLifecycle()
     val view = LocalView.current
     DisposableEffect(state.phase) {
         view.keepScreenOn = state.phase == PdrPhase.CALIBRATING ||
@@ -78,6 +79,8 @@ fun PdrApp(viewModel: PdrViewModel, onRequestActivityPermission: () -> Unit) {
             when (state.phase) {
                 PdrPhase.TRACKING, PdrPhase.PAUSED -> TelemetryScreen(
                     state = state,
+                    floorPlan = viewModel.floorPlan,
+                    anchor = mapState.anchor,
                     onResetTrace = viewModel::resetTrace,
                     onRecalibrate = viewModel::recalibrate,
                     onResumeNewTrace = viewModel::resumeWithNewTrace
@@ -85,10 +88,15 @@ fun PdrApp(viewModel: PdrViewModel, onRequestActivityPermission: () -> Unit) {
 
                 else -> CalibrationScreen(
                     state = state,
+                    floorPlan = viewModel.floorPlan,
+                    mapState = mapState,
                     onSelectSource = { s: StepSource -> viewModel.selectStepSource(s) },
                     onStartCalibration = viewModel::startCalibration,
                     onFinishCalibration = viewModel::finishCalibration,
                     onStartManual = viewModel::startManual,
+                    onSelectStartNode = viewModel::selectStartNode,
+                    onSelectFacing = viewModel::selectFacing,
+                    onClearAnchor = viewModel::clearAnchor,
                     onRequestActivityPermission = onRequestActivityPermission
                 )
             }

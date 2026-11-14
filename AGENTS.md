@@ -25,6 +25,14 @@ no navigation, no backend, no GNSS.
   `x += L·sin(theta)`, `y += L·cos(theta)`. Position only changes on accepted steps.
 - Cap is always relative ("Axe fixe"); `GAME_ROTATION_VECTOR` drifts, so no
   absolute north, no GPS, no cm-level accuracy claims.
+- Optional floor anchoring (package `com.hackdecouverte.map`, pure Kotlin):
+  `floorplan.json` (asset, also on unit-test classpath) is a node/edge graph in
+  normalized coords × estimated plan dimensions (axis y = south). `MapAnchor`
+  projects local PDR points onto the plan: `toMap(p) = origin + r·p.x + f·p.y`
+  with `f = (sin ψ, −cos ψ)`, `r = (cos ψ, sin ψ)` — ψ = facing heading,
+  clockwise from plan-up (−y). Display heading = `wrap(ψ + pdrHeading)`.
+  Opt-in: start node + facing picked on the calibration screen; without an
+  anchor the local-frame behavior is unchanged. `pdr/` is untouched.
 - Sensor timestamps (`SensorEvent.timestamp` = `SystemClock.elapsedRealtimeNanos`,
   CLOCK_BOOTTIME) are the truth; delayed events are matched against a 2.5 s
   orientation buffer, not their arrival time. The whole app injects that same

@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.hackdecouverte.map.FloorPlan
+import com.hackdecouverte.map.MapAnchor
 import com.hackdecouverte.pdr.PathGeometry
 import com.hackdecouverte.pdr.PathSegment
 import com.hackdecouverte.pdr.PdrPhase
@@ -61,6 +63,8 @@ private fun Metric(label: String, value: String, modifier: Modifier = Modifier) 
 @Composable
 fun TelemetryScreen(
     state: PdrState,
+    floorPlan: FloorPlan?,
+    anchor: MapAnchor?,
     onResetTrace: () -> Unit,
     onRecalibrate: () -> Unit,
     onResumeNewTrace: () -> Unit
@@ -71,7 +75,10 @@ fun TelemetryScreen(
     var frozenFocus by remember { mutableStateOf(PointM(0.0, 0.0)) }
     var headUp by remember { mutableStateOf(false) }
     var showRaw by remember { mutableStateOf(false) }
-    val currentPosition by rememberUpdatedState(state.position)
+    var showPlan by remember { mutableStateOf(true) }
+    val displayPosition = anchor?.toMap(state.position) ?: state.position
+    val displayHeading = anchor?.mapHeading(state.headingRadians) ?: state.headingRadians
+    val currentPosition by rememberUpdatedState(displayPosition)
     val segments = remember(state.rawPath) { PathGeometry.smoothedSegments(state.rawPath) }
     val headingReady = state.headingValid && !state.tilted
 
@@ -118,6 +125,14 @@ fun TelemetryScreen(
                 "—"
             }
             Metric("Cap relatif", cap)
+            if (anchor != null) {
+                val capPlan = if (state.headingValid) {
+                    fmt(Math.toDegrees(displayHeading), 0) + "°"
+                } else {
+                    "—"
+                }
+                Metric("Cap plan", capPlan)
+            }
             Metric("Pas", state.stepCount.toString())
             val length = state.lengthPerStepM
             Metric(
@@ -172,8 +187,8 @@ fun TelemetryScreen(
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val pxPerM = 56.dp.toPx() * zoom
-                val focus = if (follow) state.position else frozenFocus
-                val rotation = if (headUp) -state.headingRadians else 0.0
+                val focus = if (follow) displayPosition else frozenFocus
+                val rotation = if (headUp) -displayHeading else 0.0
                 val transform = MapTransform(
                     focus = focus,
                     panXPx = pan.x.toDouble(),
@@ -188,6 +203,8 @@ fun TelemetryScreen(
                     val s = transform.worldToScreen(p)
                     return Offset(s.x.toFloat(), s.y.toFloat())
                 }
+
+                fun disp(p: PointM): PointM = anchor?.toMap(p) ?: p
 
                 drawRect(color = Color(0xFFF5F5F5))
 
@@ -220,13 +237,79 @@ fun TelemetryScreen(
                     gy += gridStep
                 }
 
+                if (floorPlan != null && showPlan) {
+                    for (edge in floorPlan.edges) {
+                        val a = floorPlan.node(edge.fromId)?.posM ?: continue
+                        val b = floorPlan.node(edge.toId)?.posM ?: continue
+                        if (edge.accessible) {
+                            drawLine(
+                                color = Color(0xFFB0BEC5),
+                                start = toScreen(a),
+                                end = toScreen(b),
+                                strokeWidth = 4f,
+                                cap = StrokeCap.Round
+                            )
+                        } else {
+                            drawLine(
+                                color = Color(0xFF9E9E9E),
+                                start = toScreen(a),
+                                end = toScreen(b),
+                                strokeWidth = 2f,
+                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f))
+                            )
+                        }
+                    }
+                    val nodeLabelPaint = Paint().apply {
+                        color = android.graphics.Color.DKGRAY
+                        textSize = 9.dp.toPx()
+                        isAntiAlias = true
+                    }
+                    for (node in floorPlan.nodes) {
+                        val s = toScreen(node.posM)
+                        when (node.type) {
+                            "corridor" -> drawCircle(
+                                color = Color(0xFF90A4AE),
+                                radius = 3f,
+                                center = s
+                            )
+
+                            "stairs" -> drawRect(
+                                color = Color(0xFFF57C00),
+                                topLeft = Offset(s.x - 5f, s.y - 5f),
+                                size = androidx.compose.ui.geometry.Size(10f, 10f)
+                            )
+
+                            "elevator" -> drawRoundRect(
+                                color = Color(0xFF7E57C2),
+                                topLeft = Offset(s.x - 6f, s.y - 6f),
+                                size = androidx.compose.ui.geometry.Size(12f, 12f),
+                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f, 3f)
+                            )
+
+                            else -> drawRect(
+                                color = Color(0xFFA1887F),
+                                topLeft = Offset(s.x - 5f, s.y - 5f),
+                                size = androidx.compose.ui.geometry.Size(10f, 10f)
+                            )
+                        }
+                        if (node.type != "corridor" || pxPerM > 20f) {
+                            drawContext.canvas.nativeCanvas.drawText(
+                                node.label,
+                                s.x + 7f,
+                                s.y - 7f,
+                                nodeLabelPaint
+                            )
+                        }
+                    }
+                }
+
                 val traceColor = Color(0xFF1565C0)
                 val rawPoints = state.rawPath
                 if (showRaw && rawPoints.size >= 2) {
                     val rawPath = Path()
-                    rawPath.moveToOffset(toScreen(rawPoints[0]))
+                    rawPath.moveToOffset(toScreen(disp(rawPoints[0])))
                     for (i in 1 until rawPoints.size) {
-                        rawPath.lineToOffset(toScreen(rawPoints[i]))
+                        rawPath.lineToOffset(toScreen(disp(rawPoints[i])))
                     }
                     drawPath(
                         path = rawPath,
@@ -242,13 +325,13 @@ fun TelemetryScreen(
 
                 if (segments.isNotEmpty()) {
                     val smooth = Path()
-                    smooth.moveToOffset(toScreen(segments.first().start))
+                    smooth.moveToOffset(toScreen(disp(segments.first().start)))
                     for (segment in segments) {
                         when (segment) {
-                            is PathSegment.Line -> smooth.lineToOffset(toScreen(segment.end))
+                            is PathSegment.Line -> smooth.lineToOffset(toScreen(disp(segment.end)))
                             is PathSegment.Quad -> {
-                                val c = toScreen(segment.control)
-                                val e = toScreen(segment.end)
+                                val c = toScreen(disp(segment.control))
+                                val e = toScreen(disp(segment.end))
                                 smooth.quadraticTo(c.x, c.y, e.x, e.y)
                             }
                         }
@@ -264,7 +347,7 @@ fun TelemetryScreen(
                     )
                 }
 
-                val originScreen = toScreen(PointM(0.0, 0.0))
+                val originScreen = toScreen(disp(PointM(0.0, 0.0)))
                 drawCircle(
                     color = Color(0xFF2E7D32),
                     radius = 7.dp.toPx(),
@@ -282,7 +365,7 @@ fun TelemetryScreen(
                 )
 
                 for (milestone in state.milestones) {
-                    val ms = toScreen(milestone.position)
+                    val ms = toScreen(disp(milestone.position))
                     drawCircle(color = Color.White, radius = 6.dp.toPx(), center = ms)
                     drawCircle(
                         color = Color(0xFF37474F),
@@ -302,14 +385,14 @@ fun TelemetryScreen(
                     )
                 }
 
-                val here = toScreen(state.position)
+                val here = toScreen(displayPosition)
                 val heading = state.headingRadians
                 val coneColor = if (state.headingValid) {
                     Color(0x551565C0)
                 } else {
                     Color(0x5590A4AE)
                 }
-                val tipWorld = state.position + PointM(sin(heading) * 0.9, cos(heading) * 0.9)
+                val tipWorld = disp(state.position + PointM(sin(heading) * 0.9, cos(heading) * 0.9))
                 val tip = toScreen(tipWorld)
                 val vx = tip.x - here.x
                 val vy = tip.y - here.y
@@ -336,6 +419,16 @@ fun TelemetryScreen(
                         textSize = 10.dp.toPx()
                         isAntiAlias = true
                     }
+                )
+            }
+            if (floorPlan != null && showPlan && anchor == null) {
+                Text(
+                    "Sélectionnez une salle de départ pour ancrer le tracé",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(8.dp)
                 )
             }
         }
@@ -371,6 +464,13 @@ fun TelemetryScreen(
                 onClick = { showRaw = !showRaw },
                 label = { Text("Tracé brut") }
             )
+            if (floorPlan != null) {
+                FilterChip(
+                    selected = showPlan,
+                    onClick = { showPlan = !showPlan },
+                    label = { Text("Plan") }
+                )
+            }
             OutlinedButton(onClick = onResetTrace, enabled = headingReady) {
                 Text("Reset")
             }
