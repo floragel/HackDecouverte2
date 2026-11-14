@@ -73,6 +73,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hackdecouverte.PdrViewModel
 import com.hackdecouverte.backend.IndoorNavigationBackend
 import com.hackdecouverte.backend.NavigationSnapshot
+import com.hackdecouverte.map.BuildingGraph
 import com.hackdecouverte.map.NavigationRoute
 import com.hackdecouverte.map.RejoinHint
 import com.hackdecouverte.map.RouteStep
@@ -213,16 +214,17 @@ fun IndoorScreen() {
     }
 
     picker?.let { which ->
+        val preferredFloor = snap.activeFloorId ?: snap.userFloorId
         RoomPickerSheet(
             title = stringResource(if (which == Picker.FROM) R.string.indoor_from else R.string.indoor_to),
-            items = if (which == Picker.FROM) {
-                val plan = snap.activeFloor
-                plan?.labeledNodes.orEmpty().map { RoomItem(plan!!.floorId, it.id, it.label, it.name) }
-            } else {
-                snap.destinations.map { RoomItem(it.key.floorId, it.key.nodeId, it.label, it.name) }
+            items = remember(which, snap.destinations, preferredFloor) {
+                snap.destinations
+                    .map { RoomItem(it.key.floorId, it.key.nodeId, it.label, it.name) }
+                    .sortedBy { if (it.floorId == preferredFloor) 0 else 1 }
             },
             onPick = { item ->
                 haptics.tick()
+                camera.recenter()
                 if (which == Picker.FROM) backend.setStartPose(item.floorId, item.nodeId)
                 else backend.setDestination(com.hackdecouverte.map.NodeKey(item.floorId, item.nodeId))
                 picker = null
@@ -244,7 +246,9 @@ private fun SetupSheet(
 ) {
     val c = Campus.colors
     val s = snap.pdr
-    val start = snap.startNodeId?.let { id -> snap.activeFloor?.node(id) }
+    val start = snap.startPose?.let { sp ->
+        snap.floors.firstOrNull { it.floorId == sp.floorId }?.node(sp.nodeId)
+    } ?: snap.startNodeId?.let { id -> snap.activeFloor?.node(id) }
     val dest = snap.destination?.let { key -> snap.destinations.firstOrNull { it.key == key } }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (s.activityPermissionNeeded && !s.activityPermissionGranted) {
@@ -339,8 +343,18 @@ private fun TrackingSheet(snap: NavigationSnapshot, backend: IndoorNavigationBac
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Pill(stringResource(R.string.indoor_stop), backend::stopToSetup, style = PillStyle.Tonal)
+            val suggested = snap.suggestedTransfer
+            if (!snap.isViewingUserFloor && snap.activeFloorId != null) {
+                val viewed = snap.activeFloorId
+                Pill(stringResource(R.string.indoor_floor, floorNumber(viewed)), { backend.confirmUserFloor(viewed) })
+            } else if (suggested != null) {
+                Pill(
+                    stringResource(R.string.indoor_floor, floorNumber(suggested.toFloorId)),
+                    { backend.confirmUserFloor(suggested.toFloorId, suggested.verticalGroupId) },
+                )
+            }
             if (snap.destination != null) Pill(stringResource(R.string.indoor_clear), { backend.setDestination(null) }, style = PillStyle.Outline)
-            Pill(stringResource(R.string.indoor_restart), { if (headingReady) backend.resetPositionToStart() }, style = PillStyle.Outline)
+            Pill(stringResource(R.string.indoor_restart), { backend.resetPositionToStart() }, style = PillStyle.Outline)
         }
     }
 }
@@ -516,7 +530,11 @@ private fun RoomPickerSheet(title: String, items: List<RoomItem>, onPick: (RoomI
     var query by remember { mutableStateOf("") }
     val filtered = remember(query, items) {
         val q = query.trim()
-        if (q.isEmpty()) items else items.filter { it.label.contains(q, true) || it.name.contains(q, true) }
+        if (q.isEmpty()) {
+            items
+        } else {
+            items.filter { BuildingGraph.matchesSearchQuery(q, it.label, it.name, it.floorId) }
+        }
     }
     ModalBottomSheet(
         onDismissRequest = onDismiss,

@@ -5,7 +5,6 @@ import com.hackdecouverte.pdr.angleDelta
 import java.util.PriorityQueue
 import kotlin.math.abs
 import kotlin.math.atan2
-import kotlin.math.hypot
 
 data class NodeKey(val floorId: String, val nodeId: String)
 
@@ -28,7 +27,10 @@ sealed interface RouteStep {
         val fromFloorId: String,
         val toFloorId: String,
         val viaLabel: String,
-        val viaElevator: Boolean
+        val viaElevator: Boolean,
+        val verticalGroupId: String? = null,
+        val departurePosM: PointM = PointM(0.0, 0.0),
+        val arrivalPosM: PointM = PointM(0.0, 0.0)
     ) : RouteStep
     data class Arrive(val floorId: String, val label: String) : RouteStep
 }
@@ -47,9 +49,20 @@ data class NavigationRoute(
     val isArrived: Boolean,
     val rejoin: RejoinHint? = null
 ) {
+    val transfers: List<RouteStep.FloorTransfer>
+        get() = steps.filterIsInstance<RouteStep.FloorTransfer>()
+
     fun pointsForFloor(floorId: String): List<PointM> =
         floorSegments.filter { it.floorId == floorId }.flatMap { it.pointsM }
 }
+
+data class VerticalLandingResult(
+    val targetFloorId: String,
+    val arrivalNode: FloorNode?,
+    val arrivalPosM: PointM,
+    val verticalGroupId: String?,
+    val viaElevator: Boolean
+)
 
 class BuildingGraph(
     val floors: List<FloorPlan>,
@@ -65,6 +78,7 @@ class BuildingGraph(
     )
 
     private val floorsById: Map<String, FloorPlan> = floors.associateBy { it.floorId }
+    private val floorIndexById: Map<String, Int> = floors.mapIndexed { idx, p -> p.floorId to idx }.toMap()
     private val adj = HashMap<NodeKey, MutableList<AdjEdge>>()
 
     val destinations: List<DestinationItem> = floors.flatMap { plan ->
@@ -112,12 +126,13 @@ class BuildingGraph(
         linkVerticalGroups()
     }
 
-    private fun floorOrdinal(floorId: String, fallbackIndex: Int): Int =
-        floorId.substringAfterLast('-', "").toIntOrNull() ?: fallbackIndex
+    fun floorNumber(floorId: String): Int =
+        floorId.substringAfterLast('-', "").toIntOrNull()
+            ?: ((floorIndexById[floorId] ?: 0) + 1)
 
     private fun linkVerticalGroups() {
         if (floors.size < 2) return
-        val floorRank = floors.mapIndexed { idx, p -> p.floorId to floorOrdinal(p.floorId, idx) }.toMap()
+        val floorRank = floors.associate { it.floorId to floorNumber(it.floorId) }
         val groups = HashMap<String, MutableList<Pair<FloorPlan, FloorNode>>>()
         for (plan in floors) {
             for (node in plan.nodes) {
@@ -169,6 +184,164 @@ class BuildingGraph(
     fun floor(floorId: String): FloorPlan? = floorsById[floorId]
 
     fun node(key: NodeKey): FloorNode? = floorsById[key.floorId]?.node(key.nodeId)
+
+    /**
+     * Finds the nearest stairwell or elevator on [floorId] within [maxRadiusM] of [posM].
+     */
+    fun findNearestVerticalConnector(
+        floorId: String,
+        posM: PointM,
+        maxRadiusM: Double = 10.0,
+        accessibleOnly: Boolean = false
+    ): FloorNode? {
+        val plan = floorsById[floorId] ?: return null
+        return plan.nodes
+            .filter { node ->
+                val isVert = !node.verticalGroupId.isNullOrBlank() ||
+                    node.type == "stairs" ||
+                    node.type == "elevator"
+                isVert && (!accessibleOnly || node.type == "elevator")
+            }
+            .filter { it.posM.distanceTo(posM) <= maxRadiusM }
+            .minByOrNull { it.posM.distanceTo(posM) }
+    }
+
+    /**
+     * Adjacent floor (`+1` up or `-1` down) relative to [fromFloorId] in sorted building order.
+     */
+    fun adjacentFloorId(fromFloorId: String, floorDelta: Int): String? {
+        val idx = floorIndexById[fromFloorId] ?: return null
+        return floors.getOrNull(idx + floorDelta)?.floorId
+    }
+
+    /**
+     * Resolves where the user lands on [targetFloorId] when moving from [fromFloorId] at [currentPosM],
+     * accounting for stairwell/elevator shafts (`vertical_group_id`), elevator speed (`verticalSpeedMps`),
+     * and any active navigation route transfer.
+     */
+    fun resolveFloorTransition(
+        fromFloorId: String,
+        targetFloorId: String,
+        currentPosM: PointM,
+        verticalSpeedMps: Double = 0.0,
+        activeRoute: NavigationRoute? = null,
+        explicitVerticalGroupId: String? = null
+    ): VerticalLandingResult? {
+        val fromPlan = floorsById[fromFloorId] ?: return null
+        val targetPlan = floorsById[targetFloorId] ?: return null
+        if (fromFloorId == targetFloorId) {
+            return VerticalLandingResult(targetFloorId, null, currentPosM, null, false)
+        }
+
+        val targetVerticalByGroup = targetPlan.nodes
+            .filter { !it.verticalGroupId.isNullOrBlank() }
+            .groupBy { it.verticalGroupId!! }
+
+        // 1. Explicit vertical group requested (e.g. tapping a specific stair/elevator transfer button)
+        if (!explicitVerticalGroupId.isNullOrBlank()) {
+            val arrival = targetVerticalByGroup[explicitVerticalGroupId]
+                ?.minByOrNull { it.posM.distanceTo(currentPosM) }
+            if (arrival != null) {
+                return VerticalLandingResult(
+                    targetFloorId = targetFloorId,
+                    arrivalNode = arrival,
+                    arrivalPosM = arrival.posM,
+                    verticalGroupId = explicitVerticalGroupId,
+                    viaElevator = arrival.type == "elevator"
+                )
+            }
+        }
+
+        // 2. If fast vertical velocity (> 0.9 m/s => elevator) and an elevator group exists nearby & on target
+        if (abs(verticalSpeedMps) >= 0.9) {
+            val nearElev = fromPlan.nodes
+                .filter {
+                    it.type == "elevator" &&
+                        it.verticalGroupId in targetVerticalByGroup &&
+                        it.posM.distanceTo(currentPosM) <= 18.0
+                }
+                .minByOrNull { it.posM.distanceTo(currentPosM) }
+            if (nearElev != null) {
+                val vg = nearElev.verticalGroupId!!
+                val arrival = targetVerticalByGroup[vg]!!.minByOrNull { it.posM.distanceTo(nearElev.posM) }!!
+                return VerticalLandingResult(targetFloorId, arrival, arrival.posM, vg, true)
+            }
+        }
+
+        // 3. Active route transfer leaving fromFloorId in the same vertical direction when reasonably close
+        val goingUp = floorNumber(targetFloorId) > floorNumber(fromFloorId)
+        val routeTransfer = activeRoute?.transfers?.firstOrNull { t ->
+            t.fromFloorId == fromFloorId &&
+                (floorNumber(t.toFloorId) > floorNumber(fromFloorId)) == goingUp &&
+                t.verticalGroupId != null &&
+                t.verticalGroupId in targetVerticalByGroup &&
+                t.departurePosM.distanceTo(currentPosM) <= 14.0
+        }
+        if (routeTransfer != null) {
+            val vg = routeTransfer.verticalGroupId!!
+            val arrival = targetVerticalByGroup[vg]!!.minByOrNull {
+                it.posM.distanceTo(routeTransfer.departurePosM)
+            }!!
+            return VerticalLandingResult(
+                targetFloorId = targetFloorId,
+                arrivalNode = arrival,
+                arrivalPosM = arrival.posM,
+                verticalGroupId = vg,
+                viaElevator = arrival.type == "elevator"
+            )
+        }
+
+        // 4. Nearest vertical connector on fromFloorId that connects to targetFloorId (within 15 m)
+        val nearDeparture = fromPlan.nodes
+            .filter {
+                !it.verticalGroupId.isNullOrBlank() &&
+                    it.verticalGroupId in targetVerticalByGroup &&
+                    it.posM.distanceTo(currentPosM) <= 15.0
+            }
+            .minByOrNull { it.posM.distanceTo(currentPosM) }
+        if (nearDeparture != null) {
+            val vg = nearDeparture.verticalGroupId!!
+            val arrival = targetVerticalByGroup[vg]!!.minByOrNull {
+                it.posM.distanceTo(nearDeparture.posM)
+            }!!
+            return VerticalLandingResult(
+                targetFloorId = targetFloorId,
+                arrivalNode = arrival,
+                arrivalPosM = arrival.posM,
+                verticalGroupId = vg,
+                viaElevator = arrival.type == "elevator"
+            )
+        }
+
+        // 5. Fallback: if activeRoute has ANY transfer arriving at targetFloorId (e.g. manual floor jump button)
+        val directRouteArrival = activeRoute?.transfers?.firstOrNull {
+            it.toFloorId == targetFloorId && it.verticalGroupId in targetVerticalByGroup
+        }
+        if (directRouteArrival != null) {
+            val vg = directRouteArrival.verticalGroupId!!
+            val arrival = targetVerticalByGroup[vg]!!.minByOrNull {
+                it.posM.distanceTo(directRouteArrival.arrivalPosM)
+            }!!
+            return VerticalLandingResult(
+                targetFloorId = targetFloorId,
+                arrivalNode = arrival,
+                arrivalPosM = arrival.posM,
+                verticalGroupId = vg,
+                viaElevator = arrival.type == "elevator"
+            )
+        }
+
+        // 6. Shared True-North metric frame fallback: preserve (eastM, northM) projected onto target floor
+        val projected = projectStartOntoPlan(targetPlan, currentPosM, accessibleOnly = false)?.projectedPointM
+            ?: currentPosM
+        return VerticalLandingResult(
+            targetFloorId = targetFloorId,
+            arrivalNode = null,
+            arrivalPosM = projected,
+            verticalGroupId = null,
+            viaElevator = false
+        )
+    }
 
     fun findRouteFromNode(
         start: NodeKey,
@@ -435,14 +608,29 @@ class BuildingGraph(
             if (key.floorId != prevFloor) {
                 flushFloorLegs()
                 val via = prevNode ?: n
-                rawSteps.add(
-                    RouteStep.FloorTransfer(
-                        fromFloorId = prevFloor,
-                        toFloorId = key.floorId,
-                        viaLabel = via.label.ifBlank { via.name },
-                        viaElevator = via.type == "elevator" && n.type == "elevator"
-                    )
+                val newTransfer = RouteStep.FloorTransfer(
+                    fromFloorId = prevFloor,
+                    toFloorId = key.floorId,
+                    viaLabel = via.label.ifBlank { via.name },
+                    viaElevator = via.type == "elevator" && n.type == "elevator",
+                    verticalGroupId = via.verticalGroupId ?: n.verticalGroupId,
+                    departurePosM = via.posM,
+                    arrivalPosM = n.posM
                 )
+                // Merge multi-flight stair transfers through the same stairwell (e.g. MB-2 -> MB-3 -> MB-4)
+                val lastStep = rawSteps.lastOrNull()
+                if (lastStep is RouteStep.FloorTransfer &&
+                    lastStep.toFloorId == newTransfer.fromFloorId &&
+                    lastStep.viaElevator == newTransfer.viaElevator &&
+                    (lastStep.verticalGroupId == null || lastStep.verticalGroupId == newTransfer.verticalGroupId)
+                ) {
+                    rawSteps[rawSteps.lastIndex] = lastStep.copy(
+                        toFloorId = newTransfer.toFloorId,
+                        arrivalPosM = newTransfer.arrivalPosM
+                    )
+                } else {
+                    rawSteps.add(newTransfer)
+                }
                 prevFloor = key.floorId
                 prevPt = n.posM
                 prevNode = n
@@ -497,9 +685,16 @@ class BuildingGraph(
                 val next = steps.getOrNull(1)
                 val suffix = when (next) {
                     is RouteStep.Turn -> if (next.left) " puis à gauche" else " puis à droite"
-                    is RouteStep.FloorTransfer ->
-                        if (next.viaElevator) " vers l'ascenseur (${next.toFloorId})"
-                        else " vers l'escalier (${next.toFloorId})"
+                    is RouteStep.FloorTransfer -> {
+                        val goingUp = floorNumber(next.toFloorId) > floorNumber(next.fromFloorId)
+                        if (next.viaElevator) {
+                            " vers l'ascenseur (${next.toFloorId})"
+                        } else if (goingUp) {
+                            " vers l'escalier ↑ ${next.toFloorId}"
+                        } else {
+                            " vers l'escalier ↓ ${next.toFloorId}"
+                        }
+                    }
                     is RouteStep.Arrive -> " jusqu'à ${next.label}"
                     else -> ""
                 }
@@ -510,9 +705,14 @@ class BuildingGraph(
                 if (first.left) "Tourner à gauche (${first.intoLabel})"
                 else "Tourner à droite (${first.intoLabel})"
 
-            is RouteStep.FloorTransfer ->
-                if (first.viaElevator) "Prendre l'ascenseur ${first.viaLabel} → ${first.toFloorId}"
-                else "Prendre l'escalier ${first.viaLabel} → ${first.toFloorId}"
+            is RouteStep.FloorTransfer -> {
+                val goingUp = floorNumber(first.toFloorId) > floorNumber(first.fromFloorId)
+                when {
+                    first.viaElevator -> "Prendre l'ascenseur (${first.viaLabel}) → ${first.toFloorId}"
+                    goingUp -> "Monter par l'escalier ${first.viaLabel} → ${first.toFloorId}"
+                    else -> "Descendre par l'escalier ${first.viaLabel} → ${first.toFloorId}"
+                }
+            }
 
             is RouteStep.Arrive -> "Arrivé à ${first.label}"
         }
@@ -520,5 +720,35 @@ class BuildingGraph(
 
     companion object {
         const val ARRIVAL_RADIUS_M = 2.5
+
+        private fun normalizeRoomToken(raw: String): String {
+            var s = raw.lowercase()
+                .replace(" ", "")
+                .replace("-", "")
+                .replace("_", "")
+                .replace(".", "")
+            // Normalize shorthand "m2255" -> "mb2255" so "M.2.255" matches "MB-2.255"
+            if (s.length >= 2 && s[0] == 'm' && s[1].isDigit()) {
+                s = "mb" + s.substring(1)
+            }
+            return s
+        }
+
+        fun matchesSearchQuery(
+            query: String,
+            label: String,
+            name: String,
+            floorId: String = ""
+        ): Boolean {
+            val q = query.trim()
+            if (q.isEmpty()) return true
+            val combined = "$floorId $label $name"
+            if (combined.contains(q, ignoreCase = true)) return true
+            val normQ = normalizeRoomToken(q)
+            if (normQ.isEmpty()) return true
+            val normLabel = normalizeRoomToken(label)
+            val normCombined = normalizeRoomToken(combined)
+            return normLabel.contains(normQ) || normCombined.contains(normQ)
+        }
     }
 }

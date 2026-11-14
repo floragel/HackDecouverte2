@@ -38,10 +38,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hackdecouverte.backend.NavigationSnapshot
+import com.hackdecouverte.map.BuildingGraph
+import com.hackdecouverte.map.DestinationItem
 import com.hackdecouverte.map.NodeKey
 import com.hackdecouverte.pdr.PdrPhase
 import com.hackdecouverte.pdr.PdrState
@@ -103,17 +106,28 @@ internal fun WarningBanner(state: PdrState) {
 }
 
 @Composable
-internal fun <T> SearchPickerDialog(
+internal fun RoomSearchDialog(
     title: String,
-    items: List<T>,
-    itemText: (T) -> String,
-    onPick: (T) -> Unit,
+    items: List<DestinationItem>,
+    preferredFloorId: String?,
+    onPick: (DestinationItem) -> Unit,
     onDismiss: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
-    val filtered = remember(query, items) {
+    val filtered = remember(query, items, preferredFloorId) {
         val q = query.trim()
-        if (q.isEmpty()) items else items.filter { itemText(it).contains(q, ignoreCase = true) }
+        val matching = if (q.isEmpty()) {
+            items
+        } else {
+            items.filter { BuildingGraph.matchesSearchQuery(q, it.label, it.name, it.key.floorId) }
+        }
+        matching.sortedWith(
+            compareBy(
+                { if (q.isEmpty() && it.key.floorId == preferredFloorId) 0 else 1 },
+                { if (q.isNotEmpty() && it.label.contains(q, ignoreCase = true)) 0 else 1 },
+                { it.type != "room" }
+            )
+        )
     }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -123,22 +137,29 @@ internal fun <T> SearchPickerDialog(
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    label = { Text("Rechercher (ex: 2.255)") },
+                    label = { Text("Salle / escalier (ex: MB-2.255, M.2.255, 4.206)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
-                LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                LazyColumn(modifier = Modifier.heightIn(max = 340.dp)) {
                     items(filtered.size) { i ->
+                        val item = filtered[i]
+                        val detail = item.name.takeIf { it.isNotBlank() && it != item.label }
+                        val line = if (detail != null) {
+                            "[${item.key.floorId}] ${item.label} — $detail"
+                        } else {
+                            "[${item.key.floorId}] ${item.label}"
+                        }
                         Text(
-                            itemText(filtered[i]),
+                            line,
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    onPick(filtered[i])
+                                    onPick(item)
                                     onDismiss()
                                 }
                                 .padding(vertical = 10.dp)
@@ -216,13 +237,22 @@ fun CalibrationScreen(
         }
 
         val headingDeg = Math.toDegrees(snapshot.mapHeadingRad)
+        val fix = snapshot.latestGpsFix
+        val gnssTag = if (fix != null) {
+            val galileoTxt = if (fix.galileoUsed > 0) "+Galileo(${fix.galileoUsed})" else ""
+            val l5Txt = if (fix.dualFrequencyUsed > 0) " L1/E5" else ""
+            "GPS$galileoTxt$l5Txt ±${fix.accuracyM.roundToInt()} m"
+        } else {
+            null
+        }
+        val baroTag = if (snapshot.barometerAvailable) " • Baromètre étages actif" else ""
         val northStatus = when {
-            state.trueNorthAligned && snapshot.latestGpsFix != null ->
-                "Nord Vrai auto (GPS ±${snapshot.latestGpsFix.accuracyM.roundToInt()} m + Boussole) • ${compassCardinalFr(headingDeg)}"
+            state.trueNorthAligned && gnssTag != null ->
+                "Nord Vrai auto ($gnssTag) • ${compassCardinalFr(headingDeg)}$baroTag"
             state.trueNorthAligned ->
-                "Nord Vrai auto (Boussole Montréal) • ${compassCardinalFr(headingDeg)}"
+                "Nord Vrai auto (Boussole Montréal) • ${compassCardinalFr(headingDeg)}$baroTag"
             else ->
-                "Acquisition du Nord du téléphone…"
+                "Acquisition du Nord du téléphone…$baroTag"
         }
         Text(
             northStatus,
@@ -241,45 +271,61 @@ fun CalibrationScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        "1. Étage & Départ (${plan.floorId})",
+                        "1. Salle de départ (recommandé en intérieur)",
                         style = MaterialTheme.typography.titleSmall
                     )
                     if (snapshot.floors.size > 1) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             for (f in snapshot.floors) {
                                 FilterChip(
-                                    selected = f.floorId == plan.floorId,
+                                    selected = f.floorId == snapshot.userFloorId,
                                     onClick = { onSwitchFloor(f.floorId) },
                                     label = { Text(f.floorId) }
                                 )
                             }
                         }
                     }
-                    val startNode = snapshot.startNodeId?.let(plan::node)
+
+                    val startItem = snapshot.startPose?.let { sp ->
+                        snapshot.destinations.firstOrNull { it.key == sp }
+                            ?: snapshot.userFloor?.node(sp.nodeId)?.let { n ->
+                                DestinationItem(sp, n.label.ifBlank { n.name }, n.name, n.type)
+                            }
+                    }
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedButton(
+                        Button(
                             onClick = { showStartPicker = true },
                             modifier = Modifier.weight(1f)
                         ) {
                             val label = when {
-                                startNode != null -> "Départ : ${startNode.label} — ${startNode.name}"
-                                snapshot.usingGpsStart -> "Départ : Position GPS actuelle"
-                                else -> "Choisir une salle de départ…"
+                                startItem != null ->
+                                    "Départ : [${startItem.key.floorId}] ${startItem.label}"
+                                snapshot.usingGpsStart ->
+                                    "Départ : Position GPS extérieure"
+                                else ->
+                                    "Choisir ma salle de départ (ex: MB-2.255)…"
                             }
-                            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                label,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
-                        if (startNode != null) {
+                        if (startItem != null || snapshot.usingGpsStart) {
                             TextButton(onClick = onClearStartPose) {
                                 Text("✕")
                             }
                         }
                     }
-                    if (snapshot.latestGpsFix != null && startNode != null) {
+
+                    if (fix != null && !snapshot.usingGpsStart) {
                         TextButton(onClick = onUseGpsStart) {
-                            Text("Utiliser plutôt ma position GPS")
+                            Text("En extérieur ? Utiliser ma position GPS (±${fix.accuracyM.roundToInt()} m)")
                         }
                     }
                 }
@@ -295,7 +341,7 @@ fun CalibrationScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        "2. Destination (optionnel, multi-étages)",
+                        "2. Destination (optionnel, multi-étages MB-1..7)",
                         style = MaterialTheme.typography.titleSmall
                     )
                     val destItem = snapshot.destinations.firstOrNull { it.key == snapshot.destination }
@@ -354,7 +400,7 @@ fun CalibrationScreen(
             }
 
             else -> {
-                Text("3. Foulée & Lancement (sans calibration d'angle)", style = MaterialTheme.typography.titleSmall)
+                Text("3. Foulée & Lancement (Nord auto, sans calibration d'angle)", style = MaterialTheme.typography.titleSmall)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -399,21 +445,21 @@ fun CalibrationScreen(
         }
     }
 
-    if (showStartPicker && plan != null) {
-        SearchPickerDialog(
-            title = "Salle de départ (${plan.floorId})",
-            items = plan.labeledNodes,
-            itemText = { "${it.label} — ${it.name}" },
-            onPick = { onSelectStartPose(plan.floorId, it.id) },
+    if (showStartPicker) {
+        RoomSearchDialog(
+            title = "Choisir ma salle de départ",
+            items = snapshot.destinations,
+            preferredFloorId = snapshot.userFloorId ?: snapshot.activeFloorId,
+            onPick = { onSelectStartPose(it.key.floorId, it.key.nodeId) },
             onDismiss = { showStartPicker = false }
         )
     }
 
     if (showDestPicker) {
-        SearchPickerDialog(
+        RoomSearchDialog(
             title = "Aller vers",
             items = snapshot.destinations,
-            itemText = { "[${it.key.floorId}] ${it.label} — ${it.name}" },
+            preferredFloorId = snapshot.userFloorId ?: snapshot.activeFloorId,
             onPick = { onSelectDestination(it.key) },
             onDismiss = { showDestPicker = false }
         )

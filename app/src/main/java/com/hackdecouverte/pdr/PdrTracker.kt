@@ -32,6 +32,13 @@ class PdrTracker(
     var mapAxisBaseLocal: Double? = null
     var useTrueNorthReference: Boolean = false
 
+    private var verticalHoldActive = false
+    private var verticalHoldSuppressed = false
+    private val heldStepDeltas = ArrayList<PointM>()
+    private var heldDistanceM = 0.0
+
+    val heldStepCount: Int get() = heldStepDeltas.size
+
     private var sensorStatus = SensorStatus()
     private var referenceYaw: Double? = null
     private var trueNorthOffsetRad: Double? = null
@@ -312,6 +319,17 @@ class PdrTracker(
 
         val dynamicLength = length * dynamicStepFactor()
         currentStepLengthM = dynamicLength
+        if (verticalHoldActive) {
+            heldStepDeltas.add(PointM(dynamicLength * sin(theta), dynamicLength * cos(theta)))
+            heldDistanceM += dynamicLength
+            stepCount++
+            if (heldStepDeltas.size >= MAX_HELD_STEPS) {
+                commitHeldSteps()
+                verticalHoldActive = false
+                verticalHoldSuppressed = true
+            }
+            return true
+        }
         val turnScale = if (corridorAssistEnabled && turnRate > 1.2) {
             (1.0 - (turnRate - 1.2) / 2.0).coerceIn(0.2, 1.0)
         } else {
@@ -529,6 +547,61 @@ class PdrTracker(
         return true
     }
 
+    /**
+     * Starts buffering step displacements while the barometer suspects a stair climb.
+     * Buffered steps are replayed by [endVerticalHold] (`commit = true`) if no floor change
+     * happens, or dropped by [reanchorFloorOriginKeepHeading] when the user lands on a new floor.
+     */
+    fun beginVerticalHold() {
+        if (verticalHoldActive || verticalHoldSuppressed || phase != PdrPhase.TRACKING) return
+        verticalHoldActive = true
+        heldStepDeltas.clear()
+        heldDistanceM = 0.0
+    }
+
+    fun endVerticalHold(commit: Boolean) {
+        if (commit) commitHeldSteps() else clearHeldSteps()
+        verticalHoldActive = false
+        verticalHoldSuppressed = false
+        publish()
+    }
+
+    private fun commitHeldSteps() {
+        for (d in heldStepDeltas) {
+            val previous = position
+            val previousDistance = distanceM
+            position += d
+            distanceM += d.norm()
+            points.add(position)
+            milestoneTracker.onSegment(previous, previousDistance, position, distanceM)
+        }
+        clearHeldSteps()
+    }
+
+    private fun clearHeldSteps() {
+        heldStepDeltas.clear()
+        heldDistanceM = 0.0
+    }
+
+    /**
+     * Re-anchors local `(0, 0)` on a new floor landing (stairs / elevator exit) while keeping
+     * the locked heading reference, cumulative walked distance, step count, and gait model intact.
+     */
+    fun reanchorFloorOriginKeepHeading(): Boolean {
+        clearHeldSteps()
+        verticalHoldActive = false
+        verticalHoldSuppressed = false
+        position = PointM(0.0, 0.0)
+        points.clear()
+        points.add(PointM(0.0, 0.0))
+        recentStepYaws.clear()
+        straightRunThetas.clear()
+        externalOrigin = null
+        externalPull = PointM(0.0, 0.0)
+        publish()
+        return true
+    }
+
     fun onSensorFrameRestart() {
         orientation.clear()
         referenceYaw = null
@@ -595,6 +668,9 @@ class PdrTracker(
     }
 
     private fun resetTraceInternal() {
+        clearHeldSteps()
+        verticalHoldActive = false
+        verticalHoldSuppressed = false
         position = PointM(0.0, 0.0)
         distanceM = 0.0
         stepCount = 0
@@ -697,5 +773,6 @@ class PdrTracker(
         private const val EXTERNAL_GAIN = 0.2
         private const val MAX_EXTERNAL_PULL_M = 1.5
         private const val MAX_EXTERNAL_STEP_M = 0.08
+        private const val MAX_HELD_STEPS = 32
     }
 }

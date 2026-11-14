@@ -3,6 +3,15 @@ package com.hackdecouverte.ui
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.RectF
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
@@ -14,6 +23,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -43,11 +54,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hackdecouverte.backend.NavigationSnapshot
 import com.hackdecouverte.map.NodeKey
-import com.hackdecouverte.pdr.PathGeometry
-import com.hackdecouverte.pdr.PathSegment
 import com.hackdecouverte.pdr.PdrPhase
 import com.hackdecouverte.pdr.PointM
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -58,9 +68,12 @@ private val SCALE_BAR_STEPS_M = intArrayOf(2, 5, 10, 20, 50, 100, 200)
 @Composable
 fun TelemetryScreen(
     snapshot: NavigationSnapshot,
+    onSelectStartPose: (floorId: String, nodeId: String) -> Unit,
     onSelectDestination: (NodeKey?) -> Unit,
     onSetAccessibleOnly: (Boolean) -> Unit,
     onSwitchFloor: (String) -> Unit,
+    onConfirmUserFloor: (targetFloorId: String, verticalGroupId: String?) -> Unit,
+    onReturnToUserFloor: () -> Unit,
     onResetPosition: () -> Unit,
     onOpenSetup: () -> Unit,
     onResumeNewTrace: () -> Unit
@@ -72,26 +85,51 @@ fun TelemetryScreen(
     val anchor = snapshot.anchor
     val route = snapshot.activeRoute
 
-    var zoom by remember { mutableStateOf(0.22f) }
+    var zoom by remember { mutableStateOf(0.85f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var follow by remember { mutableStateOf(true) }
     var frozenFocus by remember { mutableStateOf(PointM(0.0, 0.0)) }
-    var headUp by remember { mutableStateOf(false) }
+    var headUp by remember { mutableStateOf(true) }
+    var showStartDialog by remember { mutableStateOf(false) }
     var showDestDialog by remember { mutableStateOf(false) }
-    var floorBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var renderedFloorPair by remember { mutableStateOf<Pair<String, Bitmap>?>(null) }
 
+    // Render active floor immediately + pre-warm all other loaded MB floors in background
     LaunchedEffect(vectorPlan?.floorId) {
-        floorBitmap = if (vectorPlan != null) {
-            FloorVectorRenderer.getOrRender(vectorPlan)
-        } else {
-            null
+        val vp = vectorPlan ?: return@LaunchedEffect
+        val bmp = FloorVectorRenderer.getOrRender(vp)
+        renderedFloorPair = vp.floorId to bmp
+    }
+    LaunchedEffect(snapshot.loadedFloorVectors.size) {
+        for (vp in snapshot.loadedFloorVectors.values) {
+            if (FloorVectorRenderer.getCached(vp.floorId) == null) {
+                FloorVectorRenderer.getOrRender(vp)
+            }
         }
     }
 
-    val displayPosition = snapshot.mapPositionM
-    val displayHeading = snapshot.mapHeadingRad
+    val targetPosition = snapshot.mapPositionM
+    val displayHeading = rememberSmoothHeadingRad(snapshot.mapHeadingRad)
+    // Glide the blue dot between steps instead of jumping 0.7 m at a time
+    val animPos = remember {
+        Animatable(Offset(targetPosition.x.toFloat(), targetPosition.y.toFloat()), Offset.VectorConverter)
+    }
+    LaunchedEffect(targetPosition) {
+        val target = Offset(targetPosition.x.toFloat(), targetPosition.y.toFloat())
+        if ((target - animPos.value).getDistance() > SNAP_DISTANCE_M) {
+            animPos.snapTo(target)
+        } else {
+            animPos.animateTo(target, tween(STEP_GLIDE_MS, easing = LinearOutSlowInEasing))
+        }
+    }
+    val displayPosition = PointM(animPos.value.x.toDouble(), animPos.value.y.toDouble())
     val currentPosition by rememberUpdatedState(displayPosition)
-    val segments = remember(state.rawPath) { PathGeometry.smoothedSegments(state.rawPath) }
+    val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing)),
+        label = "pulse"
+    )
     val headingReady = state.headingValid && !state.tilted
 
     val bmpMatrix = remember { Matrix() }
@@ -103,7 +141,7 @@ fun TelemetryScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         WarningBanner(state)
 
@@ -150,7 +188,7 @@ fun TelemetryScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                route?.let { "Vers ${it.destinationLabel}" }
+                                route?.let { "Vers [${it.destination.floorId}] ${it.destinationLabel}" }
                                     ?: "Naviguer vers une salle…",
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -169,37 +207,122 @@ fun TelemetryScreen(
                     }
 
                     if (route != null) {
+                        Surface(
+                            color = if (route.isArrived) Color(0xFF188038) else Color(0xFF0B8043),
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    route.nextInstruction,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (!route.isArrived) {
+                                    Text(
+                                        "${fmt(route.totalDistanceM, 0)} m",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(start = 10.dp)
+                                    )
+                                }
+                            }
+                        }
+                    } else if (snapshot.destination != null && !snapshot.hasExplicitStart && state.stepCount == 0) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                route.nextInstruction,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (route.isArrived) {
-                                    Color(0xFF2E7D32)
+                                "Choisissez votre salle actuelle pour tracer l'itinéraire",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { showStartDialog = true }) {
+                                Text("Choisir")
+                            }
+                        }
+                    }
+
+                    // Contextual Stair / Elevator Floor Transition Action
+                    val suggested = snapshot.suggestedTransfer
+                    val nearbyVert = snapshot.nearbyVertical
+                    if (suggested != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            val modeTxt = if (suggested.viaElevator) "Ascenseur" else "Escalier"
+                            Text(
+                                if (snapshot.inVerticalTransit) {
+                                    "$modeTxt en cours (${fmtSigned(snapshot.floorDeltaAltitudeM)} m)…"
                                 } else {
-                                    MaterialTheme.colorScheme.primary
+                                    "$modeTxt ${suggested.viaLabel}"
                                 },
-                                maxLines = 2,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Button(
+                                onClick = {
+                                    follow = true
+                                    pan = Offset.Zero
+                                    onConfirmUserFloor(suggested.toFloorId, suggested.verticalGroupId)
+                                }
+                            ) {
+                                Text("Arrivé au ${suggested.toFloorId}")
+                            }
+                        }
+                    } else if (nearbyVert != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val connLbl = nearbyVert.connectorNode.label.ifBlank { "Escalier/Asc." }
+                            Text(
+                                "Près de $connLbl :",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f)
                             )
-                            Text(
-                                "${fmt(route.totalDistanceM, 0)} m",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(start = 8.dp)
-                            )
+                            nearbyVert.upFloorId?.let { upId ->
+                                AssistChip(
+                                    onClick = {
+                                        follow = true
+                                        pan = Offset.Zero
+                                        onConfirmUserFloor(upId, nearbyVert.connectorNode.verticalGroupId)
+                                    },
+                                    label = { Text("↑ $upId") }
+                                )
+                            }
+                            nearbyVert.downFloorId?.let { downId ->
+                                AssistChip(
+                                    onClick = {
+                                        follow = true
+                                        pan = Offset.Zero
+                                        onConfirmUserFloor(downId, nearbyVert.connectorNode.verticalGroupId)
+                                    },
+                                    label = { Text("↓ $downId") }
+                                )
+                            }
                         }
-                    } else if (snapshot.destination != null && snapshot.startNodeId == null && !snapshot.usingGpsStart) {
-                        Text(
-                            "Choisissez une salle de départ dans Config pour l'itinéraire",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
                     }
                 }
             }
@@ -207,11 +330,17 @@ fun TelemetryScreen(
 
         val stepLen = state.currentStepLengthM ?: state.lengthPerStepM
         val capTxt = if (state.headingValid) compassCardinalFr(Math.toDegrees(displayHeading)) else "—"
+        val transitTxt = if (snapshot.inVerticalTransit || abs(snapshot.floorDeltaAltitudeM) >= 0.8) {
+            "  •  Δz ${fmtSigned(snapshot.floorDeltaAltitudeM)} m"
+        } else {
+            ""
+        }
         Text(
-            "Parcouru : ${fmt(state.distanceM, 1)} m  •  " +
+            "Étage : ${snapshot.userFloorId ?: "—"}  •  " +
+                "Parcouru : ${fmt(state.distanceM, 1)} m  •  " +
                 "Pas : ${state.stepCount}" +
                 (stepLen?.let { " (${fmt(it, 2)} m)" } ?: "") +
-                "  •  Cap : $capTxt",
+                "  •  Cap : $capTxt$transitTxt",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -221,14 +350,60 @@ fun TelemetryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 for (f in snapshot.floors) {
+                    val isUserFloor = f.floorId == snapshot.userFloorId
+                    val isViewedFloor = f.floorId == snapshot.activeFloorId
                     FilterChip(
-                        selected = f.floorId == snapshot.activeFloorId,
+                        selected = isViewedFloor,
                         onClick = { onSwitchFloor(f.floorId) },
-                        label = { Text(f.floorId) }
+                        label = {
+                            Text(if (isUserFloor) "● ${f.floorId}" else f.floorId)
+                        }
                     )
+                }
+            }
+        }
+
+        if (!snapshot.isViewingUserFloor && snapshot.activeFloorId != null) {
+            val viewedId = snapshot.activeFloorId
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "Aperçu $viewedId (vous êtes au ${snapshot.userFloorId ?: "—"})",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(
+                        onClick = {
+                            follow = true
+                            pan = Offset.Zero
+                            onConfirmUserFloor(viewedId, null)
+                        }
+                    ) {
+                        Text("Je suis au $viewedId")
+                    }
+                    TextButton(
+                        onClick = {
+                            follow = true
+                            pan = Offset.Zero
+                            onReturnToUserFloor()
+                        }
+                    ) {
+                        Text("Retour")
+                    }
                 }
             }
         }
@@ -252,9 +427,16 @@ fun TelemetryScreen(
                 }
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
+                val viewedFloorId = snapshot.activeFloorId
                 val pxPerM = 56.dp.toPx() * zoom
-                val focus = if (follow) displayPosition else frozenFocus
-                val rotation = if (headUp) -displayHeading else 0.0
+                val routePtsOnViewed = viewedFloorId?.let { route?.pointsForFloor(it) }.orEmpty()
+                val defaultFocus = if (snapshot.isViewingUserFloor) {
+                    displayPosition
+                } else {
+                    routePtsOnViewed.firstOrNull() ?: displayPosition
+                }
+                val focus = if (follow) defaultFocus else frozenFocus
+                val rotation = if (headUp && snapshot.isViewingUserFloor) -displayHeading else 0.0
                 val transform = MapTransform(
                     focus = focus,
                     panXPx = pan.x.toDouble(),
@@ -279,7 +461,7 @@ fun TelemetryScreen(
                 )
 
                 // 1. OpenStreetMap Base Land
-                drawRect(color = Color(0xFFEEF2F6))
+                drawRect(color = MapPalette.land)
 
                 if (osm != null) {
                     // 2. OSM Parks / Green spaces
@@ -298,7 +480,7 @@ fun TelemetryScreen(
                             }
                             close()
                         }
-                        drawPath(path = poly, color = Color(0xFFDCECCB))
+                        drawPath(path = poly, color = MapPalette.park)
                     }
 
                     // 3. OSM Roads (casing + fill)
@@ -321,7 +503,7 @@ fun TelemetryScreen(
                         if (!isFootway) {
                             drawPath(
                                 path = roadPath,
-                                color = Color(0xFFD3DCE6),
+                                color = MapPalette.roadCasing,
                                 style = Stroke(
                                     width = widthPx + 2.2f,
                                     cap = StrokeCap.Round,
@@ -331,7 +513,7 @@ fun TelemetryScreen(
                         }
                         drawPath(
                             path = roadPath,
-                            color = if (isFootway) Color(0xFFE3E8EF) else Color.White,
+                            color = if (isFootway) MapPalette.footway else MapPalette.road,
                             style = Stroke(
                                 width = widthPx,
                                 cap = StrokeCap.Round,
@@ -342,7 +524,7 @@ fun TelemetryScreen(
 
                     // 4. OSM Surrounding & Focus Buildings
                     val buildingLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = android.graphics.Color.rgb(71, 85, 105)
+                        color = android.graphics.Color.rgb(128, 134, 139)
                         textSize = 10.5.dp.toPx()
                         textAlign = Paint.Align.CENTER
                         isFakeBoldText = true
@@ -362,17 +544,17 @@ fun TelemetryScreen(
                             close()
                         }
                         if (b.isFocusBuilding) {
-                            drawPath(path = poly, color = Color(0xFFFFFDF9))
+                            drawPath(path = poly, color = MapPalette.focusBuilding)
                             drawPath(
                                 path = poly,
-                                color = Color(0xFF94A3B8),
+                                color = MapPalette.focusBuildingStroke,
                                 style = Stroke(width = 2.4f, join = StrokeJoin.Round)
                             )
                         } else {
-                            drawPath(path = poly, color = Color(0xFFDDE4EC))
+                            drawPath(path = poly, color = MapPalette.building)
                             drawPath(
                                 path = poly,
-                                color = Color(0xFFC5D0DC),
+                                color = MapPalette.buildingStroke,
                                 style = Stroke(width = 1.2f, join = StrokeJoin.Round)
                             )
                             val tag = b.ref.ifBlank { b.name }
@@ -428,12 +610,14 @@ fun TelemetryScreen(
                                 var deg = Math.toDegrees(atan2((sb.y - sa.y).toDouble(), (sb.x - sa.x).toDouble())).toFloat()
                                 if (deg > 90f) deg -= 180f
                                 if (deg < -90f) deg += 180f
-                                val nc = drawContext.canvas.nativeCanvas
-                                nc.save()
-                                nc.translate(mx, my)
-                                nc.rotate(deg)
-                                nc.drawText(name, 0f, 3.dp.toPx(), roadNamePaint)
-                                nc.restore()
+                                drawHaloText(
+                                    name,
+                                    mx,
+                                    my + 3.dp.toPx(),
+                                    roadNamePaint.textSize,
+                                    android.graphics.Color.rgb(95, 99, 104),
+                                    rotationDeg = deg
+                                )
                             }
                         }
                     }
@@ -447,8 +631,12 @@ fun TelemetryScreen(
                 }
 
                 // 7. Aligned MB Vector Floor Plan Background (MB-1..7)
-                val bmp = floorBitmap
-                if (bmp != null && vectorPlan != null) {
+                val pair = renderedFloorPair
+                val bmp = vectorPlan?.let { vp ->
+                    FloorVectorRenderer.getCached(vp.floorId)
+                        ?: pair?.takeIf { it.first == vp.floorId }?.second
+                }
+                if (bmp != null) {
                     val vb = vectorPlan.viewBoundsM
                     val sTL = toScreen(PointM(vb.minEastM, vb.maxNorthM))
                     val sTR = toScreen(PointM(vb.maxEastM, vb.maxNorthM))
@@ -480,89 +668,134 @@ fun TelemetryScreen(
                     }
                 }
 
-                // 8. Destination marker & Navigation Route Polyline
-                val routePts = snapshot.activeFloorId?.let { route?.pointsForFloor(it) }.orEmpty()
-                if (routePts.size >= 2) {
-                    val routePath = Path().apply {
-                        moveToOffset(toScreen(routePts.first()))
-                        for (i in 1 until routePts.size) {
-                            lineToOffset(toScreen(routePts[i]))
+                val density = 1.dp.toPx()
+
+                // 8. Stairs, elevators and room numbers on the displayed floor
+                if (floorPlan != null && pxPerM >= 3.0f) {
+                    val drawnRoomLabels = HashSet<String>()
+                    for (node in floorPlan.nodes) {
+                        if (node.posM.x !in viewBounds.minX..viewBounds.maxX ||
+                            node.posM.y !in viewBounds.minY..viewBounds.maxY
+                        ) {
+                            continue
                         }
-                    }
-                    drawPath(
-                        path = routePath,
-                        color = Color(0x4400897B),
-                        style = Stroke(width = 14f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                    )
-                    drawPath(
-                        path = routePath,
-                        color = Color(0xFF00897B),
-                        style = Stroke(width = 6f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-                    )
-                    val endScreen = toScreen(routePts.last())
-                    drawCircle(color = Color(0xFF00897B), radius = 8.dp.toPx(), center = endScreen)
-                    drawCircle(color = Color.White, radius = 3.5.dp.toPx(), center = endScreen)
-                }
-
-                // 9. Optional subtle GPS circle when outdoors/nearby
-                snapshot.latestGpsFix?.let { fix ->
-                    if (fix.accuracyM <= 35.0 && fix.eastNorthM.norm() <= 350.0) {
-                        val gpsScreen = toScreen(fix.eastNorthM)
-                        val rPx = (fix.accuracyM.toFloat() * pxPerM).coerceIn(6.dp.toPx(), 70.dp.toPx())
-                        drawCircle(color = Color(0x180284C7), radius = rPx, center = gpsScreen)
-                    }
-                }
-
-                // 10. PDR Trajectory & True-North Heading Cone
-                val traceColor = Color(0xFF1565C0)
-                if (segments.isNotEmpty()) {
-                    val smooth = Path()
-                    smooth.moveToOffset(toScreen(disp(segments.first().start)))
-                    for (segment in segments) {
-                        when (segment) {
-                            is PathSegment.Line -> smooth.lineToOffset(toScreen(disp(segment.end)))
-                            is PathSegment.Quad -> {
-                                val c = toScreen(disp(segment.control))
-                                val e = toScreen(disp(segment.end))
-                                smooth.quadraticTo(c.x, c.y, e.x, e.y)
+                        val sc = toScreen(node.posM)
+                        when (node.type) {
+                            "stairs" -> drawStairsIcon(sc, density)
+                            "elevator" -> drawElevatorIcon(sc, density)
+                            "room" -> if (pxPerM >= 14f && node.label.isNotBlank() && drawnRoomLabels.add(node.label)) {
+                                drawHaloText(
+                                    node.label.removePrefix("MB-"),
+                                    sc.x,
+                                    sc.y + 3.5f * density,
+                                    10.5f * density,
+                                    MapPalette.labelText
+                                )
                             }
                         }
                     }
-                    drawPath(
-                        path = smooth,
-                        color = traceColor,
-                        style = Stroke(width = 4.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                }
+
+                // 9. Walked trail (under the route), on the user's floor only
+                if (snapshot.isViewingUserFloor && state.rawPath.size >= 2) {
+                    val trail = ArrayList<Offset>(state.rawPath.size)
+                    for (i in 0 until state.rawPath.size - 1) trail.add(toScreen(disp(state.rawPath[i])))
+                    trail.add(toScreen(displayPosition))
+                    drawWalkedTrail(trail, 5f * density)
+                    drawStartMarker(trail.first(), density)
+                }
+
+                // 10. Navigation route, floor-transfer callouts and destination pin
+                if (routePtsOnViewed.size >= 2) {
+                    val pts = ArrayList<Offset>(routePtsOnViewed.size + 1)
+                    if (snapshot.isViewingUserFloor && route?.floorSegments?.firstOrNull()?.floorId == viewedFloorId) {
+                        pts.add(toScreen(displayPosition))
+                    }
+                    routePtsOnViewed.forEach { pts.add(toScreen(it)) }
+                    drawRouteLine(pts, density)
+                    if (route != null && route.destination.floorId == viewedFloorId) {
+                        drawDestinationPin(pts.last(), density, route.destinationLabel)
+                    }
+                }
+                if (route != null && viewedFloorId != null) {
+                    for (tr in route.transfers) {
+                        when (viewedFloorId) {
+                            tr.fromFloorId -> {
+                                val up = extractFloorOrd(tr.toFloorId) > extractFloorOrd(tr.fromFloorId)
+                                val glyph = if (tr.viaElevator) "Ascenseur" else "Escalier"
+                                drawRoutePill(toScreen(tr.departurePosM), "${if (up) "↑" else "↓"} $glyph ${tr.toFloorId}", density)
+                            }
+                            tr.toFloorId -> drawRoutePill(toScreen(tr.arrivalPosM), "Depuis ${tr.fromFloorId}", density)
+                        }
+                    }
+                }
+
+                // 11. Precise outdoor GNSS only (indoor fixes are too coarse to be useful)
+                snapshot.latestGpsFix?.let { fix ->
+                    if (fix.accuracyM <= 12.0 && fix.eastNorthM.norm() <= 350.0) {
+                        val rPx = (fix.accuracyM.toFloat() * pxPerM).coerceIn(8f * density, 70f * density)
+                        drawCircle(MapPalette.userBlue.copy(alpha = 0.08f), radius = rPx, center = toScreen(fix.eastNorthM))
+                    }
+                }
+
+                // 12. Blue location dot with heading beam
+                if (snapshot.isViewingUserFloor) {
+                    val here = toScreen(displayPosition)
+                    val ahead = toScreen(
+                        PointM(
+                            displayPosition.x + sin(displayHeading),
+                            displayPosition.y + cos(displayHeading)
+                        )
+                    )
+                    drawUserLocation(
+                        center = here,
+                        headingScreenRad = if (state.headingValid) screenHeading(here, ahead) else null,
+                        pulse = pulse,
+                        density = density,
+                        headingValid = headingReady
                     )
                 }
 
-                val originScreen = toScreen(disp(PointM(0.0, 0.0)))
-                drawCircle(color = Color(0xFF2E7D32), radius = 4.5.dp.toPx(), center = originScreen)
-
-                val here = toScreen(displayPosition)
-                val heading = state.headingRadians
-                val coneColor = if (state.headingValid) Color(0x551565C0) else Color(0x5590A4AE)
-                val coneLenM = (26.dp.toPx() / pxPerM).coerceIn(1.2f, 9f).toDouble()
-                val tipWorld = disp(state.position + PointM(sin(heading) * coneLenM, cos(heading) * coneLenM))
-                val tip = toScreen(tipWorld)
-                val vx = tip.x - here.x
-                val vy = tip.y - here.y
-                val vLen = hypot(vx, vy)
-                if (vLen > 1f) {
-                    val px = -vy / vLen
-                    val py = vx / vLen
-                    val half = vLen * 0.34f
-                    val cone = Path().apply {
-                        moveToOffset(tip)
-                        lineToOffset(Offset(here.x + px * half, here.y + py * half))
-                        lineToOffset(Offset(here.x - px * half, here.y - py * half))
-                        close()
+                // 13. Top-left Active Floor Watermark Pill + Top-right North Badge + Scale Bar
+                if (viewedFloorId != null) {
+                    val floorBadgeBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = if (snapshot.isViewingUserFloor) {
+                            android.graphics.Color.argb(225, 15, 23, 42)
+                        } else {
+                            android.graphics.Color.argb(225, 180, 83, 9)
+                        }
                     }
-                    drawPath(path = cone, color = coneColor)
+                    val floorBadgeTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = android.graphics.Color.WHITE
+                        textSize = 11.5.dp.toPx()
+                        isFakeBoldText = true
+                    }
+                    val badgeLabel = if (snapshot.isViewingUserFloor) {
+                        "Plan $viewedFloorId"
+                    } else {
+                        "Aperçu $viewedFloorId"
+                    }
+                    val tw = floorBadgeTxt.measureText(badgeLabel)
+                    val badgeRect = RectF(
+                        10.dp.toPx(),
+                        10.dp.toPx(),
+                        26.dp.toPx() + tw,
+                        34.dp.toPx()
+                    )
+                    drawContext.canvas.nativeCanvas.drawRoundRect(
+                        badgeRect,
+                        8.dp.toPx(),
+                        8.dp.toPx(),
+                        floorBadgeBg
+                    )
+                    drawContext.canvas.nativeCanvas.drawText(
+                        badgeLabel,
+                        18.dp.toPx(),
+                        26.dp.toPx(),
+                        floorBadgeTxt
+                    )
                 }
-                drawCircle(color = Color.White, radius = 9.dp.toPx(), center = here)
-                drawCircle(color = traceColor, radius = 6.8.dp.toPx(), center = here)
 
-                // 11. North Badge (top-right) & Metric Scale Bar (bottom-left)
                 val compassCenter = Offset(size.width - 24.dp.toPx(), 24.dp.toPx())
                 drawCircle(color = Color(0xDDFFFFFF), radius = 16.dp.toPx(), center = compassCenter)
                 val northDirX = sin(rotation).toFloat()
@@ -613,16 +846,25 @@ fun TelemetryScreen(
                 onClick = {
                     follow = true
                     pan = Offset.Zero
+                    if (!snapshot.isViewingUserFloor) {
+                        onReturnToUserFloor()
+                    }
                 }
             ) {
                 Text("Recentrer")
+            }
+            OutlinedButton(onClick = { showStartDialog = true }) {
+                val startShort = snapshot.startPose?.let { sp ->
+                    snapshot.userFloor?.node(sp.nodeId)?.label?.ifBlank { sp.floorId }
+                }
+                Text(startShort?.let { "Ici : $it" } ?: "Je suis à…")
             }
             FilterChip(
                 selected = headUp,
                 onClick = { headUp = !headUp },
                 label = { Text("Cap en haut") }
             )
-            OutlinedButton(onClick = onResetPosition, enabled = headingReady) {
+            OutlinedButton(onClick = onResetPosition) {
                 Text("Reset départ")
             }
             OutlinedButton(onClick = onOpenSetup) {
@@ -631,19 +873,42 @@ fun TelemetryScreen(
         }
     }
 
+    if (showStartDialog) {
+        RoomSearchDialog(
+            title = "Où êtes-vous maintenant ?",
+            items = snapshot.destinations,
+            preferredFloorId = snapshot.activeFloorId ?: snapshot.userFloorId,
+            onPick = {
+                follow = true
+                pan = Offset.Zero
+                onSelectStartPose(it.key.floorId, it.key.nodeId)
+            },
+            onDismiss = { showStartDialog = false }
+        )
+    }
+
     if (showDestDialog) {
-        SearchPickerDialog(
+        RoomSearchDialog(
             title = "Naviguer vers",
             items = snapshot.destinations,
-            itemText = { "[${it.key.floorId}] ${it.label} — ${it.name}" },
+            preferredFloorId = snapshot.activeFloorId ?: snapshot.userFloorId,
             onPick = { onSelectDestination(it.key) },
             onDismiss = { showDestDialog = false }
         )
     }
 }
 
+private const val SNAP_DISTANCE_M = 4f
+private const val STEP_GLIDE_MS = 420
+
+private fun extractFloorOrd(floorId: String): Int =
+    floorId.substringAfterLast('-', "").toIntOrNull() ?: 0
+
 private fun fmt(value: Double, decimals: Int): String =
     String.format(Locale.FRENCH, "%.${decimals}f", value)
+
+private fun fmtSigned(value: Double): String =
+    String.format(Locale.FRENCH, "%+.1f", value)
 
 private fun Path.moveToOffset(o: Offset) = moveTo(o.x, o.y)
 

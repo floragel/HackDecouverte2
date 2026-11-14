@@ -61,9 +61,12 @@ fun IndoorDevScreen() {
             when (snapshot.pdr.phase) {
                 PdrPhase.TRACKING, PdrPhase.PAUSED -> TelemetryScreen(
                     snapshot = snapshot,
+                    onSelectStartPose = { floorId, nodeId -> backend.setStartPose(floorId, nodeId) },
                     onSelectDestination = backend::setDestination,
                     onSetAccessibleOnly = backend::setAccessibleOnly,
                     onSwitchFloor = { backend.switchActiveFloor(it) },
+                    onConfirmUserFloor = { floorId, vg -> backend.confirmUserFloor(floorId, vg) },
+                    onReturnToUserFloor = backend::returnViewToUserFloor,
                     onResetPosition = backend::resetPositionToStart,
                     onOpenSetup = backend::stopToSetup,
                     onResumeNewTrace = backend::resumeFromPause,
