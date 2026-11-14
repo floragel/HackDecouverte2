@@ -109,8 +109,7 @@ fun TelemetryScreen(
     }
 
     val targetPosition = snapshot.mapPositionM
-    // While walking, the dot and the map follow the direction of travel; at a stop, the phone heading.
-    val displayHeading = rememberSmoothHeadingRad(snapshot.mapMotionBearingRad ?: snapshot.mapHeadingRad)
+    val displayHeading = rememberSmoothHeadingRad(snapshot.mapHeadingRad)
     // Glide the blue dot between steps instead of jumping 0.7 m at a time
     val animPos = remember {
         Animatable(Offset(targetPosition.x.toFloat(), targetPosition.y.toFloat()), Offset.VectorConverter)

@@ -2,9 +2,7 @@ package com.hackdecouverte.pdr
 
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.round
 import kotlin.math.sin
@@ -73,9 +71,6 @@ class PdrTracker(
     private var lastAcceptedWallNs = Long.MIN_VALUE
 
     private val recentStepYaws = ArrayDeque<Double>()
-    private val recentStepDeltas = ArrayDeque<PointM>()
-    private var motionBearingRad: Double? = null
-    private var motionStable = false
     private val straightRunThetas = ArrayList<Double>()
     private var learnedAxisBase: Double? = null
     private val recentIntervalsNs = ArrayDeque<Long>()
@@ -324,19 +319,8 @@ class PdrTracker(
 
         val dynamicLength = length * dynamicStepFactor()
         currentStepLengthM = dynamicLength
-        // Motion equation: advance along the recent displacement direction (what the body
-        // actually does), not along the raw phone yaw. A deviation from the established
-        // motion bearing smaller than ~50° is damped (phone wobble / looking around);
-        // a larger deviation is a real turn and goes through raw so the window catches up.
-        val motionBearing = if (motionStable) motionBearingRad else null
-        val thetaEff = if (motionBearing != null) {
-            val dev = angleDelta(motionBearing, theta)
-            if (abs(dev) <= MOTION_BLEND_MAX_RAD) {
-                wrapAnglePi(motionBearing + dev * MOTION_HEADING_BLEND)
-            } else theta
-        } else theta
         if (verticalHoldActive) {
-            heldStepDeltas.add(PointM(dynamicLength * sin(thetaEff), dynamicLength * cos(thetaEff)))
+            heldStepDeltas.add(PointM(dynamicLength * sin(theta), dynamicLength * cos(theta)))
             heldDistanceM += dynamicLength
             stepCount++
             if (heldStepDeltas.size >= MAX_HELD_STEPS) {
@@ -354,17 +338,14 @@ class PdrTracker(
         val effectiveLength = dynamicLength * turnScale
         val previous = position
         val previousDistance = distanceM
-        var nextPos = position + PointM(effectiveLength * sin(thetaEff), effectiveLength * cos(thetaEff))
+        var nextPos = position + PointM(effectiveLength * sin(theta), effectiveLength * cos(theta))
 
         if (corridorAssistEnabled && straight) {
-            corridorConstraint?.invoke(nextPos, thetaEff)?.let { c ->
+            corridorConstraint?.invoke(nextPos, theta)?.let { c ->
                 val lateral = c.projectedLocalPos - nextPos
                 nextPos += clampNorm(lateral * LATERAL_GAIN, MAX_LATERAL_STEP_M)
             }
         }
-        // Motion window = real displacement before the external (GPS) pull: it reflects where the
-        // trace actually moves (including corridor assistance) without GPS recentering steering it.
-        val motionDelta = nextPos - previous
         if (externalPull.norm() > 1e-6) {
             val apply = clampNorm(externalPull, MAX_EXTERNAL_STEP_M)
             nextPos += apply
@@ -375,31 +356,8 @@ class PdrTracker(
         distanceM += effectiveLength
         stepCount++
         points.add(position)
-        updateMotionBearing(motionDelta)
         milestoneTracker.onSegment(previous, previousDistance, position, distanceM)
         return true
-    }
-
-    private fun updateMotionBearing(stepDelta: PointM) {
-        recentStepDeltas.addLast(stepDelta)
-        while (recentStepDeltas.size > MOTION_WINDOW_STEPS) recentStepDeltas.removeFirst()
-        var sx = 0.0
-        var sy = 0.0
-        for (d in recentStepDeltas) {
-            sx += d.x
-            sy += d.y
-        }
-        val norm = hypot(sx, sy)
-        if (norm < MOTION_MIN_NORM_M) {
-            motionStable = false
-            return
-        }
-        val bearing = atan2(sx, sy)
-        // Only blend while the recent steps point in a consistent direction — never while turning.
-        motionStable = recentStepDeltas.all { d ->
-            d.norm() < 1e-6 || abs(angleDelta(bearing, atan2(d.x, d.y))) <= MOTION_STABLE_RAD
-        }
-        motionBearingRad = bearing
     }
 
     private fun updateStraightness(yaw: Double, turnRate: Double): Boolean {
@@ -724,9 +682,6 @@ class PdrTracker(
         lastAcceptedGaitStepNs = Long.MIN_VALUE
         lastAcceptedWallNs = Long.MIN_VALUE
         recentStepYaws.clear()
-        recentStepDeltas.clear()
-        motionBearingRad = null
-        motionStable = false
         straightRunThetas.clear()
         learnedAxisBase = null
         externalOrigin = null
@@ -780,7 +735,6 @@ class PdrTracker(
             activityPermissionGranted = sensorStatus.permissionGranted,
             registrationFailed = sensorStatus.registrationFailed,
             corridorAssistEnabled = corridorAssistEnabled,
-            motionBearingRad = if (now - lastTrackedStepNs < MOTION_STALE_NS) motionBearingRad else null,
             trueNorthAligned = useTrueNorthReference && tnOffset != null,
             externalAccuracyM = externalAccuracyM,
             warnings = warnings.toSet()
@@ -811,12 +765,6 @@ class PdrTracker(
         private const val MAX_LATERAL_STEP_M = 0.12
         private const val CADENCE_WINDOW = 4
         private const val CADENCE_GAIN = 0.9
-        private const val MOTION_WINDOW_STEPS = 6
-        private const val MOTION_MIN_NORM_M = 1.0
-        private const val MOTION_HEADING_BLEND = 0.35
-        private val MOTION_BLEND_MAX_RAD = Math.toRadians(50.0)
-        private val MOTION_STABLE_RAD = Math.toRadians(20.0)
-        private const val MOTION_STALE_NS = 2_500_000_000L
         private const val MIN_DYNAMIC_FACTOR = 0.75
         private const val MAX_DYNAMIC_FACTOR = 1.30
         private const val MAX_FUSION_ACCURACY_M = 8.0
