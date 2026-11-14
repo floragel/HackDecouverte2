@@ -301,4 +301,6 @@
     <string name="pdr_w_cal_heading">Your direction moved too much. Try again.</string>
     <string name="settings_developer">Developer</string>
     <string name="settings_indoor_test">Indoor navigation test</string>
+    <string name="map_theme_dark">Switch to dark mode</string>
+    <string name="map_theme_light">Switch to light mode</string>
 </resources>

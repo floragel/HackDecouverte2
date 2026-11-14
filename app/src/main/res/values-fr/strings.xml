@@ -293,4 +293,6 @@
     <string name="pdr_w_cal_heading">Ta direction a trop bougé. Recommence.</string>
     <string name="settings_developer">Développeur</string>
     <string name="settings_indoor_test">Test de la navigation intérieure</string>
+    <string name="map_theme_dark">Passer en mode sombre</string>
+    <string name="map_theme_light">Passer en mode clair</string>
 </resources>

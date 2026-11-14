@@ -212,6 +212,8 @@ fun MapScreen() {
                 }
                 if (hasPermission) Spacer(Modifier.weight(1f))
                 Spacer(Modifier.width(8.dp))
+                com.lync.app.ui.indoor.ThemeToggleButton()
+                Spacer(Modifier.width(8.dp))
                 Box(
                     Modifier.size(48.dp).shadow(8.dp, CircleShape).clip(CircleShape).background(c.bg)
                         .pressable({ myPos?.let { flyTo(it.first, it.second) } ?: me?.let { flyTo(45.4972, -73.5790, 15.5) } }),

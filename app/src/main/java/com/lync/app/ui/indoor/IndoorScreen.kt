@@ -40,6 +40,8 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.GpsFixed
 import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -81,6 +83,7 @@ import com.hackdecouverte.pdr.PdrState
 import com.hackdecouverte.pdr.PdrWarning
 import com.lync.app.R
 import com.lync.app.ui.LocalNavigator
+import com.lync.app.ui.LocalThemeController
 import com.lync.app.ui.components.CircleIconButton
 import com.lync.app.ui.components.Pill
 import com.lync.app.ui.components.PillStyle
@@ -186,6 +189,7 @@ fun IndoorScreen() {
                     if (camera.headUp) Icons.Rounded.Explore else Icons.Outlined.Explore,
                     stringResource(R.string.indoor_heading_up), active = camera.headUp,
                 ) { haptics.tick(); camera.headUp = !camera.headUp }
+                ThemeToggleButton()
                 MapRoundButton(Icons.Rounded.MyLocation, stringResource(R.string.indoor_recenter)) { camera.recenter() }
             }
             Column(
@@ -426,6 +430,25 @@ private fun MapRoundButton(icon: androidx.compose.ui.graphics.vector.ImageVector
         Modifier.size(48.dp).shadow(8.dp, CircleShape).clip(CircleShape).background(if (active) c.text else c.bg).pressable(onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, description, tint = if (active) c.bg else c.text) }
+}
+
+/** Light / dark switch for the maps. Saves the choice like Settings > Appearance does. */
+@Composable
+fun ThemeToggleButton() {
+    val c = Campus.colors
+    val theme = LocalThemeController.current
+    val haptics = rememberHaptics()
+    Box(
+        Modifier.size(48.dp).shadow(8.dp, CircleShape).clip(CircleShape).background(c.bg)
+            .pressable({ haptics.tick(); theme.set(if (c.isDark) "light" else "dark") }),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            if (c.isDark) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
+            stringResource(if (c.isDark) R.string.map_theme_light else R.string.map_theme_dark),
+            tint = c.text,
+        )
+    }
 }
 
 /** Vertical floor switcher (7 at the top), floating on the plan. Active floor = ink, like a selected choice. */
