@@ -26,20 +26,26 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MeetingRoom
 import com.lync.app.ui.LocalNavigator
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.MeetingRoom
 import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Icon
@@ -58,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -82,11 +89,13 @@ import com.lync.app.data.model.PinKind
 import com.lync.app.data.model.StatusPreset
 import com.lync.app.data.model.BuildingPresence
 import com.lync.app.data.Buildings
+import com.lync.app.data.Rooms
 import com.lync.app.ui.campusViewModel
 import com.lync.app.ui.components.Avatar
 import com.lync.app.ui.components.pressable
 import com.lync.app.ui.components.timeAgo
 import com.lync.app.ui.theme.Campus
+import com.lync.app.ui.theme.Tokens
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -129,6 +138,7 @@ fun MapScreen() {
     var showFriends by remember { mutableStateOf(true) }
     var showClassmates by remember { mutableStateOf(true) }
     var selected by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
 
     var hasPermission by remember { mutableStateOf(vm.tracker.hasPermission()) }
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -193,6 +203,112 @@ fun MapScreen() {
                 GhostToggle(ghost) { vm.setGhost(!ghost) }
             }
             Spacer(Modifier.height(10.dp))
+            // Search Bar (input field)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .shadow(4.dp, RoundedCornerShape(Tokens.RadiusControl))
+                    .clip(RoundedCornerShape(Tokens.RadiusControl))
+                    .background(c.surface)
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.Search, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.weight(1f)) {
+                    if (searchQuery.isEmpty()) {
+                        Text(
+                            stringResource(R.string.map_search),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = c.textMuted
+                        )
+                    }
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = c.text),
+                        cursorBrush = SolidColor(c.accent),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (searchQuery.isNotEmpty()) {
+                    Box(
+                        Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .pressable({ searchQuery = "" }),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Clear", tint = c.textMuted, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+
+            // Room search results dropdown
+            val matchingRooms = remember(searchQuery) {
+                if (searchQuery.isBlank()) emptyList()
+                else Rooms.search(searchQuery)
+            }
+            if (matchingRooms.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .shadow(8.dp, RoundedCornerShape(Tokens.RadiusControl))
+                        .clip(RoundedCornerShape(Tokens.RadiusControl))
+                        .background(c.surface)
+                        .padding(vertical = 4.dp)
+                ) {
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
+                        items(matchingRooms, key = { it.name }) { room ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .pressable({
+                                        val bld = Buildings.concordia.firstOrNull { it.code == room.buildingCode }
+                                        val lat = bld?.lat ?: 45.49535
+                                        val lng = bld?.lng ?: -73.57905
+                                        flyTo(lat, lng, 18.0)
+                                        searchQuery = ""
+                                    }, scaleDown = 0.98f)
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(c.accentSoft),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.MeetingRoom,
+                                        contentDescription = null,
+                                        tint = c.accent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(R.string.map_room_title, room.name),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = c.text
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.map_room_floor, room.buildingName, room.floor),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = c.textMuted
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(stringResource(R.string.map_friends), showFriends, c.accent) { showFriends = !showFriends }
                 FilterChip(stringResource(R.string.map_classmates), showClassmates, c.accent2) { showClassmates = !showClassmates }
@@ -211,6 +327,8 @@ fun MapScreen() {
                     }
                 }
                 if (hasPermission) Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
+                com.lync.app.ui.indoor.ThemeToggleButton()
                 Spacer(Modifier.width(8.dp))
                 Box(
                     Modifier.size(48.dp).shadow(8.dp, CircleShape).clip(CircleShape).background(c.bg)

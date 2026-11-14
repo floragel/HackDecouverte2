@@ -21,10 +21,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.People
@@ -59,6 +61,7 @@ import com.lync.app.ui.profile.EditProfileScreen
 import com.lync.app.ui.settings.SettingsScreen
 import com.lync.app.ui.scan.ScannerScreen
 import com.lync.app.ui.stories.StoriesScreen
+import com.lync.app.ui.calendar.CalendarScreen
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,6 +84,7 @@ import com.lync.app.ui.theme.Campus
 private enum class Tab(val route: String, val label: Int, val icon: ImageVector, val iconSelected: ImageVector) {
     Home("home", R.string.tab_home, Icons.Outlined.Home, Icons.Rounded.Home),
     Network("network", R.string.tab_network, Icons.Outlined.People, Icons.Rounded.People),
+    Calendar("calendar", R.string.tab_calendar, Icons.Outlined.CalendarMonth, Icons.Rounded.CalendarMonth),
     Map("map", R.string.tab_map, Icons.Outlined.Map, Icons.Rounded.Map),
     Profile("profile", R.string.tab_profile, Icons.Outlined.Person, Icons.Rounded.Person),
 }
@@ -116,6 +120,7 @@ fun MainScreen() {
             ) {
                 composable(Tab.Home.route) { ProvideNavScope(this) { FeedScreen() } }
                 composable(Tab.Network.route) { ProvideNavScope(this) { NetworkScreen() } }
+                composable(Tab.Calendar.route) { ProvideNavScope(this) { CalendarScreen() } }
                 composable(Tab.Map.route) { ProvideNavScope(this) { MapScreen() } }
                 composable(Tab.Profile.route) { ProvideNavScope(this) { ProfileScreen() } }
                 composable(

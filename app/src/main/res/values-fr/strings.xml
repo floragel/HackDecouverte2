@@ -4,6 +4,7 @@
 
     <string name="tab_home">Accueil</string>
     <string name="tab_network">Réseau</string>
+    <string name="tab_calendar">Calendrier</string>
     <string name="tab_map">Carte</string>
     <string name="tab_profile">Profil</string>
 
@@ -60,6 +61,7 @@
     <string name="map_updated">il y a %1$s</string>
     <string name="map_now">maintenant</string>
     <string name="map_permission">Autorise la localisation pour te voir sur la carte</string>
+    <string name="map_search">Chercher une salle…</string>
 
     <string name="profile_title">Profil</string>
     <string name="profile_posts">Publications</string>
@@ -293,4 +295,55 @@
     <string name="pdr_w_cal_heading">Ta direction a trop bougé. Recommence.</string>
     <string name="settings_developer">Développeur</string>
     <string name="settings_indoor_test">Test de la navigation intérieure</string>
+    <string name="map_theme_dark">Passer en mode sombre</string>
+    <string name="map_theme_light">Passer en mode clair</string>
+    <string name="map_room_title">Salle %1$s</string>
+    <string name="map_room_floor">%1$s • Étage %2$s</string>
+
+    <!-- Calendar -->
+    <string name="calendar_title">Calendrier</string>
+    <string name="calendar_my_schedule">Mon calendrier</string>
+    <string name="calendar_filter_all">Tout</string>
+    <string name="calendar_filter_courses">Cours</string>
+    <string name="calendar_filter_social">Social</string>
+    <string name="calendar_today">Aujourd\'hui</string>
+    <string name="calendar_import">Importer un calendrier</string>
+    <string name="calendar_import_desc">Importe un fichier .ics ou synchronise ton horaire universitaire.</string>
+    <string name="calendar_import_file">Importer un fichier .ics</string>
+    <string name="calendar_import_file_desc">Depuis Apple Calendrier, Google Agenda ou Outlook</string>
+    <string name="calendar_import_uni">Synchroniser l\'horaire Concordia</string>
+    <string name="calendar_import_uni_desc">Cours, labos et examens de l\'automne 2026</string>
+    <string name="calendar_import_url">Lien iCal (URL)</string>
+    <string name="calendar_import_url_hint">https://.../calendar.ics</string>
+    <string name="calendar_import_demo">Horaire étudiant complet</string>
+    <string name="calendar_import_demo_desc">Avec cours, sessions d\'étude et soirées campus</string>
+    <string name="calendar_import_action">Importer</string>
+    <string name="calendar_imported_count">%1$d événements importés</string>
+    <string name="calendar_clear_imported">Effacer les événements importés</string>
+    <string name="calendar_empty_title">Rien de prévu ce jour-là</string>
+    <string name="calendar_empty_desc">Profite pour te reposer ou rejoins un événement sur le campus.</string>
+    <string name="calendar_badge_course">Cours</string>
+    <string name="calendar_badge_event">Événement</string>
+    <string name="calendar_badge_plan">Plan</string>
+    <string name="calendar_badge_imported">Importé</string>
+    <string name="calendar_classmates_count">%1$d camarades dans ce cours</string>
+    <string name="calendar_friends_going">%1$d amis y vont</string>
+    <string name="calendar_open_map">Voir sur le plan du campus</string>
+    <string name="calendar_view_event">Voir l\'événement</string>
+    <string name="calendar_events_count">%1$d événements</string>
+    <string name="calendar_attendee_classmate_one">%1$s est dans ce cours</string>
+    <string name="calendar_attendee_classmate_many">%1$s et %2$d autres dans ce cours</string>
+    <string name="calendar_attendee_friend_one">%1$s y va</string>
+    <string name="calendar_attendee_friend_many">%1$s et %2$d ami(e)s y vont</string>
+    <string name="calendar_classmates_section">Camarades dans ce cours</string>
+    <string name="calendar_friends_section">Ami(e)s qui participent</string>
+    <string name="calendar_tag_courses">%1$d cours</string>
+    <string name="calendar_tag_course_one">%1$d cours</string>
+    <string name="calendar_tag_social">%1$d social</string>
+    <string name="calendar_msg_imported">%1$d événements importés avec succès</string>
+    <string name="calendar_msg_synced">Horaire Concordia synchronisé (%1$d cours et labos)</string>
+    <string name="calendar_msg_cleared">Événements importés effacés</string>
+    <string name="calendar_msg_error_import">Erreur d\'import : fichier invalide ou vide</string>
+    <string name="calendar_msg_error_url">Erreur de lien : vérifie l\'adresse URL</string>
+    <string name="calendar_duration_minutes">%1$d min</string>
 </resources>
