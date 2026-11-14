@@ -106,6 +106,7 @@ fun ScannerScreen() {
     var found by remember { mutableStateOf<Person?>(null) }
     var lookingUp by remember { mutableStateOf(false) }
     var notFound by remember { mutableStateOf(false) }
+    var celebrating by remember { mutableStateOf(false) }
 
     val onCode: (Long, String) -> Unit = { code, source ->
         if (found == null && !lookingUp) {
@@ -113,9 +114,9 @@ fun ScannerScreen() {
             scope.launch {
                 val person = runCatching { repo.profileByCode(code) }.getOrNull()
                 if (person != null) {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     if (person.connection == ConnectionState.NONE) runCatching { repo.connect(person.profile.id, source) }
                     found = runCatching { repo.profile(person.profile.id) }.getOrNull() ?: person
+                    celebrating = true
                 } else notFound = true
                 lookingUp = false
             }
@@ -135,12 +136,16 @@ fun ScannerScreen() {
 
         // dim everything except the circle
         val pulse by rememberInfiniteTransition(label = "p").animateFloat(0.96f, 1.02f, infiniteRepeatable(tween(1400), RepeatMode.Reverse), label = "s")
+        // when a code is detected the circle tightens and turns green
+        val locked = lookingUp || found != null
+        val tighten by androidx.compose.animation.core.animateFloatAsState(if (locked) 0.82f else 1f, com.lync.app.ui.motion.Motion.bouncy(), label = "lock")
+        val ringColor by androidx.compose.animation.animateColorAsState(if (locked) Color(0xFF2FD07A) else Color.White, label = "lockc")
         Canvas(Modifier.fillMaxSize().graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)) {
             val r = size.width * 0.36f
             val center = Offset(size.width / 2, size.height / 2)
             drawRect(Color.Black.copy(alpha = 0.55f))
             drawCircle(Color.Transparent, radius = r, center = center, blendMode = BlendMode.Clear)
-            drawCircle(Color.White, radius = r * pulse, center = center, style = Stroke(width = 3.dp.toPx()))
+            drawCircle(ringColor, radius = r * (if (locked) tighten else pulse), center = center, style = Stroke(width = (if (locked) 5.dp else 3.dp).toPx()))
         }
 
         Column(Modifier.fillMaxSize().safeDrawingPadding().padding(16.dp)) {
@@ -166,6 +171,17 @@ fun ScannerScreen() {
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(if (reader.enabled) R.string.scan_nfc_ready else R.string.scan_nfc_off), style = MaterialTheme.typography.labelLarge, color = Color.White)
             }
+            if (repo.isDemo && found == null) {
+                // demo / jury mode: simulate scanning a classmate's card (works on emulators without a camera)
+                Spacer(Modifier.height(10.dp))
+                Pill(stringResource(R.string.scan_simulate), {
+                    scope.launch {
+                        val next = runCatching { repo.classmates() }.getOrDefault(emptyList()).firstOrNull { it.connection != ConnectionState.CONNECTED }
+                            ?: runCatching { repo.suggestions() }.getOrDefault(emptyList()).firstOrNull()
+                        next?.profile?.lyncCode?.let { onCode(it, "code") }
+                    }
+                }, Modifier.align(Alignment.CenterHorizontally), style = PillStyle.Tonal)
+            }
             if (notFound) {
                 Spacer(Modifier.height(10.dp))
                 Text(stringResource(R.string.net_scan_invalid), style = MaterialTheme.typography.labelLarge, color = Color.White, modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -173,7 +189,7 @@ fun ScannerScreen() {
             Spacer(Modifier.height(24.dp))
         }
 
-        AnimatedVisibility(found != null, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut(), modifier = Modifier.align(Alignment.BottomCenter)) {
+        AnimatedVisibility(found != null && !celebrating, enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut(), modifier = Modifier.align(Alignment.BottomCenter)) {
             found?.let { p ->
                 Column(
                     Modifier.fillMaxWidth().safeDrawingPadding().padding(12.dp).clip(RoundedCornerShape(Tokens.RadiusCard)).background(c.bg).padding(22.dp),
@@ -195,6 +211,12 @@ fun ScannerScreen() {
                     }
                 }
             }
+        }
+
+        // the signature moment, then the result card
+        val f = found
+        if (celebrating && f != null) {
+            com.lync.app.ui.motion.ConnectCelebration(repo.me.value, f.profile, f.sharedCourses, c.accent) { celebrating = false }
         }
     }
 }

@@ -65,3 +65,31 @@ The SwiftUI app must declare the **same values** so both look identical.
 3. Left-aligned large titles; no top app bars.
 4. Rows over boxes: cards only for things that are cards (Lync card, classmate).
 5. Motion only answers a tap (press, like burst, flip) — no decorative entrance animations.
+
+## Motion
+
+Source of truth: `app/src/main/java/com/lync/app/ui/motion/`. One signature moment, everything else answers a gesture.
+If the system "reduce motion" setting is on, everything snaps (Android: animator scale 0, iOS: `UIAccessibility.isReduceMotionEnabled`).
+
+| Token | Android (Compose) | iOS (SwiftUI) | Used for |
+|---|---|---|---|
+| press | spring(damping 0.6, stiffness 600) | `.spring(response: 0.25, dampingFraction: 0.6)` | every tappable thing (scale 0.96) |
+| standard | spring(0.8, 400) | `.spring(response: 0.35, dampingFraction: 0.8)` | UI movement |
+| bouncy | spring(MediumBouncy, 380) | `.spring(response: 0.4, dampingFraction: 0.5)` | likes, avatars joining, scanner lock |
+| short / medium | 180 / 280 ms | 0.18 / 0.28 s | fades / screen transitions |
+| stagger | 70 ms | 0.07 s | poll bars, lists |
+
+| Moment | What happens | Duration |
+|---|---|---|
+| **Launch** | system splash shows the mark on Night, then the two links pull apart and snap back ("click"), "Lync" fades in | ~550 ms |
+| **Connect (signature)** | both avatars fly in, the two links interlock between them, ring bursts in the university color, double haptic, "You and X are connected" + shared courses | ~1.5 s |
+| Scanner lock | circle tightens (bouncy) and turns green `#2FD07A` when a code is read | 300 ms |
+| Shared elements | event cover → event page header, group emoji tile → group page | 280 ms (iOS `matchedGeometryEffect` / `.navigationTransition(.zoom)`) |
+| Likes | digits roll up/down (iOS `.contentTransition(.numericText())`), heart springs, double-tap heart burst | 220 ms |
+| Poll | bars fill one after another | 520 ms + 70 ms stagger |
+| Plan "I'm in" | your avatar pops into the stack (bouncy) | 300 ms |
+| Card | flip on tap, gyroscope tilt + holographic foil | continuous |
+
+Haptics: `tick` (like, tab switch, follow, card flip) = `UISelectionFeedbackGenerator`; `confirm` (vote, I'm in, RSVP, join, connect) = `UIImpactFeedbackGenerator(.light)`; `success` (two people connected) = `UINotificationFeedbackGenerator(.success)`.
+
+Demo tip: in demo mode the scanner shows **"Demo: simulate a scan"** to trigger the signature moment without a second phone.

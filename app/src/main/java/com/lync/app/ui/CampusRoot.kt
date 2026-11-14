@@ -18,6 +18,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lync.app.AppContainer
 import com.lync.app.data.demo.DemoRepository
@@ -40,6 +43,8 @@ fun CampusRoot(container: AppContainer) {
     }
 
     val me by container.repository.me.collectAsStateWithLifecycle()
+    val reducedMotion = com.lync.app.ui.motion.rememberSystemReducedMotion()
+    var splashDone by remember { mutableStateOf(reducedMotion) }
 
     // Keep the demo session across restarts
     LaunchedEffect(me) { if (container.repository.isDemo) container.session.demoProfile = me }
@@ -52,25 +57,28 @@ fun CampusRoot(container: AppContainer) {
     val dark = when (themeMode) { "light" -> false; "dark" -> true; else -> androidx.compose.foundation.isSystemInDarkTheme() }
     val settings = remember { ThemeController { mode -> themeMode = mode; container.session.themeMode = mode } }
 
-    CompositionLocalProvider(LocalAppContainer provides container, LocalThemeController provides settings) {
+    CompositionLocalProvider(
+        LocalAppContainer provides container, LocalThemeController provides settings,
+        com.lync.app.ui.motion.LocalReducedMotion provides reducedMotion,
+    ) {
         CampusTheme(accentHex = accent, accent2Hex = accent2, dark = dark) {
             val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
             val screen = when {
-                !ready -> Screen.Loading
+                !ready || !splashDone -> Screen.Loading
                 me == null -> Screen.Onboarding
                 landscape -> Screen.Card
                 else -> Screen.Main
             }
             Box(Modifier.fillMaxSize().background(Campus.colors.bg)) {
                 // MainScreen stays composed under the card so tabs / scroll keep their state.
-                if (me != null) MainScreen()
+                if (me != null && splashDone) MainScreen()
                 AnimatedContent(
                     targetState = screen,
                     transitionSpec = { (fadeIn() + scaleIn(initialScale = 0.96f)) togetherWith fadeOut() },
                     label = "root",
                 ) { s ->
                     when (s) {
-                        Screen.Loading -> Box(Modifier.fillMaxSize().background(Campus.colors.bg))
+                        Screen.Loading -> Splash(reducedMotion) { splashDone = true }
                         Screen.Onboarding -> OnboardingFlow(onUniversityColors)
                         Screen.Card -> me?.let { StudentCardScreen(it) }
                         Screen.Main -> Box(Modifier.fillMaxSize()) // MainScreen is drawn beneath
@@ -79,6 +87,23 @@ fun CampusRoot(container: AppContainer) {
             }
         }
     }
+}
+
+/** Launch: the two links snap together on the brand night blue (same as the app icon), then the app fades in. */
+@Composable
+private fun Splash(reduced: Boolean, onDone: () -> Unit) {
+    var wordmark by remember { mutableStateOf(false) }
+    val alpha by androidx.compose.animation.core.animateFloatAsState(if (wordmark) 1f else 0f, androidx.compose.animation.core.tween(220), label = "w")
+    Box(Modifier.fillMaxSize().background(com.lync.app.ui.theme.Tokens.Night), contentAlignment = androidx.compose.ui.Alignment.Center) {
+        // same size & position as the system splash icon -> no jump between the two
+        com.lync.app.ui.motion.LyncLogoIntro(148.dp, androidx.compose.ui.graphics.Color.White, reduced) { wordmark = true }
+        androidx.compose.material3.Text(
+            "Lync", style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
+            color = androidx.compose.ui.graphics.Color.White.copy(alpha = alpha),
+            modifier = Modifier.offset(y = (96 + (1f - alpha) * 10).dp),
+        )
+    }
+    LaunchedEffect(wordmark) { if (wordmark) { kotlinx.coroutines.delay(if (reduced) 0 else 260); onDone() } }
 }
 
 /** Lets the Settings screen switch light / dark / system live. */

@@ -56,10 +56,11 @@ fun FlippableCard(p: Profile, uni: University?, modifier: Modifier = Modifier) {
     val rotation by animateFloatAsState(if (flipped) 180f else 0f, spring(dampingRatio = 0.75f, stiffness = 200f), label = "flip")
     val density = LocalDensity.current
     val tilt = rememberTilt()
+    val haptics = com.lync.app.ui.motion.rememberHaptics()
     Box(
         modifier.padding(horizontal = Tokens.Gutter, vertical = 4.dp).fillMaxWidth()
             .graphicsLayer { rotationY = rotation + tilt.x * 8f; rotationX = -tilt.y * 6f; cameraDistance = 14f * density.density }
-            .pressable({ flipped = !flipped }, 0.98f),
+            .pressable({ haptics.tick(); flipped = !flipped }, 0.98f),
     ) {
         if (rotation <= 90f) LyncCardFront(p, uni, Modifier.fillMaxWidth(), tilt = tilt, shine = 0.7f)
         else LyncCardBack(p, uni, Modifier.fillMaxWidth().graphicsLayer { rotationY = 180f }, tilt = tilt, shine = 0.5f)

@@ -66,6 +66,7 @@ import com.lync.app.ui.feed.PostCard
 import com.lync.app.ui.shareText
 import com.lync.app.ui.theme.Campus
 import com.lync.app.ui.theme.Tokens
+import com.lync.app.ui.motion.sharedElement
 import kotlinx.coroutines.launch
 
 @Composable
@@ -78,7 +79,9 @@ fun GroupsTab() {
     var creating by remember { mutableStateOf(false) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { scope.launch { groups = runCatching { repo.groups() }.getOrDefault(groups) } }
 
+    val haptics = com.lync.app.ui.motion.rememberHaptics()
     val toggle: (InterestGroup) -> Unit = { g ->
+        haptics.confirm()
         val join = !g.isMember
         groups = groups.map { if (it.id == g.id) it.copy(isMember = join, memberCount = it.memberCount + if (join) 1 else -1) else it }
         scope.launch { runCatching { repo.setMember(g.id, join) } }
@@ -93,7 +96,7 @@ fun GroupsTab() {
                 LazyRow(contentPadding = PaddingValues(horizontal = Tokens.Gutter), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(mine, key = { "m" + it.id }) { g ->
                         Column(Modifier.width(118.dp).clip(RoundedCornerShape(Tokens.RadiusMedia)).background(c.surface).pressable({ nav.group(g.id) }, 0.97f).padding(14.dp)) {
-                            Text(g.emoji, fontSize = 30.sp)
+                            Text(g.emoji, fontSize = 30.sp, modifier = Modifier.sharedElement("group-${g.id}"))
                             Spacer(Modifier.height(10.dp))
                             Text(g.name, style = MaterialTheme.typography.titleSmall, color = c.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Text(pluralStringResource(R.plurals.groups_members, g.memberCount, g.memberCount), style = MaterialTheme.typography.bodySmall, color = c.textMuted)
@@ -110,7 +113,7 @@ fun GroupsTab() {
         }
         items(discover, key = { it.id }) { g ->
             Row(Modifier.fillMaxWidth().pressable({ nav.group(g.id) }, 0.99f).padding(horizontal = Tokens.Gutter, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(c.surface), contentAlignment = Alignment.Center) { Text(g.emoji, fontSize = 26.sp) }
+                Box(Modifier.size(52.dp).sharedElement("group-${g.id}").clip(RoundedCornerShape(16.dp)).background(c.surface), contentAlignment = Alignment.Center) { Text(g.emoji, fontSize = 26.sp) }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(g.name, style = MaterialTheme.typography.titleSmall, color = c.text)
@@ -196,7 +199,7 @@ fun GroupScreen(id: String) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
                 Column(Modifier.padding(horizontal = Tokens.Gutter)) {
-                    Box(Modifier.size(76.dp).clip(RoundedCornerShape(24.dp)).background(c.surface), contentAlignment = Alignment.Center) { Text(g.emoji, fontSize = 38.sp) }
+                    Box(Modifier.size(76.dp).sharedElement("group-${g.id}").clip(RoundedCornerShape(24.dp)).background(c.surface), contentAlignment = Alignment.Center) { Text(g.emoji, fontSize = 38.sp) }
                     Spacer(Modifier.height(14.dp))
                     Text(g.name, style = MaterialTheme.typography.displaySmall, color = c.text)
                     Spacer(Modifier.height(6.dp))

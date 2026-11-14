@@ -227,4 +227,8 @@
     <plurals name="events_going"><item quantity="one">%d going</item><item quantity="other">%d going</item></plurals>
     <plurals name="groups_members"><item quantity="one">%d member</item><item quantity="other">%d members</item></plurals>
     <plurals name="events_friends_going"><item quantity="one">%1$s and %2$d friend</item><item quantity="other">%1$s and %2$d friends</item></plurals>
+    <plurals name="likes_word"><item quantity="one">like</item><item quantity="other">likes</item></plurals>
+    <plurals name="celebrate_courses"><item quantity="one">%d course in common</item><item quantity="other">%d courses in common</item></plurals>
+    <string name="celebrate_title">You and %1$s are connected</string>
+    <string name="scan_simulate">Demo: simulate a scan</string>
 </resources>

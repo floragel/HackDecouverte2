@@ -66,6 +66,7 @@ fun UserProfileScreen(id: String) {
     val nav = LocalNavigator.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val haptics = com.lync.app.ui.motion.rememberHaptics()
 
     var person by remember { mutableStateOf<Person?>(null) }
     var uni by remember { mutableStateOf<University?>(null) }
@@ -104,6 +105,7 @@ fun UserProfileScreen(id: String) {
                             ConnectionState.CONNECTED -> R.string.net_connected to PillStyle.Outline
                         }
                         Pill(stringResource(label), {
+                            if (state == ConnectionState.NONE || state == ConnectionState.INCOMING) haptics.confirm()
                             when (state) {
                                 ConnectionState.NONE -> { person = p.copy(connection = ConnectionState.OUTGOING); scope.launch { runCatching { repo.connect(p.profile.id) } } }
                                 ConnectionState.INCOMING -> { person = p.copy(connection = ConnectionState.CONNECTED); scope.launch { runCatching { repo.respond(p.profile.id, true) } } }
@@ -112,6 +114,7 @@ fun UserProfileScreen(id: String) {
                         }, Modifier.fillMaxWidth(), style = style, contentPadding = PaddingValues(vertical = 12.dp))
                     }
                     Pill(stringResource(if (p.following) R.string.net_following else R.string.net_follow), {
+                        haptics.tick()
                         val follow = !p.following
                         person = p.copy(following = follow)
                         stats = stats.copy(followers = stats.followers + if (follow) 1 else -1)

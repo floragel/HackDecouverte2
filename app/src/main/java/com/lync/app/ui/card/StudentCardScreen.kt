@@ -61,6 +61,7 @@ fun StudentCardScreen(me: Profile) {
     var flipped by remember { mutableStateOf(false) }
     val rotation by animateFloatAsState(if (flipped) 180f else 0f, spring(dampingRatio = 0.75f, stiffness = 180f), label = "flip")
     val tilt = rememberTilt()
+    val haptics = com.lync.app.ui.motion.rememberHaptics()
     val density = LocalDensity.current
     val context = LocalContext.current
 
@@ -82,7 +83,7 @@ fun StudentCardScreen(me: Profile) {
                         cameraDistance = 14f * density.density
                     }
                     .shadow(28.dp, RoundedCornerShape(Tokens.RadiusCard))
-                    .pressable({ flipped = !flipped }, 0.98f),
+                    .pressable({ haptics.tick(); flipped = !flipped }, 0.98f),
             ) {
                 if (rotation <= 90f) {
                     LyncCardFront(profile, university, Modifier.fillMaxHeight(), tilt = tilt, shine = 1f)

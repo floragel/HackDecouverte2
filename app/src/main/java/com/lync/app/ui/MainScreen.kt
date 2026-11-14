@@ -38,6 +38,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SharedTransitionLayout
+import com.lync.app.ui.motion.LocalSharedScope
+import com.lync.app.ui.motion.ProvideNavScope
+import com.lync.app.ui.motion.rememberHaptics
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -81,6 +85,7 @@ private enum class Tab(val route: String, val label: Int, val icon: ImageVector,
     Profile("profile", R.string.tab_profile, Icons.Outlined.Person, Icons.Rounded.Person),
 }
 
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 fun MainScreen() {
     val nav = rememberNavController()
@@ -88,13 +93,16 @@ fun MainScreen() {
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination?.route ?: Tab.Home.route
     val showBar = current in Routes.tabs
+    val haptics = rememberHaptics()
 
     CompositionLocalProvider(LocalNavigator provides navigator) {
         Column(Modifier.fillMaxSize().background(Campus.colors.bg)) {
+            SharedTransitionLayout(Modifier.weight(1f)) {
+            CompositionLocalProvider(LocalSharedScope provides this) {
             NavHost(
                 navController = nav,
                 startDestination = Tab.Home.route,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
                 enterTransition = {
                     if (targetState.destination.route in Routes.tabs) fadeIn(tween(180))
                     else slideInHorizontally(tween(280)) { it / 3 } + fadeIn(tween(200))
@@ -106,29 +114,32 @@ fun MainScreen() {
                     else slideOutHorizontally(tween(260)) { it / 3 } + fadeOut(tween(200))
                 },
             ) {
-                composable(Tab.Home.route) { FeedScreen() }
-                composable(Tab.Network.route) { NetworkScreen() }
-                composable(Tab.Map.route) { MapScreen() }
-                composable(Tab.Profile.route) { ProfileScreen() }
+                composable(Tab.Home.route) { ProvideNavScope(this) { FeedScreen() } }
+                composable(Tab.Network.route) { ProvideNavScope(this) { NetworkScreen() } }
+                composable(Tab.Map.route) { ProvideNavScope(this) { MapScreen() } }
+                composable(Tab.Profile.route) { ProvideNavScope(this) { ProfileScreen() } }
                 composable(
                     Routes.COMPOSE, arguments = listOf(navArgument("story") { type = NavType.BoolType; defaultValue = false }),
                     enterTransition = { slideInVertically(tween(320)) { it / 2 } + fadeIn(tween(220)) },
                     popExitTransition = { slideOutVertically(tween(280)) { it / 2 } + fadeOut(tween(200)) },
-                ) { ComposeScreen(storyMode = it.arguments?.getBoolean("story") == true) }
-                composable(Routes.USER) { UserProfileScreen(it.arguments?.getString("id").orEmpty()) }
+                ) { ProvideNavScope(this) { ComposeScreen(storyMode = it.arguments?.getBoolean("story") == true) } }
+                composable(Routes.USER) { ProvideNavScope(this) { UserProfileScreen(it.arguments?.getString("id").orEmpty()) } }
                 composable(
                     Routes.STORIES,
                     enterTransition = { scaleIn(tween(260), initialScale = 0.9f) + fadeIn(tween(200)) },
                     popExitTransition = { scaleOut(tween(220), targetScale = 0.9f) + fadeOut(tween(180)) },
-                ) { StoriesScreen(it.arguments?.getString("id").orEmpty()) }
+                ) { ProvideNavScope(this) { StoriesScreen(it.arguments?.getString("id").orEmpty()) } }
                 composable(Routes.EDIT) { EditProfileScreen() }
                 composable(Routes.SETTINGS) { SettingsScreen() }
                 composable(Routes.SCAN) { ScannerScreen() }
-                composable(Routes.EVENT) { com.lync.app.ui.network.EventDetailScreen(it.arguments?.getString("id").orEmpty()) }
-                composable(Routes.GROUP) { com.lync.app.ui.network.GroupScreen(it.arguments?.getString("id").orEmpty()) }
+                composable(Routes.EVENT) { ProvideNavScope(this) { com.lync.app.ui.network.EventDetailScreen(it.arguments?.getString("id").orEmpty()) } }
+                composable(Routes.GROUP) { ProvideNavScope(this) { com.lync.app.ui.network.GroupScreen(it.arguments?.getString("id").orEmpty()) } }
+            }
+            }
             }
             AnimatedVisibility(showBar, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                 BottomBar(current) { tab ->
+                    if (tab.route != current) haptics.tick()
                     nav.navigate(tab.route) {
                         popUpTo(nav.graph.findStartDestination().id) { saveState = true }
                         launchSingleTop = true

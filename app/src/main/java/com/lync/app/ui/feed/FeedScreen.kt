@@ -309,8 +309,13 @@ fun PostCard(
     val c = Campus.colors
     val scope = rememberCoroutineScope()
     val burst = remember { Animatable(0f) }
+    val haptics = com.lync.app.ui.motion.rememberHaptics()
+    val onLike = { haptics.tick(); onLike() }
+    val onVote: (String) -> Unit = { haptics.confirm(); onVote(it) }
+    val onGoing = { haptics.confirm(); onGoing() }
     val doubleTap = Modifier.pointerInput(post.id) {
         detectTapGestures(onDoubleTap = {
+            haptics.confirm()
             onDoubleTap()
             scope.launch {
                 burst.snapTo(0f)
@@ -373,7 +378,10 @@ fun PostCard(
             Action(onShare) { Icon(Icons.Outlined.IosShare, stringResource(R.string.a11y_share), tint = c.text, modifier = Modifier.size(24.dp)) }
         }
         Column(Modifier.padding(horizontal = 16.dp)) {
-            Text(pluralStringResource(R.plurals.likes, post.likeCount, post.likeCount), style = MaterialTheme.typography.titleSmall, color = c.text)
+            Row {
+                com.lync.app.ui.motion.RollingNumber(post.likeCount, MaterialTheme.typography.titleSmall, c.text)
+                Text(" " + pluralStringResource(R.plurals.likes_word, post.likeCount), style = MaterialTheme.typography.titleSmall, color = c.text)
+            }
             if (post.kind == PostKind.PHOTO || post.kind == PostKind.PLAN) post.caption?.let {
                 Spacer(Modifier.height(2.dp))
                 Text(buildAnnotatedString {
@@ -401,9 +409,10 @@ private fun PollBlock(poll: Poll, onVote: (String) -> Unit) {
     Column(Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(RoundedCornerShape(Tokens.RadiusMedia)).background(c.surface).padding(18.dp)) {
         Text(poll.question, style = MaterialTheme.typography.titleLarge, color = c.text)
         Spacer(Modifier.height(14.dp))
-        poll.options.forEach { o ->
+        poll.options.forEachIndexed { index, o ->
             val pct = if (poll.total == 0) 0f else o.votes.toFloat() / poll.total
-            val fill by animateFloatAsState(if (voted) pct else 0f, tween(600), label = "fill")
+            // bars fill one after the other
+            val fill by animateFloatAsState(if (voted) pct else 0f, tween(520, delayMillis = index * com.lync.app.ui.motion.Motion.STAGGER), label = "fill")
             val mine = o.id == poll.myVote
             Box(
                 Modifier.fillMaxWidth().padding(bottom = 8.dp).height(46.dp).clip(RoundedCornerShape(14.dp)).background(c.bg)
@@ -451,9 +460,14 @@ private fun PlanBlock(plan: Plan, onGoing: () -> Unit, onPerson: (String) -> Uni
         }
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
+            val initial = remember { plan.going.map { it.id }.toSet() }
             Row(horizontalArrangement = Arrangement.spacedBy((-10).dp)) {
                 plan.going.take(4).forEach { p ->
-                    Box(Modifier.clip(CircleShape).background(c.surface).padding(2.dp).pressable({ onPerson(p.id) })) {
+                    // someone who just joined pops into the stack
+                    val pop = remember(p.id) { Animatable(if (p.id in initial) 1f else 0f) }
+                    LaunchedEffect(p.id) { pop.animateTo(1f, com.lync.app.ui.motion.Motion.bouncy()) }
+                    Box(Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value; alpha = pop.value.coerceIn(0f, 1f) }
+                        .clip(CircleShape).background(c.surface).padding(2.dp).pressable({ onPerson(p.id) })) {
                         Avatar(p.avatarUrl, p.initials, 30.dp)
                     }
                 }

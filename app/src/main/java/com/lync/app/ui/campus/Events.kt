@@ -75,6 +75,7 @@ import com.lync.app.ui.components.pressable
 import com.lync.app.ui.shareText
 import com.lync.app.ui.theme.Campus
 import com.lync.app.ui.theme.Tokens
+import com.lync.app.ui.motion.sharedElement
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Calendar
@@ -116,7 +117,9 @@ fun EventsTab() {
     var filter by remember { mutableStateOf<EventCategory?>(null) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { scope.launch { events = runCatching { repo.events() }.getOrDefault(events) } }
 
+    val haptics = com.lync.app.ui.motion.rememberHaptics()
     val rsvp: (CampusEvent) -> Unit = { e ->
+        haptics.confirm()
         val going = !e.imGoing
         events = events.map { if (it.id == e.id) it.copy(imGoing = going, goingCount = it.goingCount + if (going) 1 else -1) else it }
         scope.launch { runCatching { repo.setRsvp(e.id, going) } }
@@ -151,7 +154,7 @@ fun EventsTab() {
 @Composable
 private fun FeaturedEvent(e: CampusEvent, onOpen: () -> Unit, onRsvp: () -> Unit) {
     Box(Modifier.width(300.dp).aspectRatio(1.35f).clip(RoundedCornerShape(Tokens.RadiusMedia)).pressable(onOpen, 0.98f)) {
-        AsyncImage(e.coverUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        AsyncImage(e.coverUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().sharedElement("event-${e.id}"))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.3f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.8f))))
         Text(stringResource(R.string.events_featured), style = MaterialTheme.typography.labelMedium, color = Color.White,
             modifier = Modifier.padding(12.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.22f)).padding(horizontal = 10.dp, vertical = 4.dp))
@@ -241,7 +244,7 @@ fun EventDetailScreen(id: String) {
     Box(Modifier.fillMaxSize().background(c.bg)) {
         if (e != null) Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth().aspectRatio(1.1f)) {
-                AsyncImage(e.coverUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                AsyncImage(e.coverUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().sharedElement("event-${e.id}"))
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.55f to Color.Transparent, 1f to c.bg)))
             }
             Column(Modifier.padding(horizontal = Tokens.Gutter)) {
