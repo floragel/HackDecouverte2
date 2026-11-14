@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hackdecouverte.pdr.PdrPhase
-import com.hackdecouverte.pdr.StepSource
 import com.hackdecouverte.ui.CalibrationScreen
 import com.hackdecouverte.ui.TelemetryScreen
 
@@ -29,9 +28,20 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: PdrViewModel by viewModels()
 
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> viewModel.onPermissionResult(granted) }
+    private val permissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        results[Manifest.permission.ACTIVITY_RECOGNITION]?.let {
+            viewModel.backend.onActivityPermissionResult(it)
+        }
+        val locGranted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (Manifest.permission.ACCESS_FINE_LOCATION in results ||
+            Manifest.permission.ACCESS_COARSE_LOCATION in results
+        ) {
+            viewModel.backend.onLocationPermissionResult(locGranted)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,8 +53,18 @@ class MainActivity : ComponentActivity() {
                         viewModel = viewModel,
                         onRequestActivityPermission = {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                permissionLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+                                permissionsLauncher.launch(
+                                    arrayOf(Manifest.permission.ACTIVITY_RECOGNITION)
+                                )
                             }
+                        },
+                        onRequestLocationPermission = {
+                            permissionsLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
                         }
                     )
                 }
@@ -54,50 +74,57 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        viewModel.onForeground()
+        viewModel.backend.onForeground()
     }
 
     override fun onStop() {
-        viewModel.onBackground()
+        viewModel.backend.onBackground()
         super.onStop()
     }
 }
 
 @Composable
-fun PdrApp(viewModel: PdrViewModel, onRequestActivityPermission: () -> Unit) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val mapState by viewModel.mapState.collectAsStateWithLifecycle()
+fun PdrApp(
+    viewModel: PdrViewModel,
+    onRequestActivityPermission: () -> Unit,
+    onRequestLocationPermission: () -> Unit
+) {
+    val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
+    val phase = snapshot.pdr.phase
     val view = LocalView.current
-    DisposableEffect(state.phase) {
-        view.keepScreenOn = state.phase == PdrPhase.CALIBRATING ||
-            state.phase == PdrPhase.SETTLING ||
-            state.phase == PdrPhase.TRACKING
+    DisposableEffect(phase) {
+        view.keepScreenOn = phase == PdrPhase.CALIBRATING ||
+            phase == PdrPhase.SETTLING ||
+            phase == PdrPhase.TRACKING
         onDispose { view.keepScreenOn = false }
     }
+    val backend = viewModel.backend
     Scaffold { padding ->
         Box(modifier = Modifier.padding(padding)) {
-            when (state.phase) {
+            when (phase) {
                 PdrPhase.TRACKING, PdrPhase.PAUSED -> TelemetryScreen(
-                    state = state,
-                    floorPlan = viewModel.floorPlan,
-                    anchor = mapState.anchor,
-                    onResetTrace = viewModel::resetTrace,
-                    onRecalibrate = viewModel::recalibrate,
-                    onResumeNewTrace = viewModel::resumeWithNewTrace
+                    snapshot = snapshot,
+                    onSelectDestination = backend::setDestination,
+                    onSetAccessibleOnly = backend::setAccessibleOnly,
+                    onSwitchFloor = { floorId -> backend.switchActiveFloor(floorId) },
+                    onResetPosition = backend::resetPositionToStart,
+                    onOpenSetup = backend::stopToSetup,
+                    onResumeNewTrace = backend::resumeFromPause
                 )
 
                 else -> CalibrationScreen(
-                    state = state,
-                    floorPlan = viewModel.floorPlan,
-                    mapState = mapState,
-                    onSelectSource = { s: StepSource -> viewModel.selectStepSource(s) },
-                    onStartCalibration = viewModel::startCalibration,
-                    onFinishCalibration = viewModel::finishCalibration,
-                    onStartManual = viewModel::startManual,
-                    onSelectStartNode = viewModel::selectStartNode,
-                    onSelectFacing = viewModel::selectFacing,
-                    onClearAnchor = viewModel::clearAnchor,
-                    onRequestActivityPermission = onRequestActivityPermission
+                    snapshot = snapshot,
+                    onSwitchFloor = { floorId -> backend.switchActiveFloor(floorId) },
+                    onSelectStartPose = { floorId, nodeId -> backend.setStartPose(floorId, nodeId) },
+                    onUseGpsStart = { backend.useGpsAsStartOrigin() },
+                    onClearStartPose = backend::clearStartPose,
+                    onSelectDestination = backend::setDestination,
+                    onSetAccessibleOnly = backend::setAccessibleOnly,
+                    onStartWithStepLength = backend::startWithStepLength,
+                    onStartCalibration = { backend.startCalibration5m() },
+                    onFinishCalibration = backend::finishCalibration5m,
+                    onRequestActivityPermission = onRequestActivityPermission,
+                    onRequestLocationPermission = onRequestLocationPermission
                 )
             }
         }

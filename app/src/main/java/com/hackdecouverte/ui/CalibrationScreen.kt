@@ -3,6 +3,7 @@ package com.hackdecouverte.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,59 +26,54 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.hackdecouverte.FacingSelection
-import com.hackdecouverte.MapUiState
-import com.hackdecouverte.map.FloorPlan
+import com.hackdecouverte.backend.NavigationSnapshot
+import com.hackdecouverte.map.NodeKey
 import com.hackdecouverte.pdr.PdrPhase
 import com.hackdecouverte.pdr.PdrState
 import com.hackdecouverte.pdr.PdrWarning
-import com.hackdecouverte.pdr.StepSource
 import java.util.Locale
+import kotlin.math.roundToInt
 
 internal fun warningText(warning: PdrWarning): String = when (warning) {
-    PdrWarning.ROTATION_SENSOR_MISSING ->
-        "Capteur de rotation indisponible : suivi impossible sur cet appareil"
+    PdrWarning.ROTATION_SENSOR_MISSING -> "Capteur d'orientation indisponible"
+    PdrWarning.STEP_DETECTOR_MISSING -> "Podomètre matériel absent (repli accéléromètre)"
+    PdrWarning.FALLBACK_SENSOR_MISSING -> "Accéléromètre indisponible"
+    PdrWarning.ACTIVITY_PERMISSION_DENIED -> "Autorisez l'activité physique pour compter les pas"
+    PdrWarning.SENSOR_REGISTRATION_FAILED -> "Erreur d'initialisation capteur"
+    PdrWarning.CALIBRATION_FAILED_NO_STEPS -> "Aucun pas détecté pendant la calibration"
+    PdrWarning.CALIBRATION_FAILED_IMPLAUSIBLE_LENGTH -> "Longueur de pas hors limites (0,2–1,5 m)"
+    PdrWarning.CALIBRATION_FAILED_NO_HEADING -> "Orientation instable en fin de calibration"
+    PdrWarning.SESSION_INTERRUPTED -> "Session mise en pause"
+}
 
-    PdrWarning.STEP_DETECTOR_MISSING ->
-        "Détecteur de pas matériel absent"
-
-    PdrWarning.FALLBACK_SENSOR_MISSING ->
-        "Accéléromètre indisponible : pas de repli possible"
-
-    PdrWarning.ACTIVITY_PERMISSION_DENIED ->
-        "Permission « reconnaissance d'activité » refusée"
-
-    PdrWarning.SENSOR_REGISTRATION_FAILED ->
-        "Échec d'enregistrement d'un capteur"
-
-    PdrWarning.CALIBRATION_FAILED_NO_STEPS ->
-        "Calibration échouée : aucun pas détecté"
-
-    PdrWarning.CALIBRATION_FAILED_IMPLAUSIBLE_LENGTH ->
-        "Calibration échouée : longueur du pas invraisemblable (hors 0,2–1,5 m)"
-
-    PdrWarning.CALIBRATION_FAILED_NO_HEADING ->
-        "Calibration échouée : cap de référence indisponible à la fin"
-
-    PdrWarning.SESSION_INTERRUPTED ->
-        "Session interrompue (application passée à l'arrière-plan)"
+internal fun compassCardinalFr(azimuthDeg: Double): String {
+    val norm = ((azimuthDeg % 360.0) + 360.0) % 360.0
+    val dirs = arrayOf("N", "NE", "E", "SE", "S", "SO", "O", "NO")
+    val idx = ((norm + 22.5) / 45.0).toInt() % 8
+    return "${norm.roundToInt()}° ${dirs[idx]}"
 }
 
 @Composable
-internal fun WarningList(state: PdrState) {
-    if (state.warnings.isEmpty() && !state.tilted &&
+internal fun WarningBanner(state: PdrState) {
+    val actionableWarnings = state.warnings.filter {
+        it != PdrWarning.STEP_DETECTOR_MISSING && it != PdrWarning.SESSION_INTERRUPTED
+    }
+    if (!state.tilted && actionableWarnings.isEmpty() &&
         !(state.rotationSensorAvailable && !state.headingValid)
     ) {
         return
@@ -85,21 +81,20 @@ internal fun WarningList(state: PdrState) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (state.tilted) {
             Text(
-                "Inclinez moins le téléphone",
+                "Inclinez légèrement moins le téléphone",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall
             )
-        }
-        if (state.rotationSensorAvailable && !state.headingValid && !state.tilted) {
+        } else if (state.rotationSensorAvailable && !state.headingValid) {
             Text(
-                "En attente d'un cap valide…",
+                "Initialisation de l'orientation…",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        for (warning in state.warnings) {
+        for (w in actionableWarnings) {
             Text(
-                warningText(warning),
+                warningText(w),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -107,20 +102,8 @@ internal fun WarningList(state: PdrState) {
     }
 }
 
-private fun facingLabel(plan: FloorPlan, facing: FacingSelection?): String? = when (facing) {
-    is FacingSelection.Neighbor -> plan.node(facing.nodeId)?.let { "Vers ${it.label}" }
-    is FacingSelection.Cardinal -> when (facing.degrees) {
-        0 -> "Nord plan"
-        90 -> "Est plan"
-        180 -> "Sud plan"
-        else -> "Ouest plan"
-    }
-
-    null -> null
-}
-
 @Composable
-private fun <T> PlanPickerDialog(
+internal fun <T> SearchPickerDialog(
     title: String,
     items: List<T>,
     itemText: (T) -> String,
@@ -140,7 +123,7 @@ private fun <T> PlanPickerDialog(
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    label = { Text("Rechercher") },
+                    label = { Text("Rechercher (ex: 2.255)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -154,7 +137,10 @@ private fun <T> PlanPickerDialog(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onPick(filtered[i]) }
+                                .clickable {
+                                    onPick(filtered[i])
+                                    onDismiss()
+                                }
                                 .padding(vertical = 10.dp)
                         )
                     }
@@ -167,24 +153,37 @@ private fun <T> PlanPickerDialog(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CalibrationScreen(
-    state: PdrState,
-    floorPlan: FloorPlan?,
-    mapState: MapUiState,
-    onSelectSource: (StepSource) -> Unit,
+    snapshot: NavigationSnapshot,
+    onSwitchFloor: (floorId: String) -> Unit,
+    onSelectStartPose: (floorId: String, nodeId: String) -> Unit,
+    onUseGpsStart: () -> Unit,
+    onClearStartPose: () -> Unit,
+    onSelectDestination: (NodeKey?) -> Unit,
+    onSetAccessibleOnly: (Boolean) -> Unit,
+    onStartWithStepLength: (Double) -> Boolean,
     onStartCalibration: () -> Unit,
     onFinishCalibration: () -> Unit,
-    onStartManual: (Double) -> Boolean,
-    onSelectStartNode: (String?) -> Unit,
-    onSelectFacing: (FacingSelection) -> Unit,
-    onClearAnchor: () -> Unit,
-    onRequestActivityPermission: () -> Unit
+    onRequestActivityPermission: () -> Unit,
+    onRequestLocationPermission: () -> Unit
 ) {
-    var manualText by remember { mutableStateOf("") }
-    var manualError by remember { mutableStateOf(false) }
-    var startDialog by remember { mutableStateOf(false) }
-    var facingDialog by remember { mutableStateOf(false) }
+    val state = snapshot.pdr
+    val plan = snapshot.activeFloor
+    val defaultStep = snapshot.savedStepLengthM ?: 0.74
+    var stepText by rememberSaveable {
+        mutableStateOf(String.format(Locale.FRENCH, "%.3f", defaultStep))
+    }
+    LaunchedEffect(snapshot.savedStepLengthM) {
+        snapshot.savedStepLengthM?.let {
+            stepText = String.format(Locale.FRENCH, "%.3f", it)
+        }
+    }
+
+    var stepError by remember { mutableStateOf(false) }
+    var showStartPicker by remember { mutableStateOf(false) }
+    var showDestPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -193,185 +192,230 @@ fun CalibrationScreen(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text("Calibration PDR", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            "Marchez 5,0 m en ligne droite, téléphone tenu devant vous, " +
-                "haut de l'appareil vers l'avant (sens de la marche), incliné " +
-                "entre 20° et 60°. Gardez la même position pendant toute la marche.",
-            style = MaterialTheme.typography.bodyMedium
-        )
+        Text("Navigation Indoor MB (Test Backend)", style = MaterialTheme.typography.headlineSmall)
 
-        WarningList(state)
+        WarningBanner(state)
 
-        Text("Source des pas", style = MaterialTheme.typography.titleSmall)
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            FilterChip(
-                selected = state.stepSource == StepSource.HARDWARE,
-                enabled = state.stepDetectorAvailable &&
-                    (!state.activityPermissionNeeded || state.activityPermissionGranted) &&
-                    state.phase == PdrPhase.IDLE,
-                onClick = { onSelectSource(StepSource.HARDWARE) },
-                label = { Text("Détecteur matériel") }
-            )
-            FilterChip(
-                selected = state.stepSource == StepSource.FALLBACK,
-                enabled = state.fallbackCapable && state.phase == PdrPhase.IDLE,
-                onClick = { onSelectSource(StepSource.FALLBACK) },
-                label = { Text("Accéléromètre (expérimental)") }
-            )
-        }
-        if (state.stepDetectorAvailable && state.activityPermissionNeeded &&
-            !state.activityPermissionGranted
-        ) {
-            OutlinedButton(onClick = onRequestActivityPermission) {
-                Text("Autoriser la reconnaissance d'activité")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (state.stepDetectorAvailable && state.activityPermissionNeeded && !state.activityPermissionGranted) {
+                Button(
+                    onClick = onRequestActivityPermission,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Autoriser Pas")
+                }
+            }
+            if (!snapshot.locationPermissionGranted) {
+                OutlinedButton(
+                    onClick = onRequestLocationPermission,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Autoriser GPS (Nord)")
+                }
             }
         }
+
+        val headingDeg = Math.toDegrees(snapshot.mapHeadingRad)
+        val northStatus = when {
+            state.trueNorthAligned && snapshot.latestGpsFix != null ->
+                "Nord Vrai auto (GPS ±${snapshot.latestGpsFix.accuracyM.roundToInt()} m + Boussole) • ${compassCardinalFr(headingDeg)}"
+            state.trueNorthAligned ->
+                "Nord Vrai auto (Boussole Montréal) • ${compassCardinalFr(headingDeg)}"
+            else ->
+                "Acquisition du Nord du téléphone…"
+        }
+        Text(
+            northStatus,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+
+        if (plan != null) {
+            Surface(
+                tonalElevation = 2.dp,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "1. Étage & Départ (${plan.floorId})",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    if (snapshot.floors.size > 1) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            for (f in snapshot.floors) {
+                                FilterChip(
+                                    selected = f.floorId == plan.floorId,
+                                    onClick = { onSwitchFloor(f.floorId) },
+                                    label = { Text(f.floorId) }
+                                )
+                            }
+                        }
+                    }
+                    val startNode = snapshot.startNodeId?.let(plan::node)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showStartPicker = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            val label = when {
+                                startNode != null -> "Départ : ${startNode.label} — ${startNode.name}"
+                                snapshot.usingGpsStart -> "Départ : Position GPS actuelle"
+                                else -> "Choisir une salle de départ…"
+                            }
+                            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (startNode != null) {
+                            TextButton(onClick = onClearStartPose) {
+                                Text("✕")
+                            }
+                        }
+                    }
+                    if (snapshot.latestGpsFix != null && startNode != null) {
+                        TextButton(onClick = onUseGpsStart) {
+                            Text("Utiliser plutôt ma position GPS")
+                        }
+                    }
+                }
+            }
+
+            Surface(
+                tonalElevation = 2.dp,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "2. Destination (optionnel, multi-étages)",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    val destItem = snapshot.destinations.firstOrNull { it.key == snapshot.destination }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showDestPicker = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                destItem?.let { "[${it.key.floorId}] ${it.label} — ${it.name}" }
+                                    ?: "Choisir une salle d'arrivée…",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (destItem != null) {
+                            TextButton(onClick = { onSelectDestination(null) }) {
+                                Text("✕")
+                            }
+                        }
+                    }
+                    FilterChip(
+                        selected = snapshot.accessibleOnly,
+                        onClick = { onSetAccessibleOnly(!snapshot.accessibleOnly) },
+                        label = { Text("Accessible PMR (ascenseurs uniquement)") }
+                    )
+                }
+            }
+        }
+
+        HorizontalDivider()
 
         when (state.phase) {
             PdrPhase.CALIBRATING -> {
                 Text(
-                    "Pas détectés : ${state.calibrationStepCount}",
-                    style = MaterialTheme.typography.headlineMedium
+                    "Marchez 5,0 m droit devant vous — Pas : ${state.calibrationStepCount}",
+                    style = MaterialTheme.typography.titleMedium
                 )
                 Button(
                     onClick = onFinishCalibration,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Terminer — 5,0 m parcourus")
+                    Text("Valider 5,0 m")
                 }
             }
 
             PdrPhase.SETTLING -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(12.dp))
-                    Text(
-                        "Restez immobile — finalisation…",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                    Text("Restez immobile — calcul du pas…")
                 }
             }
 
             else -> {
-                Button(
-                    onClick = onStartCalibration,
-                    enabled = state.canStart,
-                    modifier = Modifier.fillMaxWidth()
+                Text("3. Foulée & Lancement (sans calibration d'angle)", style = MaterialTheme.typography.titleSmall)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Démarrer la calibration")
-                }
-                HorizontalDivider()
-                Text(
-                    "Option — test rapide sans calibration :",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
-                        value = manualText,
+                        value = stepText,
                         onValueChange = {
-                            manualText = it
-                            manualError = false
+                            stepText = it
+                            stepError = false
                         },
-                        label = { Text("Longueur du pas (m)") },
-                        isError = manualError,
+                        label = { Text("Pas de base (m)") },
+                        isError = stepError,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.weight(1f)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(
+                    Button(
                         enabled = state.canStart,
                         onClick = {
-                            val value = manualText.replace(',', '.').toDoubleOrNull()
-                            manualError = value == null || !onStartManual(value)
+                            val v = stepText.replace(',', '.').toDoubleOrNull()
+                            stepError = v == null || !onStartWithStepLength(v)
                         }
                     ) {
-                        Text("Démarrer")
+                        Text("Ouvrir Carte")
                     }
                 }
-                if (manualError) {
+                if (stepError) {
                     Text(
-                        "Valeur valide entre 0,2 et 1,5 m",
+                        "Entrez une longueur entre 0,20 et 1,50 m",
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-            }
-        }
-
-        if (floorPlan != null) {
-            HorizontalDivider()
-            Text(
-                "Position sur le plan ${floorPlan.floorId}",
-                style = MaterialTheme.typography.titleSmall
-            )
-            val startNode = mapState.selectedStartNodeId?.let(floorPlan::node)
-            OutlinedButton(
-                onClick = { startDialog = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    startNode?.let { "${it.label} — ${it.name}" } ?: "Point de départ…",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            OutlinedButton(
-                onClick = { facingDialog = true },
-                enabled = startNode != null,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    facingLabel(floorPlan, mapState.selectedFacing) ?: "Orientation de départ…",
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (mapState.anchor != null && startNode != null) {
-                Text(
-                    "Ancré : ${startNode.label} → " +
-                        "${facingLabel(floorPlan, mapState.selectedFacing)} " +
-                        "(ψ ≈ ${String.format(Locale.FRENCH, "%.0f", Math.toDegrees(mapState.anchor.psiRad))}°)",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                TextButton(onClick = onClearAnchor) {
-                    Text("Retirer l'ancrage")
+                OutlinedButton(
+                    onClick = onStartCalibration,
+                    enabled = state.canStart,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Calibrer la foulée sur 5,0 m")
                 }
             }
         }
-
-        Spacer(Modifier.height(8.dp))
     }
 
-    if (startDialog && floorPlan != null) {
-        PlanPickerDialog(
-            title = "Point de départ",
-            items = floorPlan.labeledNodes,
+    if (showStartPicker && plan != null) {
+        SearchPickerDialog(
+            title = "Salle de départ (${plan.floorId})",
+            items = plan.labeledNodes,
             itemText = { "${it.label} — ${it.name}" },
-            onPick = { onSelectStartNode(it.id) },
-            onDismiss = { startDialog = false }
+            onPick = { onSelectStartPose(plan.floorId, it.id) },
+            onDismiss = { showStartPicker = false }
         )
     }
-    val dialogStart = mapState.selectedStartNodeId?.let { floorPlan?.node(it) }
-    if (facingDialog && floorPlan != null && dialogStart != null) {
-        val facingItems = floorPlan.neighbors(dialogStart.id)
-            .map { FacingSelection.Neighbor(it.id) as FacingSelection to "Vers ${it.label}" } +
-            listOf(
-                FacingSelection.Cardinal(0) to "Nord plan",
-                FacingSelection.Cardinal(90) to "Est plan",
-                FacingSelection.Cardinal(180) to "Sud plan",
-                FacingSelection.Cardinal(270) to "Ouest plan"
-            )
-        PlanPickerDialog(
-            title = "Orientation de départ",
-            items = facingItems,
-            itemText = { it.second },
-            onPick = { onSelectFacing(it.first) },
-            onDismiss = { facingDialog = false }
+
+    if (showDestPicker) {
+        SearchPickerDialog(
+            title = "Aller vers",
+            items = snapshot.destinations,
+            itemText = { "[${it.key.floorId}] ${it.label} — ${it.name}" },
+            onPick = { onSelectDestination(it.key) },
+            onDismiss = { showDestPicker = false }
         )
     }
 }

@@ -177,4 +177,32 @@ class OrientationProcessorTest {
         val vertical = 0.0 * ux + 0.0 * uy + linZ * uz
         assertTrue(vertical > 0.0)
     }
+
+    @Test
+    fun stableHeadingIgnoresThumbTapTwistInLast100Ms() {
+        val p = OrientationProcessor()
+        var t = 100_000_000L
+        while (t <= 450_000_000L) {
+            p.onRotationVector(t, rotationVectorFor(0.0, Math.toRadians(40.0)))
+            t += 20_000_000L
+        }
+        p.onRotationVector(520_000_000L, rotationVectorFor(Math.toRadians(14.0), Math.toRadians(40.0)))
+        val stable = p.stableHeadingAt(520_000_000L)
+        assertTrue(stable != null)
+        assertEquals(0.0, stable!!, 1e-4)
+    }
+
+    @Test
+    fun turnRateMeasuresFastRotationAccurately() {
+        val p = OrientationProcessor()
+        var t = 0L
+        var yaw = 0.0
+        while (t <= 250_000_000L) {
+            p.onRotationVector(t, rotationVectorFor(yaw))
+            yaw += 0.05
+            t += 25_000_000L
+        }
+        val rate = p.turnRateRadPerSecAt(250_000_000L)
+        assertEquals(2.0, rate, 0.05)
+    }
 }

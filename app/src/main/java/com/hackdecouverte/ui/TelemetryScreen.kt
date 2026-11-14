@@ -1,5 +1,7 @@
 package com.hackdecouverte.ui
 
+import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -19,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,57 +33,71 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.hackdecouverte.map.FloorPlan
-import com.hackdecouverte.map.MapAnchor
+import com.hackdecouverte.backend.NavigationSnapshot
+import com.hackdecouverte.map.NodeKey
 import com.hackdecouverte.pdr.PathGeometry
 import com.hackdecouverte.pdr.PathSegment
 import com.hackdecouverte.pdr.PdrPhase
-import com.hackdecouverte.pdr.PdrState
 import com.hackdecouverte.pdr.PointM
-import com.hackdecouverte.pdr.StepSource
 import java.util.Locale
-import kotlin.math.floor
-import kotlin.math.sin
+import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
 
-private val GRID_STEPS_M = doubleArrayOf(0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0)
-
-@Composable
-private fun Metric(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelSmall)
-        Text(value, style = MaterialTheme.typography.titleMedium)
-    }
-}
+private val SCALE_BAR_STEPS_M = intArrayOf(2, 5, 10, 20, 50, 100, 200)
 
 @Composable
 fun TelemetryScreen(
-    state: PdrState,
-    floorPlan: FloorPlan?,
-    anchor: MapAnchor?,
-    onResetTrace: () -> Unit,
-    onRecalibrate: () -> Unit,
+    snapshot: NavigationSnapshot,
+    onSelectDestination: (NodeKey?) -> Unit,
+    onSetAccessibleOnly: (Boolean) -> Unit,
+    onSwitchFloor: (String) -> Unit,
+    onResetPosition: () -> Unit,
+    onOpenSetup: () -> Unit,
     onResumeNewTrace: () -> Unit
 ) {
-    var zoom by remember { mutableStateOf(1f) }
+    val state = snapshot.pdr
+    val floorPlan = snapshot.activeFloor
+    val vectorPlan = snapshot.activeFloorVector
+    val osm = snapshot.osmSurroundings
+    val anchor = snapshot.anchor
+    val route = snapshot.activeRoute
+
+    var zoom by remember { mutableStateOf(0.22f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var follow by remember { mutableStateOf(true) }
     var frozenFocus by remember { mutableStateOf(PointM(0.0, 0.0)) }
     var headUp by remember { mutableStateOf(false) }
-    var showRaw by remember { mutableStateOf(false) }
-    var showPlan by remember { mutableStateOf(true) }
-    val displayPosition = anchor?.toMap(state.position) ?: state.position
-    val displayHeading = anchor?.mapHeading(state.headingRadians) ?: state.headingRadians
+    var showDestDialog by remember { mutableStateOf(false) }
+    var floorBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+    LaunchedEffect(vectorPlan?.floorId) {
+        floorBitmap = if (vectorPlan != null) {
+            FloorVectorRenderer.getOrRender(vectorPlan)
+        } else {
+            null
+        }
+    }
+
+    val displayPosition = snapshot.mapPositionM
+    val displayHeading = snapshot.mapHeadingRad
     val currentPosition by rememberUpdatedState(displayPosition)
     val segments = remember(state.rawPath) { PathGeometry.smoothedSegments(state.rawPath) }
     val headingReady = state.headingValid && !state.tilted
+
+    val bmpMatrix = remember { Matrix() }
+    val bmpPaint = remember {
+        Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    }
 
     Column(
         modifier = Modifier
@@ -88,7 +105,7 @@ fun TelemetryScreen(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        WarningList(state)
+        WarningBanner(state)
 
         if (state.phase == PdrPhase.PAUSED) {
             Surface(
@@ -103,67 +120,116 @@ fun TelemetryScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        "Trajet conservé — référence perdue",
+                        "Suivi en pause",
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f)
                     )
                     TextButton(onClick = onResumeNewTrace, enabled = headingReady) {
-                        Text("Reprendre (nouveau trajet)")
+                        Text("Reprendre")
                     }
                 }
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            Metric("Distance", fmt(state.distanceM, 1) + " m")
-            val cap = if (state.headingValid) {
-                fmt(Math.toDegrees(state.headingRadians), 0) + "°"
-            } else {
-                "—"
-            }
-            Metric("Cap relatif", cap)
-            if (anchor != null) {
-                val capPlan = if (state.headingValid) {
-                    fmt(Math.toDegrees(displayHeading), 0) + "°"
-                } else {
-                    "—"
+        if (floorPlan != null) {
+            Surface(
+                tonalElevation = 2.dp,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showDestDialog = true },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                route?.let { "Vers ${it.destinationLabel}" }
+                                    ?: "Naviguer vers une salle…",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        FilterChip(
+                            selected = snapshot.accessibleOnly,
+                            onClick = { onSetAccessibleOnly(!snapshot.accessibleOnly) },
+                            label = { Text("PMR") }
+                        )
+                        if (snapshot.destination != null) {
+                            TextButton(onClick = { onSelectDestination(null) }) {
+                                Text("✕")
+                            }
+                        }
+                    }
+
+                    if (route != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                route.nextInstruction,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (route.isArrived) {
+                                    Color(0xFF2E7D32)
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                "${fmt(route.totalDistanceM, 0)} m",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    } else if (snapshot.destination != null && snapshot.startNodeId == null && !snapshot.usingGpsStart) {
+                        Text(
+                            "Choisissez une salle de départ dans Config pour l'itinéraire",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
-                Metric("Cap plan", capPlan)
             }
-            Metric("Pas", state.stepCount.toString())
-            val length = state.lengthPerStepM
-            Metric(
-                "Longueur du pas",
-                if (length == null) {
-                    "—"
-                } else {
-                    fmt(length, 2) + " m" + if (state.stepLengthManual) " (man.)" else ""
-                }
-            )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                when (state.stepSource) {
-                    StepSource.HARDWARE -> "Source : détecteur matériel"
-                    StepSource.FALLBACK -> "Source : accéléromètre (expérimental)"
-                    StepSource.NONE -> "Source : —"
-                },
-                style = MaterialTheme.typography.bodySmall
-            )
-            if (state.droppedStepCount > 0) {
-                Text(
-                    "Pas ignorés : ${state.droppedStepCount}",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall
-                )
+        val stepLen = state.currentStepLengthM ?: state.lengthPerStepM
+        val capTxt = if (state.headingValid) compassCardinalFr(Math.toDegrees(displayHeading)) else "—"
+        Text(
+            "Parcouru : ${fmt(state.distanceM, 1)} m  •  " +
+                "Pas : ${state.stepCount}" +
+                (stepLen?.let { " (${fmt(it, 2)} m)" } ?: "") +
+                "  •  Cap : $capTxt",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (snapshot.floors.size > 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                for (f in snapshot.floors) {
+                    FilterChip(
+                        selected = f.floorId == snapshot.activeFloorId,
+                        onClick = { onSwitchFloor(f.floorId) },
+                        label = { Text(f.floorId) }
+                    )
+                }
             }
         }
 
@@ -174,7 +240,7 @@ fun TelemetryScreen(
                 .clipToBounds()
                 .pointerInput(Unit) {
                     detectTransformGestures { _, panChange, zoomChange, _ ->
-                        zoom = (zoom * zoomChange).coerceIn(0.2f, 12f)
+                        zoom = (zoom * zoomChange).coerceIn(0.04f, 8f)
                         if (panChange != Offset.Zero) {
                             if (follow) {
                                 follow = false
@@ -206,123 +272,249 @@ fun TelemetryScreen(
 
                 fun disp(p: PointM): PointM = anchor?.toMap(p) ?: p
 
-                drawRect(color = Color(0xFFF5F5F5))
-
-                val gridStep = GRID_STEPS_M.firstOrNull { it * pxPerM >= 36.0 } ?: 200.0
-                val bounds = transform.viewBoundsWorld(
+                val viewBounds = transform.viewBoundsWorld(
                     size.width.toDouble(),
                     size.height.toDouble(),
-                    marginM = 2.0
+                    marginM = 25.0
                 )
-                val gridColor = Color(0xFFD8DDE3)
-                val axisColor = Color(0xFFB0B8C4)
-                var gx = floor(bounds.minX / gridStep) * gridStep
-                while (gx <= bounds.maxX) {
-                    drawLine(
-                        color = if (kotlin.math.abs(gx) < 1e-9) axisColor else gridColor,
-                        start = toScreen(PointM(gx, bounds.minY)),
-                        end = toScreen(PointM(gx, bounds.maxY)),
-                        strokeWidth = 1f
-                    )
-                    gx += gridStep
-                }
-                var gy = floor(bounds.minY / gridStep) * gridStep
-                while (gy <= bounds.maxY) {
-                    drawLine(
-                        color = if (kotlin.math.abs(gy) < 1e-9) axisColor else gridColor,
-                        start = toScreen(PointM(bounds.minX, gy)),
-                        end = toScreen(PointM(bounds.maxX, gy)),
-                        strokeWidth = 1f
-                    )
-                    gy += gridStep
+
+                // 1. OpenStreetMap Base Land
+                drawRect(color = Color(0xFFEEF2F6))
+
+                if (osm != null) {
+                    // 2. OSM Parks / Green spaces
+                    for (park in osm.parks) {
+                        if (park.polygonM.none {
+                                it.x in viewBounds.minX..viewBounds.maxX &&
+                                    it.y in viewBounds.minY..viewBounds.maxY
+                            }
+                        ) {
+                            continue
+                        }
+                        val poly = Path().apply {
+                            moveToOffset(toScreen(park.polygonM.first()))
+                            for (i in 1 until park.polygonM.size) {
+                                lineToOffset(toScreen(park.polygonM[i]))
+                            }
+                            close()
+                        }
+                        drawPath(path = poly, color = Color(0xFFDCECCB))
+                    }
+
+                    // 3. OSM Roads (casing + fill)
+                    for (road in osm.roads) {
+                        if (road.polylineM.none {
+                                it.x in viewBounds.minX..viewBounds.maxX &&
+                                    it.y in viewBounds.minY..viewBounds.maxY
+                            }
+                        ) {
+                            continue
+                        }
+                        val roadPath = Path().apply {
+                            moveToOffset(toScreen(road.polylineM.first()))
+                            for (i in 1 until road.polylineM.size) {
+                                lineToOffset(toScreen(road.polylineM[i]))
+                            }
+                        }
+                        val widthPx = (road.widthM.toFloat() * pxPerM).coerceIn(2.5f, 64f)
+                        val isFootway = road.kind == "footway" || road.kind == "cycleway"
+                        if (!isFootway) {
+                            drawPath(
+                                path = roadPath,
+                                color = Color(0xFFD3DCE6),
+                                style = Stroke(
+                                    width = widthPx + 2.2f,
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                        }
+                        drawPath(
+                            path = roadPath,
+                            color = if (isFootway) Color(0xFFE3E8EF) else Color.White,
+                            style = Stroke(
+                                width = widthPx,
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round
+                            )
+                        )
+                    }
+
+                    // 4. OSM Surrounding & Focus Buildings
+                    val buildingLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = android.graphics.Color.rgb(71, 85, 105)
+                        textSize = 10.5.dp.toPx()
+                        textAlign = Paint.Align.CENTER
+                        isFakeBoldText = true
+                    }
+                    for (b in osm.buildings) {
+                        val c = b.labelCenterM
+                        if (c.x !in (viewBounds.minX - 60.0)..(viewBounds.maxX + 60.0) ||
+                            c.y !in (viewBounds.minY - 60.0)..(viewBounds.maxY + 60.0)
+                        ) {
+                            continue
+                        }
+                        val poly = Path().apply {
+                            moveToOffset(toScreen(b.polygonM.first()))
+                            for (i in 1 until b.polygonM.size) {
+                                lineToOffset(toScreen(b.polygonM[i]))
+                            }
+                            close()
+                        }
+                        if (b.isFocusBuilding) {
+                            drawPath(path = poly, color = Color(0xFFFFFDF9))
+                            drawPath(
+                                path = poly,
+                                color = Color(0xFF94A3B8),
+                                style = Stroke(width = 2.4f, join = StrokeJoin.Round)
+                            )
+                        } else {
+                            drawPath(path = poly, color = Color(0xFFDDE4EC))
+                            drawPath(
+                                path = poly,
+                                color = Color(0xFFC5D0DC),
+                                style = Stroke(width = 1.2f, join = StrokeJoin.Round)
+                            )
+                            val tag = b.ref.ifBlank { b.name }
+                            if (tag.isNotBlank() && pxPerM >= 2.2f) {
+                                val sc = toScreen(c)
+                                drawContext.canvas.nativeCanvas.drawText(
+                                    tag.take(20),
+                                    sc.x,
+                                    sc.y + 3.dp.toPx(),
+                                    buildingLabelPaint
+                                )
+                            }
+                        }
+                    }
+
+                    // 5. Street names along OSM roads
+                    if (pxPerM >= 2.6f) {
+                        val roadNamePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = android.graphics.Color.rgb(82, 96, 115)
+                            textSize = 9.5.dp.toPx()
+                            textAlign = Paint.Align.CENTER
+                        }
+                        val drawnNames = HashSet<String>()
+                        for (road in osm.roads) {
+                            val name = road.name
+                            if (name.isBlank() || name in drawnNames || road.polylineM.size < 2) continue
+                            var bestIdx = -1
+                            var bestLen = 0f
+                            for (i in 0 until road.polylineM.size - 1) {
+                                val a = road.polylineM[i]
+                                val b = road.polylineM[i + 1]
+                                val mx = (a.x + b.x) * 0.5
+                                val my = (a.y + b.y) * 0.5
+                                if (mx !in viewBounds.minX..viewBounds.maxX ||
+                                    my !in viewBounds.minY..viewBounds.maxY
+                                ) {
+                                    continue
+                                }
+                                val sa = toScreen(a)
+                                val sb = toScreen(b)
+                                val segPx = hypot(sb.x - sa.x, sb.y - sa.y)
+                                if (segPx > bestLen) {
+                                    bestLen = segPx
+                                    bestIdx = i
+                                }
+                            }
+                            if (bestIdx >= 0 && bestLen >= 75.dp.toPx()) {
+                                drawnNames.add(name)
+                                val sa = toScreen(road.polylineM[bestIdx])
+                                val sb = toScreen(road.polylineM[bestIdx + 1])
+                                val mx = (sa.x + sb.x) * 0.5f
+                                val my = (sa.y + sb.y) * 0.5f
+                                var deg = Math.toDegrees(atan2((sb.y - sa.y).toDouble(), (sb.x - sa.x).toDouble())).toFloat()
+                                if (deg > 90f) deg -= 180f
+                                if (deg < -90f) deg += 180f
+                                val nc = drawContext.canvas.nativeCanvas
+                                nc.save()
+                                nc.translate(mx, my)
+                                nc.rotate(deg)
+                                nc.drawText(name, 0f, 3.dp.toPx(), roadNamePaint)
+                                nc.restore()
+                            }
+                        }
+                    }
+
+                    // 6. Metro entrances
+                    for (poi in osm.pois) {
+                        val sp = toScreen(poi.positionM)
+                        drawCircle(color = Color(0xFF0284C7), radius = 4.5.dp.toPx(), center = sp)
+                        drawCircle(color = Color.White, radius = 2.dp.toPx(), center = sp)
+                    }
                 }
 
-                if (floorPlan != null && showPlan) {
+                // 7. Aligned MB Vector Floor Plan Background (MB-1..7)
+                val bmp = floorBitmap
+                if (bmp != null && vectorPlan != null) {
+                    val vb = vectorPlan.viewBoundsM
+                    val sTL = toScreen(PointM(vb.minEastM, vb.maxNorthM))
+                    val sTR = toScreen(PointM(vb.maxEastM, vb.maxNorthM))
+                    val sBL = toScreen(PointM(vb.minEastM, vb.minNorthM))
+                    val src = floatArrayOf(
+                        0f, 0f,
+                        bmp.width.toFloat(), 0f,
+                        0f, bmp.height.toFloat()
+                    )
+                    val dst = floatArrayOf(
+                        sTL.x, sTL.y,
+                        sTR.x, sTR.y,
+                        sBL.x, sBL.y
+                    )
+                    if (bmpMatrix.setPolyToPoly(src, 0, dst, 0, 3)) {
+                        drawContext.canvas.nativeCanvas.drawBitmap(bmp, bmpMatrix, bmpPaint)
+                    }
+                } else if (floorPlan != null) {
                     for (edge in floorPlan.edges) {
                         val a = floorPlan.node(edge.fromId)?.posM ?: continue
                         val b = floorPlan.node(edge.toId)?.posM ?: continue
-                        if (edge.accessible) {
-                            drawLine(
-                                color = Color(0xFFB0BEC5),
-                                start = toScreen(a),
-                                end = toScreen(b),
-                                strokeWidth = 4f,
-                                cap = StrokeCap.Round
-                            )
-                        } else {
-                            drawLine(
-                                color = Color(0xFF9E9E9E),
-                                start = toScreen(a),
-                                end = toScreen(b),
-                                strokeWidth = 2f,
-                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f))
-                            )
-                        }
-                    }
-                    val nodeLabelPaint = Paint().apply {
-                        color = android.graphics.Color.DKGRAY
-                        textSize = 9.dp.toPx()
-                        isAntiAlias = true
-                    }
-                    for (node in floorPlan.nodes) {
-                        val s = toScreen(node.posM)
-                        when (node.type) {
-                            "corridor" -> drawCircle(
-                                color = Color(0xFF90A4AE),
-                                radius = 3f,
-                                center = s
-                            )
-
-                            "stairs" -> drawRect(
-                                color = Color(0xFFF57C00),
-                                topLeft = Offset(s.x - 5f, s.y - 5f),
-                                size = androidx.compose.ui.geometry.Size(10f, 10f)
-                            )
-
-                            "elevator" -> drawRoundRect(
-                                color = Color(0xFF7E57C2),
-                                topLeft = Offset(s.x - 6f, s.y - 6f),
-                                size = androidx.compose.ui.geometry.Size(12f, 12f),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f, 3f)
-                            )
-
-                            else -> drawRect(
-                                color = Color(0xFFA1887F),
-                                topLeft = Offset(s.x - 5f, s.y - 5f),
-                                size = androidx.compose.ui.geometry.Size(10f, 10f)
-                            )
-                        }
-                        if (node.type != "corridor" || pxPerM > 20f) {
-                            drawContext.canvas.nativeCanvas.drawText(
-                                node.label,
-                                s.x + 7f,
-                                s.y - 7f,
-                                nodeLabelPaint
-                            )
-                        }
+                        drawLine(
+                            color = Color(0xFFCFD8DC),
+                            start = toScreen(a),
+                            end = toScreen(b),
+                            strokeWidth = (1.5f * pxPerM).coerceIn(4f, 16f),
+                            cap = StrokeCap.Round
+                        )
                     }
                 }
 
-                val traceColor = Color(0xFF1565C0)
-                val rawPoints = state.rawPath
-                if (showRaw && rawPoints.size >= 2) {
-                    val rawPath = Path()
-                    rawPath.moveToOffset(toScreen(disp(rawPoints[0])))
-                    for (i in 1 until rawPoints.size) {
-                        rawPath.lineToOffset(toScreen(disp(rawPoints[i])))
+                // 8. Destination marker & Navigation Route Polyline
+                val routePts = snapshot.activeFloorId?.let { route?.pointsForFloor(it) }.orEmpty()
+                if (routePts.size >= 2) {
+                    val routePath = Path().apply {
+                        moveToOffset(toScreen(routePts.first()))
+                        for (i in 1 until routePts.size) {
+                            lineToOffset(toScreen(routePts[i]))
+                        }
                     }
                     drawPath(
-                        path = rawPath,
-                        color = Color(0xFF90A4AE),
-                        style = Stroke(
-                            width = 2f,
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round,
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 10f))
-                        )
+                        path = routePath,
+                        color = Color(0x4400897B),
+                        style = Stroke(width = 14f, cap = StrokeCap.Round, join = StrokeJoin.Round)
                     )
+                    drawPath(
+                        path = routePath,
+                        color = Color(0xFF00897B),
+                        style = Stroke(width = 6f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                    )
+                    val endScreen = toScreen(routePts.last())
+                    drawCircle(color = Color(0xFF00897B), radius = 8.dp.toPx(), center = endScreen)
+                    drawCircle(color = Color.White, radius = 3.5.dp.toPx(), center = endScreen)
                 }
 
+                // 9. Optional subtle GPS circle when outdoors/nearby
+                snapshot.latestGpsFix?.let { fix ->
+                    if (fix.accuracyM <= 35.0 && fix.eastNorthM.norm() <= 350.0) {
+                        val gpsScreen = toScreen(fix.eastNorthM)
+                        val rPx = (fix.accuracyM.toFloat() * pxPerM).coerceIn(6.dp.toPx(), 70.dp.toPx())
+                        drawCircle(color = Color(0x180284C7), radius = rPx, center = gpsScreen)
+                    }
+                }
+
+                // 10. PDR Trajectory & True-North Heading Cone
+                val traceColor = Color(0xFF1565C0)
                 if (segments.isNotEmpty()) {
                     val smooth = Path()
                     smooth.moveToOffset(toScreen(disp(segments.first().start)))
@@ -339,96 +531,73 @@ fun TelemetryScreen(
                     drawPath(
                         path = smooth,
                         color = traceColor,
-                        style = Stroke(
-                            width = 5f,
-                            cap = StrokeCap.Round,
-                            join = StrokeJoin.Round
-                        )
+                        style = Stroke(width = 4.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)
                     )
                 }
 
                 val originScreen = toScreen(disp(PointM(0.0, 0.0)))
-                drawCircle(
-                    color = Color(0xFF2E7D32),
-                    radius = 7.dp.toPx(),
-                    center = originScreen
-                )
-                drawContext.canvas.nativeCanvas.drawText(
-                    "Départ",
-                    originScreen.x + 8.dp.toPx(),
-                    originScreen.y - 8.dp.toPx(),
-                    Paint().apply {
-                        color = android.graphics.Color.DKGRAY
-                        textSize = 10.dp.toPx()
-                        isAntiAlias = true
-                    }
-                )
-
-                for (milestone in state.milestones) {
-                    val ms = toScreen(disp(milestone.position))
-                    drawCircle(color = Color.White, radius = 6.dp.toPx(), center = ms)
-                    drawCircle(
-                        color = Color(0xFF37474F),
-                        radius = 6.dp.toPx(),
-                        center = ms,
-                        style = Stroke(width = 2f)
-                    )
-                    drawContext.canvas.nativeCanvas.drawText(
-                        fmt(milestone.distanceM, 0) + " m",
-                        ms.x + 8.dp.toPx(),
-                        ms.y - 8.dp.toPx(),
-                        Paint().apply {
-                            color = android.graphics.Color.DKGRAY
-                            textSize = 10.dp.toPx()
-                            isAntiAlias = true
-                        }
-                    )
-                }
+                drawCircle(color = Color(0xFF2E7D32), radius = 4.5.dp.toPx(), center = originScreen)
 
                 val here = toScreen(displayPosition)
                 val heading = state.headingRadians
-                val coneColor = if (state.headingValid) {
-                    Color(0x551565C0)
-                } else {
-                    Color(0x5590A4AE)
-                }
-                val tipWorld = disp(state.position + PointM(sin(heading) * 0.9, cos(heading) * 0.9))
+                val coneColor = if (state.headingValid) Color(0x551565C0) else Color(0x5590A4AE)
+                val coneLenM = (26.dp.toPx() / pxPerM).coerceIn(1.2f, 9f).toDouble()
+                val tipWorld = disp(state.position + PointM(sin(heading) * coneLenM, cos(heading) * coneLenM))
                 val tip = toScreen(tipWorld)
                 val vx = tip.x - here.x
                 val vy = tip.y - here.y
-                val vLen = kotlin.math.hypot(vx, vy)
+                val vLen = hypot(vx, vy)
                 if (vLen > 1f) {
                     val px = -vy / vLen
                     val py = vx / vLen
-                    val half = vLen * 0.28f
-                    val cone = Path()
-                    cone.moveToOffset(tip)
-                    cone.lineToOffset(Offset(here.x + px * half, here.y + py * half))
-                    cone.lineToOffset(Offset(here.x - px * half, here.y - py * half))
-                    cone.close()
+                    val half = vLen * 0.34f
+                    val cone = Path().apply {
+                        moveToOffset(tip)
+                        lineToOffset(Offset(here.x + px * half, here.y + py * half))
+                        lineToOffset(Offset(here.x - px * half, here.y - py * half))
+                        close()
+                    }
                     drawPath(path = cone, color = coneColor)
                 }
-                drawCircle(color = traceColor, radius = 8.dp.toPx(), center = here)
+                drawCircle(color = Color.White, radius = 9.dp.toPx(), center = here)
+                drawCircle(color = traceColor, radius = 6.8.dp.toPx(), center = here)
 
-                drawContext.canvas.nativeCanvas.drawText(
-                    "Grille : " + fmt(gridStep, 1) + " m — Cap relatif, dérive possible",
-                    12.dp.toPx(),
-                    size.height - 10.dp.toPx(),
-                    Paint().apply {
-                        color = android.graphics.Color.GRAY
-                        textSize = 10.dp.toPx()
-                        isAntiAlias = true
-                    }
+                // 11. North Badge (top-right) & Metric Scale Bar (bottom-left)
+                val compassCenter = Offset(size.width - 24.dp.toPx(), 24.dp.toPx())
+                drawCircle(color = Color(0xDDFFFFFF), radius = 16.dp.toPx(), center = compassCenter)
+                val northDirX = sin(rotation).toFloat()
+                val northDirY = -cos(rotation).toFloat()
+                drawLine(
+                    color = Color(0xFFDC2626),
+                    start = compassCenter,
+                    end = Offset(
+                        compassCenter.x + northDirX * 11.dp.toPx(),
+                        compassCenter.y + northDirY * 11.dp.toPx()
+                    ),
+                    strokeWidth = 2.6.dp.toPx(),
+                    cap = StrokeCap.Round
                 )
-            }
-            if (floorPlan != null && showPlan && anchor == null) {
-                Text(
-                    "Sélectionnez une salle de départ pour ancrer le tracé",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(8.dp)
+
+                val barM = SCALE_BAR_STEPS_M.firstOrNull { it * pxPerM >= 48.dp.toPx() } ?: 200
+                val barW = barM * pxPerM
+                val barX = 14.dp.toPx()
+                val barY = size.height - 14.dp.toPx()
+                drawLine(
+                    color = Color(0xFF334155),
+                    start = Offset(barX, barY),
+                    end = Offset(barX + barW, barY),
+                    strokeWidth = 2.5f
+                )
+                val scalePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = android.graphics.Color.rgb(51, 65, 85)
+                    textSize = 10.dp.toPx()
+                    isFakeBoldText = true
+                }
+                drawContext.canvas.nativeCanvas.drawText(
+                    "$barM m · © OpenStreetMap",
+                    barX,
+                    barY - 5.dp.toPx(),
+                    scalePaint
                 )
             }
         }
@@ -444,40 +613,32 @@ fun TelemetryScreen(
                 onClick = {
                     follow = true
                     pan = Offset.Zero
-                    zoom = 1f
                 }
             ) {
                 Text("Recentrer")
             }
             FilterChip(
-                selected = !headUp,
-                onClick = { headUp = false },
-                label = { Text("Axe fixe") }
-            )
-            FilterChip(
                 selected = headUp,
-                onClick = { headUp = true },
+                onClick = { headUp = !headUp },
                 label = { Text("Cap en haut") }
             )
-            FilterChip(
-                selected = showRaw,
-                onClick = { showRaw = !showRaw },
-                label = { Text("Tracé brut") }
-            )
-            if (floorPlan != null) {
-                FilterChip(
-                    selected = showPlan,
-                    onClick = { showPlan = !showPlan },
-                    label = { Text("Plan") }
-                )
+            OutlinedButton(onClick = onResetPosition, enabled = headingReady) {
+                Text("Reset départ")
             }
-            OutlinedButton(onClick = onResetTrace, enabled = headingReady) {
-                Text("Reset")
-            }
-            OutlinedButton(onClick = onRecalibrate) {
-                Text("Recalibrer")
+            OutlinedButton(onClick = onOpenSetup) {
+                Text("Config")
             }
         }
+    }
+
+    if (showDestDialog) {
+        SearchPickerDialog(
+            title = "Naviguer vers",
+            items = snapshot.destinations,
+            itemText = { "[${it.key.floorId}] ${it.label} — ${it.name}" },
+            onPick = { onSelectDestination(it.key) },
+            onDismiss = { showDestDialog = false }
+        )
     }
 }
 

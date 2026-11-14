@@ -1,9 +1,15 @@
 package com.hackdecouverte.map
 
+import com.hackdecouverte.pdr.PointM
+import com.hackdecouverte.pdr.angleDelta
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -16,58 +22,59 @@ class FloorPlanTest {
     }
 
     @Test
-    fun parsesRealAssetCountsAndDimensions() {
+    fun parsesRealMb2AssetCountsAndTrueNorthFrame() {
         val plan = loadPlan()
         assertEquals("MB-2", plan.floorId)
-        assertEquals(116.0, plan.widthM, 1e-9)
-        assertEquals(87.0, plan.heightM, 1e-9)
-        assertEquals(84, plan.nodes.size)
-        assertEquals(89, plan.edges.size)
+        assertEquals(94.0, plan.widthM, 1e-9)
+        assertEquals(74.0, plan.heightM, 1e-9)
+        assertEquals(97, plan.nodes.size)
+        assertEquals(98, plan.edges.size)
+        assertTrue(plan.isGeoReferenced)
+        assertEquals("floor-plans/MB/MB-floor-02.svg", plan.svgAsset)
+
+        val elev = plan.node("MB-2-n001")!!
+        assertEquals("elevator", elev.type)
+        assertEquals(-0.23, elev.posM.x, 0.05)
+        assertEquals(0.19, elev.posM.y, 0.05)
+
+        // Montreal street grid ~40.5° mod 90°
+        assertEquals(Math.toRadians(40.5), abs(plan.dominantCorridorAxisRad), Math.toRadians(3.0))
     }
 
     @Test
-    fun nodePositionsAreScaledToMeters() {
+    fun nodePositionsFollowTrueNorthCoordinateNote() {
         val plan = loadPlan()
-        val n44 = plan.node("n44")
-        assertNotNull(n44)
-        assertEquals("MB-2.255", n44!!.label)
-        assertEquals(0.371 * 116.0, n44.posM.x, 1e-9)
-        assertEquals(0.226 * 87.0, n44.posM.y, 1e-9)
+        val room255 = plan.node("MB-2-n102")
+        assertNotNull(room255)
+        assertEquals("MB-2.255", room255!!.label)
+        assertEquals(room255.x * 94.0 - 44.0, room255.posM.x, 1e-6)
+        assertEquals(-(room255.y * 74.0 - 34.0), room255.posM.y, 1e-6)
     }
 
     @Test
     fun neighborsResolveBothEdgeDirections() {
         val plan = loadPlan()
-        assertEquals(listOf("n3"), plan.neighbors("n44").map { it.id })
-        assertTrue(plan.neighbors("n3").any { it.id == "n44" })
+        assertEquals(listOf("MB-2-n101"), plan.neighbors("MB-2-n102").map { it.id })
+        assertTrue(plan.neighbors("MB-2-n101").any { it.id == "MB-2-n102" })
         assertTrue(plan.neighbors("inconnu").isEmpty())
     }
 
     @Test
     fun nonAccessibleEdgeIsPreserved() {
         val plan = loadPlan()
-        val edge = plan.edges.first { it.fromId == "n5" && it.toId == "n46" }
+        val edge = plan.edges.first { it.fromId == "MB-2-n116" && it.toId == "MB-2-n117" }
         assertFalse(edge.accessible)
     }
 
     @Test
-    fun labeledNodesSortNonCorridorFirstThenByLabel() {
+    fun labeledNodesExcludeBlankCorridorsAndSortNonCorridorFirst() {
         val plan = loadPlan()
+        assertTrue(plan.labeledNodes.all { it.label.isNotBlank() || it.name.isNotBlank() })
         val firstCorridor = plan.labeledNodes.indexOfFirst { it.type == "corridor" }
         val lastOther = plan.labeledNodes.indexOfLast { it.type != "corridor" }
-        assertTrue(firstCorridor > lastOther)
-        val corridorLabels = plan.labeledNodes.drop(firstCorridor).map { it.label }
-        assertEquals(corridorLabels.sorted(), corridorLabels)
-    }
-
-    @Test
-    fun facingPsiPointsFromCorridorToRoomNorth() {
-        val plan = loadPlan()
-        val n3 = plan.node("n3")!!
-        val n44 = plan.node("n44")!!
-        assertTrue(abs(n44.posM.x - n3.posM.x) < 1e-9)
-        assertTrue(n44.posM.y < n3.posM.y)
-        assertEquals(0.0, FloorPlan.facingPsi(n3, n44), 1e-9)
+        if (firstCorridor >= 0) {
+            assertTrue(firstCorridor > lastOther)
+        }
     }
 
     @Test
@@ -77,5 +84,28 @@ class FloorPlanTest {
             org.junit.Assert.fail("JSON malformé accepté")
         } catch (expected: Exception) {
         }
+    }
+
+    @Test
+    fun matchCorridorProjectsLaterallyOntoAlignedCorridorInTrueNorthFrame() {
+        val plan = loadPlan()
+        val a = plan.node("MB-2-n012")!!
+        val b = plan.node("MB-2-n011")!!
+        val segHeading = atan2(b.posM.x - a.posM.x, b.posM.y - a.posM.y)
+        val mid = PointM((a.posM.x + b.posM.x) * 0.5, (a.posM.y + b.posM.y) * 0.5)
+        // Offset 0.9m perpendicular to the corridor
+        val perp = PointM(cos(segHeading) * 0.9, -sin(segHeading) * 0.9)
+        val slightlyOff = mid + perp
+
+        val match = plan.matchCorridor(slightlyOff, segHeading + Math.toRadians(5.0))
+        assertNotNull(match)
+        assertEquals(mid.x, match!!.projectedPointM.x, 1e-4)
+        assertEquals(mid.y, match.projectedPointM.y, 1e-4)
+        assertTrue(abs(angleDelta(segHeading, match.alignedHeadingRad!!)) < 1e-5)
+
+        // Perpendicular heading does not match that corridor
+        val wrongHeading = segHeading + Math.PI / 2.0
+        val noMatchFarRoom = plan.matchCorridor(PointM(42.0, -38.0), wrongHeading)
+        assertNull(noMatchFarRoom)
     }
 }

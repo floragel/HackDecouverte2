@@ -646,4 +646,226 @@ class PdrTrackerTest {
         )
         assertEquals(StepSource.FALLBACK, tracker2.state.value.stepSource)
     }
+
+    @Test
+    fun antiShakeBlocksIsolatedBumpAndCommitsTwoStepWalk() {
+        val clock = FakeClock()
+        val tracker = PdrTracker(clock = { clock.nowNs }, antiShakeEnabled = true)
+        tracker.onSensorStatus(
+            SensorStatus(
+                rotationAvailable = true,
+                stepDetectorAvailable = true,
+                fallbackCapable = true,
+                permissionNeeded = false,
+                permissionGranted = true
+            )
+        )
+        startTrackingWithLength(tracker, clock, 0.75)
+        val t0 = clock.nowNs
+        feedHeading(tracker, t0, t0 + 4_000 * MS, 20 * MS, 0.0)
+
+        tracker.onStep(t0 + 200 * MS, StepSource.HARDWARE)
+        assertEquals(0, tracker.state.value.stepCount)
+        assertEquals(0.0, tracker.state.value.distanceM, 1e-9)
+
+        tracker.onStep(t0 + 2_200 * MS, StepSource.HARDWARE)
+        assertEquals(0, tracker.state.value.stepCount)
+
+        tracker.onStep(t0 + 2_750 * MS, StepSource.HARDWARE)
+        assertEquals(2, tracker.state.value.stepCount)
+        assertEquals(1.5, tracker.state.value.distanceM, 1e-6)
+
+        tracker.onStep(t0 + 3_300 * MS, StepSource.HARDWARE)
+        assertEquals(3, tracker.state.value.stepCount)
+        assertEquals(2.25, tracker.state.value.distanceM, 1e-6)
+    }
+
+    @Test
+    fun antiShakeBlocksViolentShakeAcceleration() {
+        val clock = FakeClock()
+        val tracker = PdrTracker(clock = { clock.nowNs }, antiShakeEnabled = true)
+        tracker.onSensorStatus(
+            SensorStatus(
+                rotationAvailable = true,
+                stepDetectorAvailable = true,
+                fallbackCapable = true,
+                permissionNeeded = false,
+                permissionGranted = true
+            )
+        )
+        startTrackingWithLength(tracker, clock, 0.75)
+        val t0 = clock.nowNs
+        feedHeading(tracker, t0, t0 + 1_500 * MS, 20 * MS, 0.0)
+        tracker.onLinearAccelerationMagnitude(t0 + 300 * MS, 16.0)
+        tracker.onStep(t0 + 400 * MS, StepSource.HARDWARE)
+        tracker.onStep(t0 + 650 * MS, StepSource.HARDWARE)
+        assertEquals(0, tracker.state.value.stepCount)
+        assertEquals(0.0, tracker.state.value.distanceM, 1e-9)
+    }
+
+    private fun uTurnEnd(assist: Boolean): PointM {
+        val clock = FakeClock()
+        val tracker = PdrTracker(clock = { clock.nowNs }, corridorAssistInitial = assist)
+        tracker.onSensorStatus(
+            SensorStatus(
+                rotationAvailable = true,
+                stepDetectorAvailable = true,
+                fallbackCapable = true,
+                permissionNeeded = false,
+                permissionGranted = true
+            )
+        )
+        startTrackingWithLength(tracker, clock, 1.0)
+        var t = clock.nowNs
+        repeat(10) {
+            feedHeading(tracker, t + 20 * MS, t + 500 * MS, 20 * MS, 0.0)
+            t += 500 * MS
+            tracker.onStep(t, StepSource.HARDWARE)
+        }
+        val driftedReturnYaw = Math.toRadians(171.0)
+        t += 300 * MS
+        repeat(10) {
+            feedHeading(tracker, t + 20 * MS, t + 500 * MS, 20 * MS, driftedReturnYaw)
+            t += 500 * MS
+            tracker.onStep(t, StepSource.HARDWARE)
+        }
+        return tracker.state.value.position
+    }
+
+    @Test
+    fun uTurnWithAxisDriftIsCorrectedGentlyWithoutSpikes() {
+        val raw = uTurnEnd(assist = false)
+        val assisted = uTurnEnd(assist = true)
+        assertTrue(kotlin.math.abs(raw.x) > 1.4)
+        assertTrue(kotlin.math.abs(assisted.x) < 0.8)
+        assertTrue(kotlin.math.abs(assisted.y) < 0.4)
+    }
+
+    @Test
+    fun corridorAssistOnlyCorrectsLaterallyAndNeverJumps() {
+        val clock = FakeClock()
+        val tracker = PdrTracker(clock = { clock.nowNs }, corridorAssistInitial = true)
+        tracker.onSensorStatus(
+            SensorStatus(
+                rotationAvailable = true,
+                stepDetectorAvailable = true,
+                fallbackCapable = true,
+                permissionNeeded = false,
+                permissionGranted = true
+            )
+        )
+        tracker.mapAxisBaseLocal = 0.0
+        tracker.corridorConstraint = { p, theta ->
+            if (kotlin.math.abs(angleDelta(0.0, theta)) < Math.toRadians(20.0)) {
+                CorridorConstraintResult(PointM(0.0, p.y), 0.0)
+            } else {
+                null
+            }
+        }
+        startTrackingWithLength(tracker, clock, 1.0)
+        var t = clock.nowNs
+        repeat(20) {
+            feedHeading(tracker, t + 20 * MS, t + 500 * MS, 20 * MS, Math.toRadians(6.0))
+            t += 500 * MS
+            tracker.onStep(t, StepSource.HARDWARE)
+        }
+        val path = tracker.state.value.rawPath
+        for (i in 1 until path.size) {
+            assertTrue(path[i].distanceTo(path[i - 1]) < 1.2)
+            assertTrue(path[i].y > path[i - 1].y + 0.8)
+        }
+        val end = tracker.state.value.position
+        assertTrue(kotlin.math.abs(end.x) < 0.6)
+        assertTrue(end.y > 19.5)
+    }
+
+    @Test
+    fun externalFixIsIgnoredWhenInaccurateAndAppliedInSmallStepsOtherwise() {
+        val clock = FakeClock()
+        val tracker = newTracker(clock)
+        startTrackingWithLength(tracker, clock, 1.0)
+        tracker.onExternalFix(PointM(0.0, 0.0), 5.0)
+        var t = clock.nowNs
+        fun walk(n: Int) = repeat(n) {
+            feedHeading(tracker, t + 20 * MS, t + 500 * MS, 20 * MS, 0.0)
+            t += 500 * MS
+            clock.nowNs = t
+            tracker.onStep(t, StepSource.HARDWARE)
+        }
+        walk(2)
+        tracker.onExternalFix(PointM(20.0, 2.0), 20.0)
+        walk(2)
+        assertEquals(0.0, tracker.state.value.position.x, 1e-6)
+        tracker.onExternalFix(PointM(10.0, 4.0), 5.0)
+        val before = tracker.state.value.position
+        walk(1)
+        val after = tracker.state.value.position
+        assertTrue(after.x > 0.0)
+        assertTrue(after.x <= 0.08 + 1e-9)
+        assertTrue(after.distanceTo(before) <= 1.0 + 0.08 + 1e-9)
+        walk(40)
+        assertTrue(tracker.state.value.position.x <= 1.5 + 1e-6)
+    }
+
+    @Test
+    fun externalFixNeverMovesStationaryPosition() {
+        val clock = FakeClock()
+        val tracker = newTracker(clock)
+        startTrackingWithLength(tracker, clock, 1.0)
+        tracker.onExternalFix(PointM(0.0, 0.0), 4.0)
+        tracker.onExternalFix(PointM(10.0, 10.0), 4.0)
+        assertEquals(0.0, tracker.state.value.position.x, 1e-9)
+        assertEquals(0.0, tracker.state.value.position.y, 1e-9)
+        assertEquals(4.0, tracker.state.value.externalAccuracyM!!, 1e-9)
+    }
+
+    @Test
+    fun dynamicStepLengthFollowsCadenceAgainstCalibration() {
+        val clock = FakeClock()
+        val tracker = newTracker(clock)
+        seedHeading(tracker, clock)
+        val tStart = clock.nowNs
+        assertTrue(tracker.startCalibration())
+        repeat(6) { i -> tracker.onStep(tStart + (i + 1) * 500 * MS, StepSource.HARDWARE) }
+        clock.nowNs = tStart + 3_500 * MS
+        assertTrue(tracker.finishCalibration())
+        clock.advance(2_000 * MS)
+        feedHeading(tracker, clock.nowNs - 600 * MS, clock.nowNs, 20 * MS, 0.0)
+        assertTrue(tracker.finalizeCalibration(clock.nowNs))
+        val base = 5.0 / 6.0
+        assertEquals(base, tracker.state.value.lengthPerStepM!!, 1e-9)
+        assertEquals(2.0, tracker.state.value.baseCadenceHz!!, 1e-9)
+
+        var t = clock.nowNs
+        repeat(8) {
+            feedHeading(tracker, t + 20 * MS, t + 400 * MS, 20 * MS, 0.0)
+            t += 400 * MS
+            tracker.onStep(t, StepSource.HARDWARE)
+        }
+        val fast = tracker.state.value
+        assertEquals(150.0, fast.cadenceStepsPerMin!!, 1e-6)
+        assertEquals(base * 1.225, fast.currentStepLengthM!!, 1e-6)
+        assertEquals(base * (4 + 4 * 1.225), fast.distanceM, 1e-6)
+    }
+
+    @Test
+    fun dynamicStepLengthShrinksWhenSlowAndIsClamped() {
+        val clock = FakeClock()
+        val tracker = newTracker(clock)
+        startTrackingWithLength(tracker, clock, 0.8)
+        var t = clock.nowNs
+        repeat(5) {
+            feedHeading(tracker, t + 20 * MS, t + 500 * MS, 20 * MS, 0.0)
+            t += 500 * MS
+            tracker.onStep(t, StepSource.HARDWARE)
+        }
+        assertEquals(2.0, tracker.state.value.baseCadenceHz!!, 1e-9)
+        assertEquals(0.8, tracker.state.value.currentStepLengthM!!, 1e-9)
+        repeat(5) {
+            feedHeading(tracker, t + 20 * MS, t + 1_200 * MS, 20 * MS, 0.0)
+            t += 1_200 * MS
+            tracker.onStep(t, StepSource.HARDWARE)
+        }
+        assertEquals(0.8 * 0.75, tracker.state.value.currentStepLengthM!!, 1e-9)
+    }
 }

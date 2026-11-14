@@ -151,53 +151,95 @@ ramène à `IDLE` en remettant tout à zéro (y compris la source).
 
 `map/FloorPlan.kt` charge `assets/floorplan.json` : un graphe de nœuds
 (`corridor` / `room` / `stairs` / `elevator` …) et d'arêtes (`accessible`
-ou non) en coordonnées normalisées `[0,1]`, multipliées par les dimensions
-estimées du plan (axe **y plan = sud**, vers le bas). L'utilisateur choisit
+ou non) en coordonnées normalisées `[0,1]` (y image vers le bas). Au
+chargement, l'axe y est **inversé** (`posM.y = (1 − y)·H`) pour obtenir un
+repère plan **nord en haut** : +y plan = haut de l'image = haut de l'écran
+(`MapTransform` rend déjà +y monde vers le haut). L'utilisateur choisit
 un nœud de départ puis une orientation (`ψ` : voisin adjacent via
 `facingPsi`, ou cardinal plan 0/90/180/270°) sur l'écran de calibration.
 
 `map/MapAnchor.kt` projette le repère PDR local sur le plan :
 
 ```
-f = (sin ψ, −cos ψ)   avant ;   r = (cos ψ, sin ψ)   droite
+f = (sin ψ, cos ψ)   avant ;   r = (cos ψ, −sin ψ)   droite
 toMap(p) = originM + r·p.x + f·p.y
 cap plan affiché = wrap(ψ + headingRadians)
 ```
 
-ψ = 0 → face au nord du plan (+y local → −y plan) ; ψ = π/2 → face à l'est.
+ψ = 0 → face au nord du plan (+y local → +y plan, identité) ;
+ψ = π/2 → face à l'est (+y local → +x plan, droite → −y plan).
 Chaque point du tracé, borne et position est passé par `toMap` avant
 `MapTransform` ; le plan (arêtes, nœuds, étiquettes) est dessiné dans le
 même repère monde. `PdrTracker` n'est jamais modifié : l'ancrage est une
 pure couche d'affichage, indépendante de la phase PDR — un Reset repart
 naturellement du nœud ancré. Sans ancre, le rendu local est inchangé.
 
-## 9. Précision attendue et limites connues
+## 9. Stabilisation anti-dérive, anti-shake, pas dynamique et recalage
 
-- Erreur de boucle typique mesurée : **~1–2 %** du parcours (ex. ~1 m sur un
-  rectangle de 60 m). Sources : dérive du rotation vector sans magnétomètre,
-  pas plus courts en virage (L constante), tenue du téléphone non rigidement
-  alignée avec le corps.
-- `STEP_DETECTOR` rapporte la **pose du pied** ; `SensorEvent.timestamp` est
-  supposé sur `elapsedRealtimeNanos` partout.
-- Foreground only : la mise en arrière-plan efface la trame (section 7).
-- Pas de GPS, pas de fusion : le plan d'étage est un simple habillage
-  visuel (ancrage manuel, aucune contrainte sur le tracé) ; toute
-  contrainte externe (snap 90°, ZUPT visuel, repères) devra venir en amont
-  de `PdrTracker`.
+- **Cap Swing-Twist 3D** (`atan2(R[1] − R[3], R[0] + R[4])`) : rotation autour
+  de la verticale monde, insensible au tangage/roulis du poignet.
+- **Référence pré-tap (`stableHeadingAt`)** : cap stable dans
+  `[t − 500 ms, t − 100 ms]` avant l'appui sur l'écran ; la calibration
+  moyenne le cap de ses pas.
+- **Anti-shake passif** : secousse (`|a_lin| ≥ 11,5 m/s²` ou rotation
+  `> 2,6 rad/s`) → pas rejeté ; sortie d'immobilité seulement après **2 pas
+  rythmiques** (`280–1300 ms`).
+- **Longueur de pas dynamique** : `L = L₀ · clamp(1 + 0,9·(f/f₀ − 1), 0,75, 1,30)`
+  où `f` = cadence (médiane des 4 derniers intervalles entre pas) et `f₀` =
+  cadence de référence (mesurée pendant la calibration 5 m, sinon apprise sur
+  les 4 premiers intervalles, sauvegardée avec `L₀`). Marcher plus vite
+  allonge les pas, plus lentement les raccourcit.
+- **Stabiliser axes (activé par défaut)** — corrections **bornées et
+  progressives**, appliquées seulement en marche droite (3 pas consécutifs
+  à ±8° et rotation `< 0,5 rad/s`) :
+  - cap : rapproché de l'axe du couloir du plan (ancré) ou des axes à 90°
+    (plan, ou axe appris sur le 1er segment droit de 5 pas), si l'écart est
+    `≤ 18°` / `≤ 12°`, gain 0,35, **max 2,5° par pas** ;
+  - position (ancré) : uniquement la composante **latérale** vers l'axe d'un
+    couloir **aligné avec la marche** (arêtes couloir↔couloir, `≤ 2 m`
+    latéral, extrémités ±2 m), gain 0,25, **max 12 cm par pas** — jamais de
+    rappel le long du couloir ni vers un couloir perpendiculaire ou une salle.
+- **Recalage GPS (optionnel)** : un seul fournisseur (`FUSED`, sinon `GPS`),
+  utilisé seulement si précision `≤ 8 m` et en mouvement ; l'écart est réparti
+  sur les pas suivants (**max 8 cm par pas**, 1,5 m au total), l'historique
+  du tracé n'est jamais réécrit. En intérieur il est en pratique inactif.
 
-## 10. Où modifier quoi
+Corrigé : les sauts de ~5 m venaient (1) du recalage GPS/Wi-Fi en intérieur
+(précision 10–25 m, origine mal posée, correction jusqu'à 25 % de l'écart
+d'un coup) et (2) de la projection sur l'arête la plus proche, même
+perpendiculaire ou vers une salle, avec rappel le long du couloir — ce qui
+tirait le tracé en arrière après un virage (aspect « demi-tour »).
+
+## 10. Routage multi-étages & Façade Backend (`BuildingGraph` + `IndoorNavigationBackend`)
+
+- **Graphe multi-étages (`map/BuildingGraph.kt`)** :
+  - Construit le graphe pondéré en mètres pour une liste `List<FloorPlan>`.
+  - Relie automatiquement les étages adjacents lorsque deux nœuds partagent le
+    même `vertical_group_id` (ex. `stairs_north_central`, `elevator_central`).
+  - Mode **PMR (`accessibleOnly = true`)** : exclut toutes les arêtes
+    `accessible = false` et les escaliers, forçant le passage par les ascenseurs
+    lors des changements d'étage.
+  - **Projection dynamique (`findRouteFromPosition`)** : projette la position
+    courante `(x, y)` sur le segment praticable le plus proche, calcule le plus
+    court chemin (Dijkstra), fusionne les tronçons de couloir colinéaires
+    (`≤ 28°`) et génère l'instruction temps réel (`Continuer tout droit…`,
+    `Tourner à droite…`, `Prendre l'ascenseur…`, `Arrivé à…`).
+- **Intégration dans l'application finale (`backend/IndoorNavigationBackend.kt`)** :
+  - Instancier `IndoorNavigationBackend(context, scope)` et observer
+    `backend.state: StateFlow<NavigationSnapshot>`.
+  - Pour ajouter d'autres étages plus tard, déposer simplement leurs fichiers
+    JSON dans `app/src/main/assets/floors/` (ou appeler `backend.loadFloorPlans(...)`).
+
+## 11. Où modifier quoi
 
 | Besoin | Fichier |
 | --- | --- |
-| Fenetre de moyenne de cap, seuil d'inclinaison | `OrientationProcessor` (150 ms, 0.25) |
-| Seuils du repli accéléromètre | `FallbackStepDetector` (1.0 / 0.3 / 330 ms / 500 ms) |
-| Distance de calibration, bornes | `PdrTracker` (5.0, `MilestoneTracker`) |
-| Bornes de L valide | `PdrTracker.MIN/MAX_STEP_LENGTH_M` |
-| Délai de drain des pas retardés | `PdrViewModel.SETTLING_DELAY_MS` (2 s) |
-| Échelle initiale, limites de zoom | `TelemetryScreen` (56 dp/m, 0.2–12) |
+| Façade unique à brancher dans l'app finale | `backend/IndoorNavigationBackend.kt` |
+| Routage Dijkstra, PMR & multi-étages | `map/BuildingGraph.kt` |
+| Fenêtre de moyenne de cap, seuil d'inclinaison | `pdr/OrientationProcessor.kt` |
+| Seuils anti-shake, pas dynamique & stabilisation | `pdr/PdrTracker.kt` |
+| Échelle initiale, limites de zoom | `ui/TelemetryScreen.kt` |
 
-Tests : `app/src/test/java/com/hackdecouverte/` (74 tests : `pdr/`,
-`ui/MapTransformTest`, `map/FloorPlanTest`, `map/MapAnchorTest`) couvrent les
-cas ±180°, cap retardé, invalidité verticale, intervalles de calibration,
-coupures de trame, repli, géométrie, parsing du plan réel et projection
-d'ancrage.
+Tests : `app/src/test/java/com/hackdecouverte/` (93 tests : `pdr/`,
+`ui/MapTransformTest`, `map/FloorPlanTest`, `map/MapAnchorTest`,
+`map/CorridorTurnRegressionTest`, `map/BuildingGraphTest`).

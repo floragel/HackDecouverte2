@@ -1,6 +1,7 @@
 package com.hackdecouverte.pdr
 
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -59,7 +60,7 @@ fun worldVerticalFromRotationMatrix(r: DoubleArray): Triple<Double, Double, Doub
 class OrientationProcessor(
     private val bufferNs: Long = 2_500_000_000L,
     private val meanWindowNs: Long = 150_000_000L,
-    private val minHorizontalNorm: Double = 0.25
+    private val minHorizontalNorm: Double = 0.12
 ) {
     private data class YawSample(val timestampNs: Long, val yaw: Double, val valid: Boolean)
 
@@ -74,14 +75,16 @@ class OrientationProcessor(
 
     fun onRotationVector(timestampNs: Long, values: FloatArray, size: Int = values.size) {
         val r = rotationMatrixFromVector(values, size) ?: return
-        val east = r[1]
-        val north = r[4]
-        val norm = hypot(east, north)
-        val valid = norm >= minHorizontalNorm && east.isFinite() && north.isFinite()
+        val flatNorm = hypot(r[1], r[4])
+        val sinYaw = r[1] - r[3]
+        val cosYaw = r[0] + r[4]
+        val twistNorm = hypot(sinYaw, cosYaw)
+        val valid = flatNorm >= minHorizontalNorm && twistNorm >= 0.2 &&
+            sinYaw.isFinite() && cosYaw.isFinite()
         if (timestampNs <= lastTimestampNs && samples.isNotEmpty()) return
         lastTimestampNs = timestampNs
         lastTilted = !valid
-        val yaw = atan2(east, north)
+        val yaw = atan2(sinYaw, cosYaw)
         samples.addLast(YawSample(timestampNs, yaw, valid))
         if (valid) lastValidYaw = yaw
         val cutoff = timestampNs - bufferNs
@@ -90,16 +93,54 @@ class OrientationProcessor(
         }
     }
 
-    fun meanHeadingAt(timestampNs: Long): Double? {
+    fun meanHeadingAt(timestampNs: Long, windowNs: Long = meanWindowNs): Double? {
         if (samples.isEmpty()) return null
         val newest = samples.lastOrNull { it.timestampNs <= timestampNs } ?: return null
         if (!newest.valid) return null
         val window = ArrayList<Double>()
-        val from = timestampNs - meanWindowNs
+        val from = timestampNs - windowNs
         for (s in samples) {
             if (s.timestampNs in from..timestampNs && s.valid) window.add(s.yaw)
         }
         return circularMean(window)
+    }
+
+    fun stableHeadingAt(timestampNs: Long): Double? {
+        if (samples.isEmpty()) return null
+        val newest = samples.lastOrNull { it.timestampNs <= timestampNs } ?: return null
+        if (!newest.valid) return null
+        val preTapEnd = timestampNs - 100_000_000L
+        val preTapStart = timestampNs - 500_000_000L
+        val preTap = ArrayList<Double>()
+        for (s in samples) {
+            if (s.timestampNs in preTapStart..preTapEnd && s.valid) preTap.add(s.yaw)
+        }
+        if (preTap.size >= 3) {
+            val stable = circularMean(preTap)
+            if (stable != null && abs(angleDelta(stable, newest.yaw)) <= Math.toRadians(25.0)) {
+                return stable
+            }
+        }
+        return meanHeadingAt(timestampNs)
+    }
+
+    fun turnRateRadPerSecAt(timestampNs: Long, spanNs: Long = 250_000_000L): Double {
+        if (samples.size < 2) return 0.0
+        val from = timestampNs - spanNs
+        var prev: YawSample? = null
+        var totalAbsRad = 0.0
+        var firstTs = Long.MAX_VALUE
+        var lastTs = Long.MIN_VALUE
+        for (s in samples) {
+            if (s.timestampNs in from..timestampNs && s.valid) {
+                prev?.let { totalAbsRad += abs(angleDelta(it.yaw, s.yaw)) }
+                if (s.timestampNs < firstTs) firstTs = s.timestampNs
+                if (s.timestampNs > lastTs) lastTs = s.timestampNs
+                prev = s
+            }
+        }
+        val dtS = (lastTs - firstTs) / 1e9
+        return if (dtS >= 0.03) totalAbsRad / dtS else 0.0
     }
 
     fun clear() {

@@ -61,6 +61,9 @@ data class PdrState(
     val headingValid: Boolean = false,
     val tilted: Boolean = false,
     val lengthPerStepM: Double? = null,
+    val currentStepLengthM: Double? = null,
+    val cadenceStepsPerMin: Double? = null,
+    val baseCadenceHz: Double? = null,
     val stepLengthManual: Boolean = false,
     val distanceM: Double = 0.0,
     val stepCount: Int = 0,
@@ -75,6 +78,9 @@ data class PdrState(
     val activityPermissionNeeded: Boolean = false,
     val activityPermissionGranted: Boolean = false,
     val registrationFailed: Boolean = false,
+    val corridorAssistEnabled: Boolean = false,
+    val trueNorthAligned: Boolean = false,
+    val externalAccuracyM: Double? = null,
     val warnings: Set<PdrWarning> = emptySet()
 ) {
     val canStart: Boolean
