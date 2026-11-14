@@ -117,6 +117,11 @@ fun SettingsScreen() {
                 }
             }
 
+            Section(stringResource(R.string.settings_developer))
+            Group {
+                NavRow(stringResource(R.string.settings_indoor_test)) { nav.indoorDev() }
+            }
+
             Spacer(Modifier.height(24.dp))
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(Tokens.RadiusControl)).background(c.surface).pressable({ scope.launch { repo.signOut() } }, 0.98f).padding(16.dp)) {
                 Text(stringResource(R.string.profile_sign_out), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)

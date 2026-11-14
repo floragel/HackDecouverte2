@@ -37,6 +37,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.MeetingRoom
+import com.lync.app.ui.LocalNavigator
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -120,6 +122,7 @@ fun MapScreen() {
     val pins by vm.pins.collectAsStateWithLifecycle()
     val myPos by vm.tracker.position.collectAsStateWithLifecycle()
     val c = Campus.colors
+    val navigator = LocalNavigator.current
 
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var cameraTick by remember { mutableIntStateOf(0) } // bumps on every camera move -> pins re-project
@@ -190,9 +193,12 @@ fun MapScreen() {
                 GhostToggle(ghost) { vm.setGhost(!ghost) }
             }
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(stringResource(R.string.map_friends), showFriends, c.accent) { showFriends = !showFriends }
                 FilterChip(stringResource(R.string.map_classmates), showClassmates, c.accent2) { showClassmates = !showClassmates }
+                Spacer(Modifier.weight(1f))
+                // Indoor navigation in MB (floor plans + step tracking, from the algorythme branch)
+                IndoorChip { navigator.indoor() }
             }
         }
 
@@ -322,6 +328,19 @@ private fun GhostToggle(ghost: Boolean, onToggle: () -> Unit) {
         Icon(if (ghost) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, null, tint = if (ghost) c.bg else c.text, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(6.dp))
         Text(stringResource(if (ghost) R.string.map_ghost_on else R.string.map_ghost_off), style = MaterialTheme.typography.labelLarge, color = if (ghost) c.bg else c.text)
+    }
+}
+
+@Composable
+private fun IndoorChip(onClick: () -> Unit) {
+    val c = Campus.colors
+    Row(
+        Modifier.shadow(6.dp, CircleShape).clip(CircleShape).background(c.bg).pressable(onClick).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.MeetingRoom, null, tint = c.text, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(stringResource(R.string.indoor_open), style = MaterialTheme.typography.labelLarge, color = c.text)
     }
 }
 

@@ -56,6 +56,12 @@ android {
         compose = true
         buildConfig = true
     }
+    sourceSets {
+        // Indoor navigation tests (com.hackdecouverte) read the MB floor plans from the classpath
+        getByName("test") {
+            resources.srcDir("src/main/assets")
+        }
+    }
 }
 
 dependencies {
@@ -90,5 +96,8 @@ dependencies {
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
 
+    implementation(libs.kotlinx.coroutines.android)
+
     testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.kotlinx.coroutines.test)
 }

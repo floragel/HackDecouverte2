@@ -18,6 +18,8 @@ object Routes {
     const val SCAN = "scan"
     const val EVENT = "event/{id}"
     const val GROUP = "group/{id}"
+    const val INDOOR = "indoor"
+    const val INDOOR_DEV = "indoor-dev"
     val tabs = setOf(HOME, NETWORK, MAP, PROFILE)
 }
 
@@ -32,6 +34,8 @@ class Navigator(private val nav: NavHostController) {
     fun event(id: String) = nav.navigate("event/$id")
     fun group(id: String) = nav.navigate("group/$id")
     fun map() = nav.navigate(Routes.MAP) { launchSingleTop = true }
+    fun indoor() = nav.navigate(Routes.INDOOR) { launchSingleTop = true }
+    fun indoorDev() = nav.navigate(Routes.INDOOR_DEV) { launchSingleTop = true }
     fun back() { nav.popBackStack() }
 }
 

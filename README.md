@@ -53,6 +53,14 @@ If you already ran the first `schema.sql`, run `supabase/migrations/002_lync_v2.
 
 > ⚠️ Don't keep the project in an iCloud-synced folder (Desktop / Documents): iCloud creates `file 2.kt` copies that break the build. If it happens: delete `app/build` and rebuild.
 
+## Indoor navigation (Maps side, from the `algorythme` branch)
+
+- **Map tab › Find a room** opens the MB plan: floors 1 to 7, search a room (e.g. `2.255`), a step-free option (elevators only) and turn-by-turn directions in English or French.
+- Your position comes from step counting (PDR) on the phone, aligned on true north with GPS + compass. Measure your step once with a 5 m walk, or start with the saved/default step.
+- Engine: `app/src/main/java/com/hackdecouverte/` (pure Kotlin, one facade: `backend/IndoorNavigationBackend`). How it works: [`ALGORITHM.md`](ALGORITHM.md), rules for changing it: [`AGENTS.md`](AGENTS.md).
+- Lync screens: `ui/indoor/` (`IndoorScreen`, `IndoorCanvas`). Alban's original test screens stay under **Settings › Developer › Indoor navigation test**.
+- Data: `assets/floors/floorplan-MB-1..7.json` (rooms = doors, corridors, stairs, elevators) and `assets/floor-plans/MB/*.svg`, made with the editor on the `mb-floor-plans` branch.
+
 ## Architecture (kept simple so the Swift port is 1:1)
 
 ```
