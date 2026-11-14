@@ -1,0 +1,827 @@
+[
+{
+"slug": "accountancy",
+"name": "Accountancy",
+"degree": "BComm"
+},
+{
+"slug": "accountancy-cert",
+"name": "Accountancy",
+"degree": "Cert"
+},
+{
+"slug": "acting-theatre",
+"name": "Acting for the Theatre",
+"degree": "BFA"
+},
+{
+"slug": "actuarial-mathematics",
+"name": "Actuarial Mathematics",
+"degree": "BA, BSc"
+},
+{
+"slug": "actuarial-mathematics-finance",
+"name": "Actuarial Mathematics/Finance",
+"degree": "BA, BSc"
+},
+{
+"slug": "adult-education",
+"name": "Adult Education",
+"degree": "Cert"
+},
+{
+"slug": "aerospace-engineering",
+"name": "Aerospace Engineering",
+"degree": "BEng"
+},
+{
+"slug": "anthropology",
+"name": "Anthropology",
+"degree": "BA"
+},
+{
+"slug": "anthropology-and-sociology",
+"name": "Anthropology and Sociology",
+"degree": "BA"
+},
+{
+"slug": "art-education",
+"name": "Art Education – Visual Arts",
+"degree": "BFA"
+},
+{
+"slug": "art-history",
+"name": "Art History",
+"degree": "BFA"
+},
+{
+"slug": "art-history-filmstudiesbfa",
+"name": "Art History and Film Studies",
+"degree": "BFA"
+},
+{
+"slug": "art-history-studio-art",
+"name": "Art History and Studio Art",
+"degree": "BFA"
+},
+{
+"slug": "arts-science",
+"name": "Arts and Science",
+"degree": "Cert"
+},
+{
+"slug": "assurance-fraud-prevention",
+"name": "Assurance, Fraud Prevention and Investigative Services",
+"degree": ""
+},
+{
+"slug": "athletic-therapy",
+"name": "Athletic Therapy",
+"degree": "BSc"
+},
+{
+"slug": "biochemistry",
+"name": "Biochemistry",
+"degree": "BSc"
+},
+{
+"slug": "biology",
+"name": "Biology",
+"degree": "BSc"
+},
+{
+"slug": "biophysics",
+"name": "Biophysics",
+"degree": ""
+},
+{
+"slug": "black-african-diaspora-studies",
+"name": "Black and African Diaspora Studies in the Canadian Context",
+"degree": "Cert"
+},
+{
+"slug": "building-engineering",
+"name": "Building Engineering",
+"degree": "BEng"
+},
+{
+"slug": "business-analytics",
+"name": "Business Analytics",
+"degree": "BComm"
+},
+{
+"slug": "business-studies",
+"name": "Business Studies",
+"degree": "Cert"
+},
+{
+"slug": "business-technology-management",
+"name": "Business Technology Management",
+"degree": "BComm"
+},
+{
+"slug": "cell-molecular-biology",
+"name": "Cell and Molecular Biology",
+"degree": "BSc"
+},
+{
+"slug": "ceramics",
+"name": "Ceramics",
+"degree": "BFA"
+},
+{
+"slug": "chemical-engineering",
+"name": "Chemical Engineering",
+"degree": "BEng"
+},
+{
+"slug": "chemistry",
+"name": "Chemistry",
+"degree": "BSc"
+},
+{
+"slug": "child-studies",
+"name": "Child Studies",
+"degree": "BA"
+},
+{
+"slug": "civil-engineering",
+"name": "Civil Engineering",
+"degree": "BEng"
+},
+{
+"slug": "classics",
+"name": "Classics",
+"degree": "BA"
+},
+{
+"slug": "communication-cultural-studies",
+"name": "Communication and Cultural Studies",
+"degree": "BA"
+},
+{
+"slug": "communication-studies",
+"name": "Communication Studies",
+"degree": "BA"
+},
+{
+"slug": "community-organizational-leadership",
+"name": "Community and Organizational Leadership",
+"degree": "Cert"
+},
+{
+"slug": "community-public-affairs-policy-studies",
+"name": "Community, Public Affairs and Policy Studies",
+"degree": "BA"
+},
+{
+"slug": "computation-arts",
+"name": "Computation Arts",
+"degree": "BFA"
+},
+{
+"slug": "comp-arts-computer-science",
+"name": "Computation Arts - Computer Science",
+"degree": "BFA"
+},
+{
+"slug": "computational-physics",
+"name": "Computational Physics",
+"degree": "Microprogram"
+},
+{
+"slug": "computer-engineering",
+"name": "Computer Engineering",
+"degree": "BEng"
+},
+{
+"slug": "computer-science-minor",
+"name": "Computer Science",
+"degree": "Minor"
+},
+{
+"slug": "computer-science",
+"name": "Computer Science",
+"degree": "BCompSc"
+},
+{
+"slug": "computer-science-comp-arts",
+"name": "Computer Science - Computation Arts",
+"degree": "BCompSc"
+},
+{
+"slug": "contemporary-dance",
+"name": "Contemporary Dance",
+"degree": "BFA"
+},
+{
+"slug": "creative-writing",
+"name": "Creative Writing",
+"degree": "BA"
+},
+{
+"slug": "cybersecurity",
+"name": "Cybersecurity",
+"degree": "BSc"
+},
+{
+"slug": "cybersecurity-engineering",
+"name": "Cybersecurity Engineering",
+"degree": "BEng"
+},
+{
+"slug": "data-intelligence",
+"name": "Data Intelligence",
+"degree": ""
+},
+{
+"slug": "arts-science-data-science",
+"name": "Data Science",
+"degree": "BA/BSc"
+},
+{
+"slug": "computer-science-data-science",
+"name": "Data Science",
+"degree": "BCompSc"
+},
+{
+"slug": "design",
+"name": "Design",
+"degree": "BFA"
+},
+{
+"slug": "diversity-contemporary-world",
+"name": "Diversity and the Contemporary World",
+"degree": ""
+},
+{
+"slug": "early-childhood-elementary-education",
+"name": "Early Childhood and Elementary Education",
+"degree": "BA"
+},
+{
+"slug": "ecology",
+"name": "Ecology",
+"degree": "BSc"
+},
+{
+"slug": "economic-policy",
+"name": "Economic Policy",
+"degree": "Microprogram"
+},
+{
+"slug": "economics",
+"name": "Economics",
+"degree": "BA"
+},
+{
+"slug": "economics-jmsb",
+"name": "Economics",
+"degree": "BComm"
+},
+{
+"slug": "education",
+"name": "Education",
+"degree": ""
+},
+{
+"slug": "electrical-engineering",
+"name": "Electrical Engineering",
+"degree": "BEng"
+},
+{
+"slug": "electroacoustic-studies",
+"name": "Electroacoustic Studies",
+"degree": "BFA"
+},
+{
+"slug": "english-and-creativewriting",
+"name": "English and Creative Writing",
+"degree": "BA"
+},
+{
+"slug": "english-and-history",
+"name": "English and History",
+"degree": "BA"
+},
+{
+"slug": "english-literature",
+"name": "English Literature",
+"degree": "BA"
+},
+{
+"slug": "entrepreneurship",
+"name": "Entrepreneurship",
+"degree": ""
+},
+{
+"slug": "environmental-science",
+"name": "Environmental and Sustainability Science",
+"degree": "BSc"
+},
+{
+"slug": "environmental-geography",
+"name": "Environmental Geography",
+"degree": "BSc"
+},
+{
+"slug": "ethics-values",
+"name": "Ethics and Values",
+"degree": ""
+},
+{
+"slug": "exercise-science",
+"name": "Exercise Science",
+"degree": "BSc"
+},
+{
+"slug": "family-life-education",
+"name": "Family Life Education",
+"degree": "Cert"
+},
+{
+"slug": "fibres-material-practices",
+"name": "Fibres and Material Practices",
+"degree": "BFA"
+},
+{
+"slug": "film-studies",
+"name": "Film and Moving Image Studies",
+"degree": "BFA"
+},
+{
+"slug": "film-animation",
+"name": "Film Animation",
+"degree": "BFA"
+},
+{
+"slug": "film-production",
+"name": "Film Production",
+"degree": "BFA"
+},
+{
+"slug": "finance",
+"name": "Finance",
+"degree": "BComm"
+},
+{
+"slug": "financial-reporting",
+"name": "Financial Reporting",
+"degree": ""
+},
+{
+"slug": "first-peoples-studies",
+"name": "First Peoples Studies",
+"degree": "BA"
+},
+{
+"slug": "french-studies",
+"name": "French Studies (Études françaises)",
+"degree": "BA, Cert"
+},
+{
+"slug": "digital-filmmaking-fundamentals",
+"name": "Fundamentals of Digital Filmmaking",
+"degree": "Microprogram"
+},
+{
+"slug": "game-design",
+"name": "Game Design",
+"degree": ""
+},
+{
+"slug": "geospatial-technologies",
+"name": "Geospatial Technologies",
+"degree": "Cert"
+},
+{
+"slug": "german-minor",
+"name": "German Studies",
+"degree": "Minor"
+},
+{
+"slug": "health-life-sciences",
+"name": "Health and Life Sciences",
+"degree": "BCompSc"
+},
+{
+"slug": "history",
+"name": "History",
+"degree": "BA"
+},
+{
+"slug": "human-environment",
+"name": "Human Environment",
+"degree": "BA"
+},
+{
+"slug": "human-relations",
+"name": "Human Relations",
+"degree": "BA"
+},
+{
+"slug": "human-resource-management",
+"name": "Human Resource Management",
+"degree": "BComm"
+},
+{
+"slug": "human-rights",
+"name": "Human Rights Studies",
+"degree": ""
+},
+{
+"slug": "immigration-studies",
+"name": "Immigration Studies",
+"degree": "Cert"
+},
+{
+"slug": "indigenous-bridging-bcomm",
+"name": "Indigenous Bridging Program",
+"degree": "BComm"
+},
+{
+"slug": "indigenous-bridging-beng",
+"name": "Indigenous Bridging Program",
+"degree": "BEng"
+},
+{
+"slug": "indigenous-bridging-bsc",
+"name": "Indigenous Bridging Program",
+"degree": "BSc"
+},
+{
+"slug": "indigenous-bridging-journalism",
+"name": "Indigenous Bridging Program",
+"degree": "Journalism BA"
+},
+{
+"slug": "indigenous-bridging-psychology",
+"name": "Indigenous Bridging Program",
+"degree": "Psychology BA"
+},
+{
+"slug": "indigenous-land-based-education",
+"name": "Indigenous Land-Based Education",
+"degree": "Microprogram"
+},
+{
+"slug": "industrial-engineering",
+"name": "Industrial Engineering",
+"degree": "BEng"
+},
+{
+"slug": "infosys-audit-risk-management",
+"name": "Information Systems Audit and Risk Management",
+"degree": ""
+},
+{
+"slug": "innovation-mindset",
+"name": "Innovation Mindset",
+"degree": "Microprogram"
+},
+{
+"slug": "sexuality",
+"name": "Interdisciplinary Studies in Sexuality",
+"degree": "BA"
+},
+{
+"slug": "intermedia",
+"name": "Intermedia (Video, Performance and Electronic Arts)",
+"degree": "BFA"
+},
+{
+"slug": "international-business",
+"name": "International Business",
+"degree": "BComm"
+},
+{
+"slug": "irish-studies",
+"name": "Irish Studies",
+"degree": "BA, Cert"
+},
+{
+"slug": "israel-studies",
+"name": "Israel Studies",
+"degree": ""
+},
+{
+"slug": "italian",
+"name": "Italian",
+"degree": "BA"
+},
+{
+"slug": "jazz-studies",
+"name": "Jazz Studies",
+"degree": "BFA"
+},
+{
+"slug": "jewish-studies",
+"name": "Jewish Studies",
+"degree": "Microprogram"
+},
+{
+"slug": "journalism",
+"name": "Journalism",
+"degree": "BA"
+},
+{
+"slug": "judaic-studies",
+"name": "Judaic Studies",
+"degree": "BA"
+},
+{
+"slug": "clinical-exercise-physiology",
+"name": "Kinesiology and Clinical Exercise Physiology",
+"degree": "BSc"
+},
+{
+"slug": "law-society",
+"name": "Law and Society",
+"degree": ""
+},
+{
+"slug": "liberal-arts",
+"name": "Liberal Arts",
+"degree": "BA"
+},
+{
+"slug": "linguistics",
+"name": "Linguistics",
+"degree": "BA"
+},
+{
+"slug": "management",
+"name": "Management",
+"degree": "BComm"
+},
+{
+"slug": "marketing",
+"name": "Marketing",
+"degree": "BComm"
+},
+{
+"slug": "mathematical-computational-finance",
+"name": "Mathematical and Computational Finance",
+"degree": "BA, BSc"
+},
+{
+"slug": "mathematics-statistics",
+"name": "Mathematics and Statistics",
+"degree": "BA, BSc"
+},
+{
+"slug": "mechanical-engineering",
+"name": "Mechanical Engineering",
+"degree": "BEng"
+},
+{
+"slug": "modern-arabic",
+"name": "Modern Arabic Language and Culture",
+"degree": "Cert"
+},
+{
+"slug": "modern-chinese",
+"name": "Modern Chinese Language and Culture",
+"degree": "Cert"
+},
+{
+"slug": "multidisciplinary-studies",
+"name": "Multidisciplinary Studies in Science",
+"degree": ""
+},
+{
+"slug": "music",
+"name": "Music",
+"degree": "BFA"
+},
+{
+"slug": "neuroscience",
+"name": "Neuroscience",
+"degree": "BSc"
+},
+{
+"slug": "painting-drawing",
+"name": "Painting and Drawing",
+"degree": "BFA"
+},
+{
+"slug": "pastoral-care",
+"name": "Pastoral Care",
+"degree": "Cert"
+},
+{
+"slug": "performance-creation",
+"name": "Performance Creation",
+"degree": "BFA"
+},
+{
+"slug": "philosophy",
+"name": "Philosophy",
+"degree": "BA"
+},
+{
+"slug": "photography",
+"name": "Photography",
+"degree": "BFA"
+},
+{
+"slug": "physics",
+"name": "Physics",
+"degree": "BSc"
+},
+{
+"slug": "political-science",
+"name": "Political Science",
+"degree": "BA"
+},
+{
+"slug": "print-media",
+"name": "Print Media",
+"degree": "BFA"
+},
+{
+"slug": "production-accounting-film-television",
+"name": "Production Accounting for Film and Television",
+"degree": "Microprogram"
+},
+{
+"slug": "professional-writing",
+"name": "Professional Writing",
+"degree": ""
+},
+{
+"slug": "psychology",
+"name": "Psychology",
+"degree": "BA, BSc"
+},
+{
+"slug": "pure-and-applied-mathematics",
+"name": "Pure and Applied Mathematics",
+"degree": "BA, BSc"
+},
+{
+"slug": "quantitative-finance-insurance",
+"name": "Quantitative Finance and Insurance",
+"degree": ""
+},
+{
+"slug": "real-estate",
+"name": "Real Estate",
+"degree": ""
+},
+{
+"slug": "leisure-studies",
+"name": "Recreation and Leisure Studies",
+"degree": "BA"
+},
+{
+"slug": "religion",
+"name": "Religions and Cultures",
+"degree": "BA"
+},
+{
+"slug": "religious-cultural-ethnic-literacy",
+"name": "Religious, Cultural and Ethnic Literacy",
+"degree": "Microprogram"
+},
+{
+"slug": "scenography",
+"name": "Scenography",
+"degree": "BFA"
+},
+{
+"slug": "science-technology",
+"name": "Science and Technology",
+"degree": "Cert"
+},
+{
+"slug": "science-foundations",
+"name": "Science Foundations",
+"degree": "Cert"
+},
+{
+"slug": "science-journalism",
+"name": "Science Journalism",
+"degree": ""
+},
+{
+"slug": "screenwriting-film-producing",
+"name": "Screenwriting and Film Producing",
+"degree": "Microprogram"
+},
+{
+"slug": "sculpture",
+"name": "Sculpture",
+"degree": "BFA"
+},
+{
+"slug": "sociology",
+"name": "Sociology",
+"degree": "BA"
+},
+{
+"slug": "software-engineering",
+"name": "Software Engineering",
+"degree": "BEng"
+},
+{
+"slug": "songwriting-music-production",
+"name": "Songwriting and Music Production",
+"degree": "Microprogram"
+},
+{
+"slug": "southern-asia-studies",
+"name": "Southern Asia Studies",
+"degree": "BA"
+},
+{
+"slug": "spanish",
+"name": "Spanish, Hispanic Cultures and Literatures",
+"degree": "BA"
+},
+{
+"slug": "statistics",
+"name": "Statistics",
+"degree": "BA, BSc"
+},
+{
+"slug": "studio-art",
+"name": "Studio Art",
+"degree": "BFA"
+},
+{
+"slug": "supply-chain-operations-management",
+"name": "Supply Chain Operations Management",
+"degree": "BComm"
+},
+{
+"slug": "sustainability-principles",
+"name": "Sustainability Principles",
+"degree": "Microprogram"
+},
+{
+"slug": "sustainability-studies",
+"name": "Sustainability Studies",
+"degree": ""
+},
+{
+"slug": "systems-information-biology",
+"name": "Systems and Information Biology",
+"degree": "BSc"
+},
+{
+"slug": "tesl-cert",
+"name": "Teaching English as a Second Language",
+"degree": "Cert"
+},
+{
+"slug": "teaching-english-second-language",
+"name": "Teaching English as a Second Language (TESL)",
+"degree": "BEd"
+},
+{
+"slug": "theatre-minor",
+"name": "Theatre",
+"degree": "Minor"
+},
+{
+"slug": "theological-studies",
+"name": "Theological Studies",
+"degree": "BA"
+},
+{
+"slug": "therapeutic-recreation",
+"name": "Therapeutic Recreation",
+"degree": "BA"
+},
+{
+"slug": "translation",
+"name": "Traduction (Translation)",
+"degree": "BA"
+},
+{
+"slug": "urban-planning",
+"name": "Urban Planning",
+"degree": "BA"
+},
+{
+"slug": "urban-studies",
+"name": "Urban Studies",
+"degree": "BA"
+},
+{
+"slug": "web-design-user-interface",
+"name": "Web Design and User Interface",
+"degree": "Microprogram"
+},
+{
+"slug": "womens-studies",
+"name": "Women's Studies",
+"degree": "BA, Cert"
+},
+{
+"slug": "etudes-francaises",
+"name": "Études françaises (French Studies)",
+"degree": "BA, Cert"
+}
+]

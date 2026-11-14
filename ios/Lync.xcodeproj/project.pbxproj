@@ -1,0 +1,755 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		02400C9F44F86A153A7F397F /* Events.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CA9BE149A22C5F15A9F896C /* Events.swift */; };
+		049739C2AB62C617C8644B5C /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B3E15D00600261E1719244D /* MapScreen.swift */; };
+		074DA67DC37971B7C7DDC7B4 /* ShareCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C768E6CB2693C1FF9ACCF5 /* ShareCard.swift */; };
+		08A64DDF597C8AEE8C3E037E /* SupabaseRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4C7F48310D1ACB2305767CD /* SupabaseRepository.swift */; };
+		08CCB92947638C7CA92CC453 /* StoriesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1038338F0B0ECF7A03A19B7C /* StoriesScreen.swift */; };
+		092A82F2616A93AE29C0E377 /* ComposeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23985EEDA117741A18010028 /* ComposeScreen.swift */; };
+		1DD11A965D44346A5EEE9BBB /* ScannerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E37D50C9769F66C1714C0EA /* ScannerScreen.swift */; };
+		221FABD770E736B79139DFA1 /* ProfileScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D7E26D8629930E7F28025EF /* ProfileScreens.swift */; };
+		2DC5CE9A1F62B98549B9C0C8 /* LyncCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAFA89EDAA88AFDA15928570 /* LyncCard.swift */; };
+		30EFE9D2D3D83F49BE0E3B87 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 373F7C027008B47142946A57 /* Supabase */; };
+		39889AE1A9403DFEBAACBF53 /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBEB86CCD5BA333EE59FE39F /* Motion.swift */; };
+		3E81595FD813C30D5D9ED82D /* LyncCodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C34413DCD23E902A5CEA4D /* LyncCodeTests.swift */; };
+		558A37D67A1A12299E6FFA1A /* NetworkScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFD83C69894C5D6D02113502 /* NetworkScreen.swift */; };
+		57105A7CC3632C7D3F7FC05C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B56CA9555DD985D7CED09B9 /* RootView.swift */; };
+		59EE7D58A182C92F5AEAE2CD /* LocationTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7730C69CA68BBDB228769FE /* LocationTracker.swift */; };
+		62DFB5BC2022CB7A5548B2D6 /* Campus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E696DD1B1C54F637BC72B476 /* Campus.swift */; };
+		78ABED00457FBF0533B30753 /* FeedScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C6FB9BC53B39A810B8AA5E /* FeedScreen.swift */; };
+		7D3AB4A19EC9A9F8D0BA6A54 /* LyncCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8243CBC4F4CC1B93FDFBA11 /* LyncCode.swift */; };
+		7DB89F686E67EE93138F1F46 /* CalendarRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6A40D0FBDE3592D885F691 /* CalendarRepository.swift */; };
+		8C23BD99955DD0CD2008E491 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = E4B4D2B6AC260D0141946882 /* Localizable.strings */; };
+		8E1806E5CE4EB410A7C64365 /* figtree.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3CFFA49031239BBC750EC55F /* figtree.ttf */; };
+		916ACA0AC8404115906FFD5B /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC2033F34D1CA265D292A947 /* Components.swift */; };
+		917AF092195EBEEB2A1AE76B /* CampusRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 503E49C2A3BCE23F1D175D45 /* CampusRepository.swift */; };
+		9ACE2916A91D2C90BE562030 /* Groups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CCB592CF800D616A68DE10E /* Groups.swift */; };
+		9D96599E3C2B3A0C944B5FF0 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6306FB8A7B8E959ADF7EE96 /* Models.swift */; };
+		A2857EE07AE5DE12810B8495 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2568BAF114B5D68DC946C5C4 /* Theme.swift */; };
+		ADA28A8DA44130B44204D86A /* CalendarScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44961972A89DA92B2F0A183D /* CalendarScreen.swift */; };
+		B0EB2C868B4CD3AE40D2A4CF /* LyncApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 887C5A212B08F4DE6F0E22EA /* LyncApp.swift */; };
+		B16D46A74F0DB62D86481955 /* IcsParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5AA1433311D39B3389C67A0 /* IcsParser.swift */; };
+		B7D4B5DEC9538BC4CF572A20 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 74D4587140BA2A04B04F996B /* Assets.xcassets */; };
+		B9E42AA87032C31D16600D66 /* bricolage.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 27F5B97FC9FC42ABC66E6681 /* bricolage.ttf */; };
+		B9FE930164A23C47A102A7D3 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 516696C5AA38EE4D0490EB2E /* OnboardingFlow.swift */; };
+		D07089C54A0B7EB351F7C977 /* CalendarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9D8E336B7924239348C2491 /* CalendarModels.swift */; };
+		DD2978B8C76B6ACE7E05AF26 /* DemoRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F2095697864682AC33DFCB /* DemoRepository.swift */; };
+		DFF2FA741B0E8FC647D1A4B3 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60458579A7B8C2C38B50D156 /* SettingsScreen.swift */; };
+		E43E00F35A7E0E0E1856D9AC /* concordia_programs.json in Resources */ = {isa = PBXBuildFile; fileRef = 6DFB421DF5004ABF5E838201 /* concordia_programs.json */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A1C532C1EEDA5843D562A8B8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 538402913C3595EFF6D8E245 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6F227DE7F771EC2DB82BBB65;
+			remoteInfo = Lync;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		1038338F0B0ECF7A03A19B7C /* StoriesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoriesScreen.swift; sourceTree = "<group>"; };
+		23985EEDA117741A18010028 /* ComposeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeScreen.swift; sourceTree = "<group>"; };
+		2568BAF114B5D68DC946C5C4 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		27F5B97FC9FC42ABC66E6681 /* bricolage.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = bricolage.ttf; sourceTree = "<group>"; };
+		3B56CA9555DD985D7CED09B9 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		3CFFA49031239BBC750EC55F /* figtree.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = figtree.ttf; sourceTree = "<group>"; };
+		44961972A89DA92B2F0A183D /* CalendarScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarScreen.swift; sourceTree = "<group>"; };
+		4CA9BE149A22C5F15A9F896C /* Events.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Events.swift; sourceTree = "<group>"; };
+		503E49C2A3BCE23F1D175D45 /* CampusRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampusRepository.swift; sourceTree = "<group>"; };
+		516696C5AA38EE4D0490EB2E /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
+		60458579A7B8C2C38B50D156 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
+		67F16180B0BAAF7BB6CF1EBC /* LyncTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LyncTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		6DFB421DF5004ABF5E838201 /* concordia_programs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = concordia_programs.json; sourceTree = "<group>"; };
+		74D4587140BA2A04B04F996B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		76C34413DCD23E902A5CEA4D /* LyncCodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyncCodeTests.swift; sourceTree = "<group>"; };
+		79F2095697864682AC33DFCB /* DemoRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoRepository.swift; sourceTree = "<group>"; };
+		7CCB592CF800D616A68DE10E /* Groups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Groups.swift; sourceTree = "<group>"; };
+		7D3F72D1C2C00EA7A6B69BEA /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		7D7E26D8629930E7F28025EF /* ProfileScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScreens.swift; sourceTree = "<group>"; };
+		887C5A212B08F4DE6F0E22EA /* LyncApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyncApp.swift; sourceTree = "<group>"; };
+		8B3E15D00600261E1719244D /* MapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapScreen.swift; sourceTree = "<group>"; };
+		8CFB80A19D5C9271FCDF4402 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		8E37D50C9769F66C1714C0EA /* ScannerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerScreen.swift; sourceTree = "<group>"; };
+		8F240A9F2880423E2F597E8F /* Lync.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Lync.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		94AF0DC1DDAFF4E1C82ED29A /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		A4C7F48310D1ACB2305767CD /* SupabaseRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseRepository.swift; sourceTree = "<group>"; };
+		A9D8E336B7924239348C2491 /* CalendarModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarModels.swift; sourceTree = "<group>"; };
+		AAFA89EDAA88AFDA15928570 /* LyncCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyncCard.swift; sourceTree = "<group>"; };
+		B1C768E6CB2693C1FF9ACCF5 /* ShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCard.swift; sourceTree = "<group>"; };
+		B6306FB8A7B8E959ADF7EE96 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		BE35B9F55CC8FF7D67C0996C /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/Localizable.strings; sourceTree = "<group>"; };
+		C7730C69CA68BBDB228769FE /* LocationTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTracker.swift; sourceTree = "<group>"; };
+		CC2033F34D1CA265D292A947 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		CE6A40D0FBDE3592D885F691 /* CalendarRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarRepository.swift; sourceTree = "<group>"; };
+		D5AA1433311D39B3389C67A0 /* IcsParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IcsParser.swift; sourceTree = "<group>"; };
+		E696DD1B1C54F637BC72B476 /* Campus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Campus.swift; sourceTree = "<group>"; };
+		E7C6FB9BC53B39A810B8AA5E /* FeedScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedScreen.swift; sourceTree = "<group>"; };
+		E8243CBC4F4CC1B93FDFBA11 /* LyncCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyncCode.swift; sourceTree = "<group>"; };
+		EBEB86CCD5BA333EE59FE39F /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
+		FFD83C69894C5D6D02113502 /* NetworkScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkScreen.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		149720BCE1ED93FD5E09888F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				30EFE9D2D3D83F49BE0E3B87 /* Supabase in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		054896667EEB899B31A1CB23 /* Lync */ = {
+			isa = PBXGroup;
+			children = (
+				8CFB80A19D5C9271FCDF4402 /* Info.plist */,
+				445E3C0F6B0C660E17579F94 /* App */,
+				D7A0FCB7B1F75EBC2E0DD2B4 /* Code */,
+				94F6834539B9DDE94B6BA50A /* Data */,
+				4B51520121047D82F8D41653 /* Design */,
+				A5F9918FB4C5932AE608DDD4 /* Features */,
+				7D2C2285072647EE57A584E6 /* Resources */,
+			);
+			path = Lync;
+			sourceTree = "<group>";
+		};
+		164219D397121F5CF26036C9 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				516696C5AA38EE4D0490EB2E /* OnboardingFlow.swift */,
+			);
+			path = Onboarding;
+			sourceTree = "<group>";
+		};
+		22F4DD26AD27EF916A32A981 /* Card */ = {
+			isa = PBXGroup;
+			children = (
+				AAFA89EDAA88AFDA15928570 /* LyncCard.swift */,
+				B1C768E6CB2693C1FF9ACCF5 /* ShareCard.swift */,
+			);
+			path = Card;
+			sourceTree = "<group>";
+		};
+		445E3C0F6B0C660E17579F94 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				887C5A212B08F4DE6F0E22EA /* LyncApp.swift */,
+				3B56CA9555DD985D7CED09B9 /* RootView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		4859ABDF40EB2CA6560CE0EC /* Feed */ = {
+			isa = PBXGroup;
+			children = (
+				E7C6FB9BC53B39A810B8AA5E /* FeedScreen.swift */,
+			);
+			path = Feed;
+			sourceTree = "<group>";
+		};
+		4B51520121047D82F8D41653 /* Design */ = {
+			isa = PBXGroup;
+			children = (
+				CC2033F34D1CA265D292A947 /* Components.swift */,
+				EBEB86CCD5BA333EE59FE39F /* Motion.swift */,
+				2568BAF114B5D68DC946C5C4 /* Theme.swift */,
+			);
+			path = Design;
+			sourceTree = "<group>";
+		};
+		56CF868381912477F9B4FB70 = {
+			isa = PBXGroup;
+			children = (
+				E40FD7B1242300973598CCF2 /* Config */,
+				054896667EEB899B31A1CB23 /* Lync */,
+				AA5527D64AAA69ACC1AAF2BE /* LyncTests */,
+				618FFA5A37B36E77CE814348 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5F44CE33CC21C0F679E26EEF /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				4CA9BE149A22C5F15A9F896C /* Events.swift */,
+				7CCB592CF800D616A68DE10E /* Groups.swift */,
+				FFD83C69894C5D6D02113502 /* NetworkScreen.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
+		618FFA5A37B36E77CE814348 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				8F240A9F2880423E2F597E8F /* Lync.app */,
+				67F16180B0BAAF7BB6CF1EBC /* LyncTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6BAA545CD15E1A4FAAF94974 /* Calendar */ = {
+			isa = PBXGroup;
+			children = (
+				A9D8E336B7924239348C2491 /* CalendarModels.swift */,
+				CE6A40D0FBDE3592D885F691 /* CalendarRepository.swift */,
+				D5AA1433311D39B3389C67A0 /* IcsParser.swift */,
+			);
+			path = Calendar;
+			sourceTree = "<group>";
+		};
+		75DC6E0B5D7DCBFE0E0521DD /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				27F5B97FC9FC42ABC66E6681 /* bricolage.ttf */,
+				3CFFA49031239BBC750EC55F /* figtree.ttf */,
+			);
+			path = Fonts;
+			sourceTree = "<group>";
+		};
+		7D2C2285072647EE57A584E6 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				74D4587140BA2A04B04F996B /* Assets.xcassets */,
+				6DFB421DF5004ABF5E838201 /* concordia_programs.json */,
+				75DC6E0B5D7DCBFE0E0521DD /* Fonts */,
+				E4B4D2B6AC260D0141946882 /* Localizable.strings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		92F190FD817475B52B64DEA1 /* Compose */ = {
+			isa = PBXGroup;
+			children = (
+				23985EEDA117741A18010028 /* ComposeScreen.swift */,
+			);
+			path = Compose;
+			sourceTree = "<group>";
+		};
+		931E714CBF6CD81646443350 /* Stories */ = {
+			isa = PBXGroup;
+			children = (
+				1038338F0B0ECF7A03A19B7C /* StoriesScreen.swift */,
+			);
+			path = Stories;
+			sourceTree = "<group>";
+		};
+		94F6834539B9DDE94B6BA50A /* Data */ = {
+			isa = PBXGroup;
+			children = (
+				E696DD1B1C54F637BC72B476 /* Campus.swift */,
+				503E49C2A3BCE23F1D175D45 /* CampusRepository.swift */,
+				79F2095697864682AC33DFCB /* DemoRepository.swift */,
+				C7730C69CA68BBDB228769FE /* LocationTracker.swift */,
+				B6306FB8A7B8E959ADF7EE96 /* Models.swift */,
+				A4C7F48310D1ACB2305767CD /* SupabaseRepository.swift */,
+				6BAA545CD15E1A4FAAF94974 /* Calendar */,
+			);
+			path = Data;
+			sourceTree = "<group>";
+		};
+		A5F9918FB4C5932AE608DDD4 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				B86109F00786470CB2547A09 /* Calendar */,
+				22F4DD26AD27EF916A32A981 /* Card */,
+				92F190FD817475B52B64DEA1 /* Compose */,
+				4859ABDF40EB2CA6560CE0EC /* Feed */,
+				D4BBF3629A5BAE04289F1519 /* Map */,
+				5F44CE33CC21C0F679E26EEF /* Network */,
+				164219D397121F5CF26036C9 /* Onboarding */,
+				EC5807BF25B0DCD2E7178E0F /* Profile */,
+				A869FF16DC58A8C771427A4F /* Scan */,
+				F14DE17FC14CA14C186E8565 /* Settings */,
+				931E714CBF6CD81646443350 /* Stories */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		A869FF16DC58A8C771427A4F /* Scan */ = {
+			isa = PBXGroup;
+			children = (
+				8E37D50C9769F66C1714C0EA /* ScannerScreen.swift */,
+			);
+			path = Scan;
+			sourceTree = "<group>";
+		};
+		AA5527D64AAA69ACC1AAF2BE /* LyncTests */ = {
+			isa = PBXGroup;
+			children = (
+				76C34413DCD23E902A5CEA4D /* LyncCodeTests.swift */,
+			);
+			path = LyncTests;
+			sourceTree = "<group>";
+		};
+		B86109F00786470CB2547A09 /* Calendar */ = {
+			isa = PBXGroup;
+			children = (
+				44961972A89DA92B2F0A183D /* CalendarScreen.swift */,
+			);
+			path = Calendar;
+			sourceTree = "<group>";
+		};
+		D4BBF3629A5BAE04289F1519 /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				8B3E15D00600261E1719244D /* MapScreen.swift */,
+			);
+			path = Map;
+			sourceTree = "<group>";
+		};
+		D7A0FCB7B1F75EBC2E0DD2B4 /* Code */ = {
+			isa = PBXGroup;
+			children = (
+				E8243CBC4F4CC1B93FDFBA11 /* LyncCode.swift */,
+			);
+			path = Code;
+			sourceTree = "<group>";
+		};
+		E40FD7B1242300973598CCF2 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				94AF0DC1DDAFF4E1C82ED29A /* Base.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		EC5807BF25B0DCD2E7178E0F /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				7D7E26D8629930E7F28025EF /* ProfileScreens.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
+		F14DE17FC14CA14C186E8565 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				60458579A7B8C2C38B50D156 /* SettingsScreen.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6F227DE7F771EC2DB82BBB65 /* Lync */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FDA0EAD9F4910F6E2E97D1D8 /* Build configuration list for PBXNativeTarget "Lync" */;
+			buildPhases = (
+				0CD9F57874C651138EFF46EB /* Sources */,
+				861F5D5DA76B81AC48F9899F /* Resources */,
+				149720BCE1ED93FD5E09888F /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Lync;
+			packageProductDependencies = (
+				373F7C027008B47142946A57 /* Supabase */,
+			);
+			productName = Lync;
+			productReference = 8F240A9F2880423E2F597E8F /* Lync.app */;
+			productType = "com.apple.product-type.application";
+		};
+		8E26CB587D5CA3F787BADE50 /* LyncTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B2FB8D6B33F7983C567DA5C5 /* Build configuration list for PBXNativeTarget "LyncTests" */;
+			buildPhases = (
+				BC644A24D97B6F18BA3D6386 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				02B224C199A19028595C751C /* PBXTargetDependency */,
+			);
+			name = LyncTests;
+			packageProductDependencies = (
+			);
+			productName = LyncTests;
+			productReference = 67F16180B0BAAF7BB6CF1EBC /* LyncTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		538402913C3595EFF6D8E245 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					6F227DE7F771EC2DB82BBB65 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 6F6939865DD95033B73A9199 /* Build configuration list for PBXProject "Lync" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+				fr,
+			);
+			mainGroup = 56CF868381912477F9B4FB70;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				0FE98065D3691D89F6E3E72F /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 618FFA5A37B36E77CE814348 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				6F227DE7F771EC2DB82BBB65 /* Lync */,
+				8E26CB587D5CA3F787BADE50 /* LyncTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		861F5D5DA76B81AC48F9899F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B7D4B5DEC9538BC4CF572A20 /* Assets.xcassets in Resources */,
+				8C23BD99955DD0CD2008E491 /* Localizable.strings in Resources */,
+				B9E42AA87032C31D16600D66 /* bricolage.ttf in Resources */,
+				E43E00F35A7E0E0E1856D9AC /* concordia_programs.json in Resources */,
+				8E1806E5CE4EB410A7C64365 /* figtree.ttf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0CD9F57874C651138EFF46EB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D07089C54A0B7EB351F7C977 /* CalendarModels.swift in Sources */,
+				7DB89F686E67EE93138F1F46 /* CalendarRepository.swift in Sources */,
+				ADA28A8DA44130B44204D86A /* CalendarScreen.swift in Sources */,
+				62DFB5BC2022CB7A5548B2D6 /* Campus.swift in Sources */,
+				917AF092195EBEEB2A1AE76B /* CampusRepository.swift in Sources */,
+				916ACA0AC8404115906FFD5B /* Components.swift in Sources */,
+				092A82F2616A93AE29C0E377 /* ComposeScreen.swift in Sources */,
+				DD2978B8C76B6ACE7E05AF26 /* DemoRepository.swift in Sources */,
+				02400C9F44F86A153A7F397F /* Events.swift in Sources */,
+				78ABED00457FBF0533B30753 /* FeedScreen.swift in Sources */,
+				9ACE2916A91D2C90BE562030 /* Groups.swift in Sources */,
+				B16D46A74F0DB62D86481955 /* IcsParser.swift in Sources */,
+				59EE7D58A182C92F5AEAE2CD /* LocationTracker.swift in Sources */,
+				B0EB2C868B4CD3AE40D2A4CF /* LyncApp.swift in Sources */,
+				2DC5CE9A1F62B98549B9C0C8 /* LyncCard.swift in Sources */,
+				7D3AB4A19EC9A9F8D0BA6A54 /* LyncCode.swift in Sources */,
+				049739C2AB62C617C8644B5C /* MapScreen.swift in Sources */,
+				9D96599E3C2B3A0C944B5FF0 /* Models.swift in Sources */,
+				39889AE1A9403DFEBAACBF53 /* Motion.swift in Sources */,
+				558A37D67A1A12299E6FFA1A /* NetworkScreen.swift in Sources */,
+				B9FE930164A23C47A102A7D3 /* OnboardingFlow.swift in Sources */,
+				221FABD770E736B79139DFA1 /* ProfileScreens.swift in Sources */,
+				57105A7CC3632C7D3F7FC05C /* RootView.swift in Sources */,
+				1DD11A965D44346A5EEE9BBB /* ScannerScreen.swift in Sources */,
+				DFF2FA741B0E8FC647D1A4B3 /* SettingsScreen.swift in Sources */,
+				074DA67DC37971B7C7DDC7B4 /* ShareCard.swift in Sources */,
+				08CCB92947638C7CA92CC453 /* StoriesScreen.swift in Sources */,
+				08A64DDF597C8AEE8C3E037E /* SupabaseRepository.swift in Sources */,
+				A2857EE07AE5DE12810B8495 /* Theme.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC644A24D97B6F18BA3D6386 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3E81595FD813C30D5D9ED82D /* LyncCodeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		02B224C199A19028595C751C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6F227DE7F771EC2DB82BBB65 /* Lync */;
+			targetProxy = A1C532C1EEDA5843D562A8B8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		E4B4D2B6AC260D0141946882 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				7D3F72D1C2C00EA7A6B69BEA /* en */,
+				BE35B9F55CC8FF7D67C0996C /* fr */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		10E577D38DB1FC4F4C34FCC1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		61EDC12CD927325C4EDC4F8D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 94AF0DC1DDAFF4E1C82ED29A /* Base.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Lync/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lync.app;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		6A35DFF7A909C994511C0541 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 94AF0DC1DDAFF4E1C82ED29A /* Base.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Lync/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.lync.app;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		9EC5EE0DACB92883912D2BEE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		CB760290E50F21864B21D294 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lync.LyncTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Lync.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Lync";
+			};
+			name = Debug;
+		};
+		E15E4B1FD13D607164051B1B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.lync.LyncTests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Lync.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Lync";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		6F6939865DD95033B73A9199 /* Build configuration list for PBXProject "Lync" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9EC5EE0DACB92883912D2BEE /* Debug */,
+				10E577D38DB1FC4F4C34FCC1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B2FB8D6B33F7983C567DA5C5 /* Build configuration list for PBXNativeTarget "LyncTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB760290E50F21864B21D294 /* Debug */,
+				E15E4B1FD13D607164051B1B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FDA0EAD9F4910F6E2E97D1D8 /* Build configuration list for PBXNativeTarget "Lync" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				61EDC12CD927325C4EDC4F8D /* Debug */,
+				6A35DFF7A909C994511C0541 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		0FE98065D3691D89F6E3E72F /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		373F7C027008B47142946A57 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0FE98065D3691D89F6E3E72F /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 538402913C3595EFF6D8E245 /* Project object */;
+}

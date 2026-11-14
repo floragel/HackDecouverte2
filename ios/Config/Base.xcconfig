@@ -1,0 +1,6 @@
+// Shared build settings. Supabase keys live in Secrets.xcconfig (not committed).
+// Without it, the app runs on built-in demo data.
+SUPABASE_URL =
+SUPABASE_KEY =
+LYNC_DEMO = NO
+#include? "Secrets.xcconfig"
