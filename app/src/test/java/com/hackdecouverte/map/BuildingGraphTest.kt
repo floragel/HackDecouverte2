@@ -97,4 +97,62 @@ class BuildingGraphTest {
         assertNotNull(arrived)
         assertTrue(arrived!!.isArrived)
     }
+
+    @Test
+    fun resolvesStairAndElevatorLandingsAcrossFloorsAndMergesMultiFlightStairSteps() {
+        val graph = BuildingGraph(loadAllMbFloors())
+
+        // 1. Grand stair 295 shifts ~12.8 m horizontally from MB-1 foot to MB-2 top:
+        //    transitioning MB-1 -> MB-2 near MB-1.295 MUST snap to MB-2.295!
+        val stair1295 = graph.floor("MB-1")!!.nodes.first { it.verticalGroupId == "stairs_295" }
+        val stair2295 = graph.floor("MB-2")!!.nodes.first { it.verticalGroupId == "stairs_295" }
+        val landing295 = graph.resolveFloorTransition(
+            fromFloorId = "MB-1",
+            targetFloorId = "MB-2",
+            currentPosM = PointM(stair1295.posM.x + 1.2, stair1295.posM.y - 0.8),
+            verticalSpeedMps = 0.35
+        )
+        assertNotNull(landing295)
+        assertEquals("stairs_295", landing295!!.verticalGroupId)
+        assertEquals(stair2295.id, landing295.arrivalNode?.id)
+        assertEquals(stair2295.posM.x, landing295.arrivalPosM.x, 1e-4)
+        assertEquals(stair2295.posM.y, landing295.arrivalPosM.y, 1e-4)
+
+        // 2. Fast vertical velocity (>= 0.9 m/s) near elevator lobby selects elevator_central
+        val elevMb5 = graph.floor("MB-5")!!.nodes.first { it.verticalGroupId == "elevator_central" }
+        val elevLanding = graph.resolveFloorTransition(
+            fromFloorId = "MB-2",
+            targetFloorId = "MB-5",
+            currentPosM = PointM(-3.0, -1.5), // near both stairs_394 and elevator_central
+            verticalSpeedMps = 1.6
+        )
+        assertNotNull(elevLanding)
+        assertTrue(elevLanding!!.viaElevator)
+        assertEquals(elevMb5.id, elevLanding.arrivalNode?.id)
+
+        // 3. Two-floor stair route (MB-2.285 -> room near stairs_294 on MB-4, cost 2*15=30m < elevator 26m+walk)
+        val start285 = graph.floor("MB-2")!!.nodes.first { it.label == "MB-2.285" }
+        val stair4294 = graph.floor("MB-4")!!.nodes.first { it.verticalGroupId == "stairs_294" }
+        val nearStairRoom4 = graph.floor("MB-4")!!.nodes
+            .filter { it.type == "room" }
+            .minByOrNull { it.posM.distanceTo(stair4294.posM) }!!
+        val stairRoute = graph.findRouteFromNode(
+            start = NodeKey("MB-2", start285.id),
+            destination = NodeKey("MB-4", nearStairRoom4.id),
+            accessibleOnly = false
+        )
+        assertNotNull(stairRoute)
+        assertEquals(1, stairRoute!!.transfers.size)
+        assertEquals("MB-2", stairRoute.transfers.single().fromFloorId)
+        assertEquals("MB-4", stairRoute.transfers.single().toFloorId)
+    }
+
+    @Test
+    fun flexibleRoomSearchMatchesShorthandAndSpacedQueries() {
+        assertTrue(BuildingGraph.matchesSearchQuery("M.2.255", "MB-2.255", "Classroom", "MB-2"))
+        assertTrue(BuildingGraph.matchesSearchQuery("m2.255", "MB-2.255", "Classroom", "MB-2"))
+        assertTrue(BuildingGraph.matchesSearchQuery("2.255", "MB-2.255", "Classroom", "MB-2"))
+        assertTrue(BuildingGraph.matchesSearchQuery("mb 2 255", "MB-2.255", "Classroom", "MB-2"))
+        assertFalse(BuildingGraph.matchesSearchQuery("M.4.206", "MB-2.255", "Classroom", "MB-2"))
+    }
 }

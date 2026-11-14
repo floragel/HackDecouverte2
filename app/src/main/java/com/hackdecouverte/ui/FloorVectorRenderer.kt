@@ -10,9 +10,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 internal object FloorVectorRenderer {
-    private const val PX_PER_METER = 24.0
+    private const val PX_PER_METER = 20.0
 
-    private val cache = object : LruCache<String, Bitmap>(3) {}
+    // Holds all 7 MB floors simultaneously (~8.5 MB each => ~60 MB max) for 0 ms floor switching
+    private val cache = object : LruCache<String, Bitmap>(8) {}
+
+    fun getCached(floorId: String): Bitmap? = synchronized(cache) {
+        cache.get(floorId)
+    }
 
     suspend fun getOrRender(plan: FloorVectorPlan): Bitmap = withContext(Dispatchers.Default) {
         synchronized(cache) {
@@ -27,8 +32,8 @@ internal object FloorVectorRenderer {
 
     private fun renderBitmap(plan: FloorVectorPlan): Bitmap {
         val bounds = plan.viewBoundsM
-        val widthPx = (bounds.widthM * PX_PER_METER).toInt().coerceIn(256, 3200)
-        val heightPx = (bounds.heightM * PX_PER_METER).toInt().coerceIn(256, 3200)
+        val widthPx = (bounds.widthM * PX_PER_METER).toInt().coerceIn(256, 2800)
+        val heightPx = (bounds.heightM * PX_PER_METER).toInt().coerceIn(256, 2800)
         val scaleX = widthPx / bounds.widthM
         val scaleY = heightPx / bounds.heightM
 
@@ -62,7 +67,7 @@ internal object FloorVectorRenderer {
 
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = android.graphics.Color.rgb(30, 41, 59)
+            color = android.graphics.Color.rgb(112, 117, 122)
         }
         canvas.drawPath(path, paint)
         return bmp

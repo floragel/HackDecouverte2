@@ -22,6 +22,7 @@ class PdrSensorAdapter(
     private val tracker: PdrTracker,
     private val sourceProvider: () -> StepSource,
     private val fallback: FallbackStepDetector = FallbackStepDetector(),
+    private val onPressureSample: (timestampNs: Long, pressureHpa: Double) -> Unit = { _, _ -> },
     private val onRegistrationResult: (Boolean) -> Unit = {}
 ) : SensorEventListener {
 
@@ -34,6 +35,7 @@ class PdrSensorAdapter(
     val linearAcceleration: Sensor? =
         sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
     val accelerometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    val pressureSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
 
     val fallbackCapable: Boolean
         get() = linearAcceleration != null || accelerometer != null
@@ -69,6 +71,9 @@ class PdrSensorAdapter(
         }
         compassRotationSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI, 0)
+        }
+        pressureSensor?.let {
+            sensorManager.registerListener(this, it, PRESSURE_SAMPLING_PERIOD_US, 0)
         }
         val activeSource = sourceProvider()
         when (activeSource) {
@@ -155,6 +160,12 @@ class PdrSensorAdapter(
                 tracker.onStep(event.timestamp, StepSource.HARDWARE)
             }
 
+            Sensor.TYPE_PRESSURE -> {
+                if (event.values.isNotEmpty()) {
+                    onPressureSample(event.timestamp, event.values[0].toDouble())
+                }
+            }
+
             Sensor.TYPE_LINEAR_ACCELERATION -> {
                 if (event.values.size >= 3) {
                     val ax = event.values[0].toDouble()
@@ -194,6 +205,7 @@ class PdrSensorAdapter(
 
     companion object {
         private const val SAMPLING_PERIOD_US = 16_667
+        private const val PRESSURE_SAMPLING_PERIOD_US = 100_000
         private const val MAX_REPORT_LATENCY_US = 0
     }
 }

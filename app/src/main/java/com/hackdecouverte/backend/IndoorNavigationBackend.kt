@@ -5,9 +5,11 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.content.ContextCompat
 import com.hackdecouverte.map.BuildingGraph
 import com.hackdecouverte.map.DestinationItem
+import com.hackdecouverte.map.FloorNode
 import com.hackdecouverte.map.FloorPlan
 import com.hackdecouverte.map.FloorVectorPlan
 import com.hackdecouverte.map.GeoOrigin
@@ -15,7 +17,9 @@ import com.hackdecouverte.map.MapAnchor
 import com.hackdecouverte.map.NavigationRoute
 import com.hackdecouverte.map.NodeKey
 import com.hackdecouverte.map.OsmSurroundings
+import com.hackdecouverte.map.RouteStep
 import com.hackdecouverte.pdr.CorridorConstraintResult
+import com.hackdecouverte.pdr.FloorTransitionTracker
 import com.hackdecouverte.pdr.PdrPhase
 import com.hackdecouverte.pdr.PdrState
 import com.hackdecouverte.pdr.PdrTracker
@@ -43,20 +47,48 @@ sealed interface FacingOption {
     data class Cardinal(val degrees: Int) : FacingOption
 }
 
+data class SuggestedFloorTransfer(
+    val fromFloorId: String,
+    val toFloorId: String,
+    val viaLabel: String,
+    val verticalGroupId: String?,
+    val viaElevator: Boolean,
+    val fromActiveRoute: Boolean
+)
+
+data class NearbyVerticalOptions(
+    val connectorNode: FloorNode,
+    val upFloorId: String?,
+    val downFloorId: String?
+)
+
 data class NavigationSnapshot(
     val pdr: PdrState = PdrState(),
     val geoOrigin: GeoOrigin = GeoOrigin.MB_ELEVATOR_CORE,
     val osmSurroundings: OsmSurroundings? = null,
     val floors: List<FloorPlan> = emptyList(),
+    /** Floor currently displayed on the map (`viewedFloorId`). */
     val activeFloorId: String? = null,
     val activeFloor: FloorPlan? = null,
     val activeFloorVector: FloorVectorPlan? = null,
+    val loadedFloorVectors: Map<String, FloorVectorPlan> = emptyMap(),
+    /** Floor where the user physically is (`userFloorId`). */
+    val userFloorId: String? = null,
+    val userFloor: FloorPlan? = null,
+    val isViewingUserFloor: Boolean = true,
+    val startPose: NodeKey? = null,
     val startNodeId: String? = null,
     val usingGpsStart: Boolean = false,
+    val hasExplicitStart: Boolean = false,
     val facing: FacingOption = FacingOption.AutoTrueNorth,
     val anchor: MapAnchor? = null,
     val mapPositionM: PointM = PointM(0.0, 0.0),
     val mapHeadingRad: Double = 0.0,
+    val barometerAvailable: Boolean = false,
+    val floorDeltaAltitudeM: Double = 0.0,
+    val inVerticalTransit: Boolean = false,
+    val suggestedTransfer: SuggestedFloorTransfer? = null,
+    val nearbyVertical: NearbyVerticalOptions? = null,
     val locationPermissionGranted: Boolean = false,
     val latestGpsFix: GpsFix? = null,
     val destination: NodeKey? = null,
@@ -80,10 +112,13 @@ class IndoorNavigationBackend(
         useTrueNorthReference = true
     }
 
+    private val floorTracker = FloorTransitionTracker()
+
     private val adapter = PdrSensorAdapter(
         context = appContext,
         tracker = tracker,
         sourceProvider = { tracker.state.value.stepSource },
+        onPressureSample = ::handlePressureSample,
         onRegistrationResult = { failed ->
             registrationFailed = failed
             pushSensorStatus()
@@ -114,18 +149,25 @@ class IndoorNavigationBackend(
 
     private var geoOrigin: GeoOrigin = GeoOrigin.MB_ELEVATOR_CORE
     private var osmSurroundings: OsmSurroundings? = null
-    private val floorVectors = HashMap<String, FloorVectorPlan>()
+    private val floorVectors = LinkedHashMap<String, FloorVectorPlan>()
 
     private var buildingGraph = BuildingGraph(loadBundledFloors(appContext))
-    private var activeFloorId: String? =
+    private var userFloorId: String? =
         buildingGraph.floor(DEFAULT_FLOOR_ID)?.floorId ?: buildingGraph.floors.firstOrNull()?.floorId
-    private var startNodeId: String? = null
-    private var gpsStartOriginM: PointM? = null
+    private var viewedFloorId: String? = userFloorId
+
+    private var startPose: NodeKey? = null
+    private var usingGpsStart: Boolean = false
+    private var currentFloorOriginM: PointM = PointM(0.0, 0.0)
     private var facing: FacingOption = FacingOption.AutoTrueNorth
     private var anchor: MapAnchor? = MapAnchor(PointM(0.0, 0.0), 0.0)
     private var destination: NodeKey? = null
     private var accessibleOnly: Boolean = false
     private var latestGpsFix: GpsFix? = null
+
+    private var floorDeltaAltitudeM: Double = 0.0
+    private var inVerticalTransit: Boolean = false
+    private var lastPublishedAltM: Double = 0.0
 
     private val permissionNeeded = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
     private var permissionGranted = checkActivityPermission()
@@ -155,9 +197,9 @@ class IndoorNavigationBackend(
         recomputeAnchor()
 
         tracker.corridorConstraint = { localPos, localTheta ->
-            val plan = activeFloorId?.let(buildingGraph::floor)
+            val plan = userFloorId?.let(buildingGraph::floor)
             val anc = anchor
-            if (plan != null && anc != null) {
+            if (plan != null && anc != null && !inVerticalTransit) {
                 plan.matchCorridor(anc.toMap(localPos), anc.mapHeading(localTheta))?.let {
                     CorridorConstraintResult(
                         projectedLocalPos = anc.fromMap(it.projectedPointM),
@@ -169,7 +211,6 @@ class IndoorNavigationBackend(
             }
         }
 
-        // Load OpenStreetMap campus surroundings & MB-1..7 SVG vector floor plans in background
         scope.launch {
             osmLoader.loadInitial(geoOrigin)?.let { loadedOsm ->
                 osmSurroundings = loadedOsm
@@ -179,7 +220,16 @@ class IndoorNavigationBackend(
         loadVectorPlansInBackground()
 
         scope.launch {
+            var lastLoggedSteps = -1
             tracker.state.collect { pdrState ->
+                if (pdrState.stepCount != lastLoggedSteps) {
+                    lastLoggedSteps = pdrState.stepCount
+                    Log.d(
+                        LOG_TAG,
+                        "step=${pdrState.stepCount} pos=(%.2f, %.2f) dist=%.1f held=${tracker.heldStepCount} transit=$inVerticalTransit dz=%.2f floor=$userFloorId"
+                            .format(pdrState.position.x, pdrState.position.y, pdrState.distanceM, floorDeltaAltitudeM)
+                    )
+                }
                 persistGaitIfUpdated(pdrState)
                 _state.value = buildSnapshot(pdrState)
             }
@@ -188,7 +238,7 @@ class IndoorNavigationBackend(
 
     private fun loadVectorPlansInBackground() {
         val plansSnapshot = buildingGraph.floors
-        val priorityId = activeFloorId
+        val priorityId = viewedFloorId ?: userFloorId
         val ordered = plansSnapshot.sortedBy { if (it.floorId == priorityId) 0 else 1 }
         scope.launch(Dispatchers.Default) {
             for (plan in ordered) {
@@ -200,10 +250,8 @@ class IndoorNavigationBackend(
                 synchronized(floorVectors) {
                     floorVectors[plan.floorId] = parsed
                 }
-                if (plan.floorId == activeFloorId) {
-                    withContext(Dispatchers.Main) {
-                        _state.value = buildSnapshot(tracker.state.value)
-                    }
+                withContext(Dispatchers.Main) {
+                    _state.value = buildSnapshot(tracker.state.value)
                 }
             }
         }
@@ -221,46 +269,79 @@ class IndoorNavigationBackend(
 
     fun loadFloorPlans(plans: List<FloorPlan>) {
         buildingGraph = BuildingGraph(plans)
-        if (activeFloorId == null || buildingGraph.floor(activeFloorId!!) == null) {
-            activeFloorId = plans.firstOrNull()?.floorId
+        if (userFloorId == null || buildingGraph.floor(userFloorId!!) == null) {
+            userFloorId = plans.firstOrNull()?.floorId
+        }
+        if (viewedFloorId == null || buildingGraph.floor(viewedFloorId!!) == null) {
+            viewedFloorId = userFloorId
         }
         loadVectorPlansInBackground()
         recomputeAnchor()
         invalidateRouteAndPublish()
     }
 
+    /**
+     * Anchors the user's starting or current position to a specific room, entrance, stair, or
+     * elevator node (`[floorId, nodeId]`). Manual room selection is always authoritative and
+     * never overridden by coarse indoor GPS.
+     */
     fun setStartPose(
         floorId: String,
         nodeId: String,
         facingOption: FacingOption = FacingOption.AutoTrueNorth
     ) {
-        activeFloorId = floorId
-        startNodeId = nodeId
-        gpsStartOriginM = null
-        val plan = buildingGraph.floor(floorId)
+        val plan = buildingGraph.floor(floorId) ?: return
+        val node = plan.node(nodeId) ?: return
+        startPose = NodeKey(floorId, nodeId)
+        usingGpsStart = false
+        userFloorId = floorId
+        viewedFloorId = floorId
+        currentFloorOriginM = node.posM
         facing = when (facingOption) {
             FacingOption.AutoTrueNorth -> FacingOption.AutoTrueNorth
             is FacingOption.Neighbor ->
-                if (plan?.neighbors(nodeId)?.any { it.id == facingOption.nodeId } == true) {
+                if (plan.neighbors(nodeId).any { it.id == facingOption.nodeId }) {
                     facingOption
                 } else {
                     FacingOption.AutoTrueNorth
                 }
             is FacingOption.Cardinal -> facingOption
         }
+        floorTracker.onManualFloorSet()
+        inVerticalTransit = false
+        floorDeltaAltitudeM = 0.0
+        tracker.endVerticalHold(commit = false)
         recomputeAnchor()
+        val phase = tracker.state.value.phase
+        if (phase == PdrPhase.TRACKING || phase == PdrPhase.PAUSED) {
+            if (!tracker.resetTrace()) {
+                tracker.reanchorFloorOriginKeepHeading()
+            }
+        }
         invalidateRouteAndPublish()
     }
 
+    /**
+     * Explicit outdoor GPS origin action (only when explicitly requested by the user).
+     */
     fun useGpsAsStartOrigin(): Boolean {
         val fix = latestGpsFix ?: return false
         if (fix.eastNorthM.norm() > MAX_CAMPUS_RADIUS_M) return false
-        startNodeId = null
-        gpsStartOriginM = fix.eastNorthM
+        startPose = null
+        usingGpsStart = true
+        currentFloorOriginM = fix.eastNorthM
+        viewedFloorId = userFloorId
         facing = FacingOption.AutoTrueNorth
+        floorTracker.onManualFloorSet()
+        inVerticalTransit = false
+        floorDeltaAltitudeM = 0.0
+        tracker.endVerticalHold(commit = false)
         recomputeAnchor()
-        if (tracker.state.value.phase == PdrPhase.TRACKING) {
-            tracker.resetTrace()
+        val phase = tracker.state.value.phase
+        if (phase == PdrPhase.TRACKING || phase == PdrPhase.PAUSED) {
+            if (!tracker.resetTrace()) {
+                tracker.reanchorFloorOriginKeepHeading()
+            }
         }
         invalidateRouteAndPublish()
         return true
@@ -273,27 +354,77 @@ class IndoorNavigationBackend(
     }
 
     fun clearStartPose() {
-        startNodeId = null
-        gpsStartOriginM = latestGpsFix?.eastNorthM?.takeIf { it.norm() <= MAX_CAMPUS_RADIUS_M }
+        startPose = null
+        usingGpsStart = false
+        currentFloorOriginM = PointM(0.0, 0.0)
         facing = FacingOption.AutoTrueNorth
         recomputeAnchor()
         invalidateRouteAndPublish()
     }
 
+    /**
+     * Switches the floor plan displayed on the map (`viewedFloorId`).
+     * In setup (`IDLE` before choosing a room), this also sets `userFloorId` so selecting a floor
+     * sets the starting floor naturally. During active tracking, use [confirmUserFloor] (or climb
+     * stairs/elevator with barometer) to relocate the user's physical floor.
+     */
     fun switchActiveFloor(
         floorId: String,
         entryNodeId: String? = null,
         facingOption: FacingOption = FacingOption.AutoTrueNorth
     ) {
         if (buildingGraph.floor(floorId) == null) return
-        activeFloorId = floorId
         if (entryNodeId != null) {
             setStartPose(floorId, entryNodeId, facingOption)
-            tracker.resetTrace()
-        } else {
-            recomputeAnchor()
-            invalidateRouteAndPublish()
+            return
         }
+        viewedFloorId = floorId
+        val phase = tracker.state.value.phase
+        if (phase != PdrPhase.TRACKING && phase != PdrPhase.PAUSED && startPose == null) {
+            userFloorId = floorId
+            recomputeAnchor()
+        }
+        loadVectorPlansInBackground()
+        invalidateRouteAndPublish()
+    }
+
+    fun returnViewToUserFloor() {
+        val uf = userFloorId ?: return
+        viewedFloorId = uf
+        _state.value = buildSnapshot(tracker.state.value)
+    }
+
+    /**
+     * Relocates the user's physical floor to [targetFloorId] (e.g. when tapping "Monter → MB-3",
+     * "Je suis au MB-4", or via an explicit stairwell/elevator `verticalGroupId`), snapping onto
+     * the corresponding stairwell/elevator landing on [targetFloorId] and continuing the route.
+     */
+    fun confirmUserFloor(
+        targetFloorId: String,
+        explicitVerticalGroupId: String? = null
+    ) {
+        if (buildingGraph.floor(targetFloorId) == null) return
+        val fromFloor = userFloorId ?: targetFloorId
+        val currentMapPos = anchor?.toMap(tracker.state.value.position) ?: currentFloorOriginM
+        val landing = buildingGraph.resolveFloorTransition(
+            fromFloorId = fromFloor,
+            targetFloorId = targetFloorId,
+            currentPosM = currentMapPos,
+            verticalSpeedMps = 0.0,
+            activeRoute = cachedRoute,
+            explicitVerticalGroupId = explicitVerticalGroupId
+        )
+        userFloorId = targetFloorId
+        viewedFloorId = targetFloorId
+        currentFloorOriginM = landing?.arrivalPosM ?: currentMapPos
+        floorTracker.onManualFloorSet()
+        inVerticalTransit = false
+        floorDeltaAltitudeM = 0.0
+        tracker.endVerticalHold(commit = false)
+        recomputeAnchor()
+        tracker.reanchorFloorOriginKeepHeading()
+        loadVectorPlansInBackground()
+        invalidateRouteAndPublish()
     }
 
     fun setDestination(target: NodeKey?) {
@@ -309,6 +440,8 @@ class IndoorNavigationBackend(
     fun startWithStepLength(lengthM: Double): Boolean {
         val saved = savedStepLengthM
         val cadence = if (saved != null && abs(saved - lengthM) < 0.0005) savedCadenceHz else null
+        viewedFloorId = userFloorId
+        floorTracker.onManualFloorSet()
         return tracker.startWithManualStepLength(lengthM, cadence)
     }
 
@@ -317,7 +450,11 @@ class IndoorNavigationBackend(
         return startWithStepLength(len)
     }
 
-    fun startCalibration5m(): Boolean = tracker.startCalibration()
+    fun startCalibration5m(): Boolean {
+        viewedFloorId = userFloorId
+        floorTracker.onManualFloorSet()
+        return tracker.startCalibration()
+    }
 
     fun finishCalibration5m() {
         if (!tracker.finishCalibration()) return
@@ -334,11 +471,30 @@ class IndoorNavigationBackend(
     }
 
     fun resetPositionToStart() {
-        tracker.resetTrace()
+        val sp = startPose
+        if (sp != null) {
+            buildingGraph.node(sp)?.let { node ->
+                userFloorId = sp.floorId
+                viewedFloorId = sp.floorId
+                currentFloorOriginM = node.posM
+            }
+        } else {
+            viewedFloorId = userFloorId
+        }
+        floorTracker.onManualFloorSet()
+        inVerticalTransit = false
+        floorDeltaAltitudeM = 0.0
+        tracker.endVerticalHold(commit = false)
+        recomputeAnchor()
+        if (!tracker.resetTrace()) {
+            tracker.reanchorFloorOriginKeepHeading()
+        }
         invalidateRouteAndPublish()
     }
 
     fun resumeFromPause() {
+        viewedFloorId = userFloorId
+        floorTracker.onManualFloorSet()
         tracker.resumeWithNewTrace()
         invalidateRouteAndPublish()
     }
@@ -346,6 +502,10 @@ class IndoorNavigationBackend(
     fun stopToSetup() {
         settlingJob?.cancel()
         settlingJob = null
+        inVerticalTransit = false
+        floorDeltaAltitudeM = 0.0
+        tracker.endVerticalHold(commit = false)
+        viewedFloorId = userFloorId
         tracker.recalibrate()
         ensureUsableStepSource()
         refreshSensorRegistrations()
@@ -374,6 +534,8 @@ class IndoorNavigationBackend(
     fun onBackground() {
         settlingJob?.cancel()
         settlingJob = null
+        inVerticalTransit = false
+        tracker.endVerticalHold(commit = false)
         gpsSource.stop()
         adapter.stop()
         tracker.pause()
@@ -397,20 +559,68 @@ class IndoorNavigationBackend(
         _state.value = buildSnapshot(tracker.state.value)
     }
 
+    private fun handlePressureSample(timestampNs: Long, pressureHpa: Double) {
+        val uFloor = userFloorId ?: return
+        val currentMapPos = anchor?.toMap(tracker.state.value.position) ?: currentFloorOriginM
+        val nearConnector = buildingGraph.findNearestVerticalConnector(
+            floorId = uFloor,
+            posM = currentMapPos,
+            maxRadiusM = NEAR_CONNECTOR_BARO_RADIUS_M,
+            accessibleOnly = false
+        ) != null
+
+        val update = floorTracker.onPressure(timestampNs, pressureHpa, nearConnector) ?: return
+        val wasInTransit = inVerticalTransit
+        inVerticalTransit = update.inVerticalTransit
+        floorDeltaAltitudeM = update.deltaFromFloorM
+
+        if (update.inVerticalTransit && !wasInTransit) {
+            tracker.beginVerticalHold()
+        } else if (!update.inVerticalTransit && wasInTransit && update.floorStepDelta == 0) {
+            // False alarm (pressurised stairwell door, HVAC, lobby): replay the buffered steps
+            tracker.endVerticalHold(commit = true)
+        }
+
+        if (update.floorStepDelta != 0) {
+            val targetFloor = buildingGraph.adjacentFloorId(uFloor, update.floorStepDelta)
+            if (targetFloor == null) {
+                floorTracker.revertRejectedFloorStep(update.floorStepDelta)
+            } else {
+                val landing = buildingGraph.resolveFloorTransition(
+                    fromFloorId = uFloor,
+                    targetFloorId = targetFloor,
+                    currentPosM = currentMapPos,
+                    verticalSpeedMps = update.verticalSpeedMps,
+                    activeRoute = cachedRoute
+                )
+                userFloorId = targetFloor
+                viewedFloorId = targetFloor
+                currentFloorOriginM = landing?.arrivalPosM ?: currentMapPos
+                recomputeAnchor()
+                tracker.reanchorFloorOriginKeepHeading()
+                loadVectorPlansInBackground()
+                lastPublishedAltM = floorDeltaAltitudeM
+                invalidateRouteAndPublish()
+                return
+            }
+        }
+
+        if (wasInTransit != inVerticalTransit || abs(floorDeltaAltitudeM - lastPublishedAltM) >= 0.25) {
+            lastPublishedAltM = floorDeltaAltitudeM
+            _state.value = buildSnapshot(tracker.state.value)
+        }
+    }
+
     private fun handleGpsFix(fix: GpsFix) {
         latestGpsFix = fix
         adapter.magneticDeclinationDeg = fix.magneticDeclinationDeg
         fix.trueNorthBearingRad?.let { bearing ->
             tracker.onTrueNorthBearingFromGps(fix.elapsedRealtimeNs, bearing)
         }
-        if (startNodeId == null && gpsStartOriginM == null &&
-            fix.accuracyM <= 40.0 && fix.eastNorthM.norm() <= MAX_CAMPUS_RADIUS_M
-        ) {
-            gpsStartOriginM = fix.eastNorthM
-            recomputeAnchor()
-        }
+        // Only apply position drift correction when using GPS start OR outdoor high-precision GNSS (<= 4.5 m)
         val anc = anchor
-        if (anc != null && fix.eastNorthM.norm() <= MAX_CAMPUS_RADIUS_M) {
+        val allowPositionNudge = usingGpsStart || fix.accuracyM <= HIGH_PRECISION_OUTDOOR_GPS_M
+        if (allowPositionNudge && anc != null && fix.eastNorthM.norm() <= MAX_CAMPUS_RADIUS_M) {
             tracker.onExternalFix(anc.fromMap(fix.eastNorthM), fix.accuracyM)
         }
         _state.value = buildSnapshot(tracker.state.value)
@@ -428,16 +638,19 @@ class IndoorNavigationBackend(
     }
 
     private fun recomputeAnchor() {
-        val plan = activeFloorId?.let(buildingGraph::floor)
-        val startNode = startNodeId?.let { plan?.node(it) }
-        val originM = startNode?.posM ?: gpsStartOriginM ?: PointM(0.0, 0.0)
+        val uPlan = userFloorId?.let(buildingGraph::floor)
+        val sp = startPose
+        val startNodeOnUserFloor = if (sp != null && sp.floorId == userFloorId) {
+            uPlan?.node(sp.nodeId)
+        } else {
+            null
+        }
         val f = facing
-
         val psi = when (f) {
             FacingOption.AutoTrueNorth -> 0.0
             is FacingOption.Neighbor ->
-                if (plan != null && startNode != null) {
-                    plan.node(f.nodeId)?.let { FloorPlan.facingPsi(startNode, it) } ?: 0.0
+                if (uPlan != null && startNodeOnUserFloor != null) {
+                    uPlan.node(f.nodeId)?.let { FloorPlan.facingPsi(startNodeOnUserFloor, it) } ?: 0.0
                 } else {
                     0.0
                 }
@@ -445,9 +658,9 @@ class IndoorNavigationBackend(
         }
 
         tracker.useTrueNorthReference = (f == FacingOption.AutoTrueNorth)
-        val computed = MapAnchor(originM, psi)
+        val computed = MapAnchor(currentFloorOriginM, psi)
         anchor = computed
-        val corridorAxis = plan?.dominantCorridorAxisRad ?: 0.0
+        val corridorAxis = uPlan?.dominantCorridorAxisRad ?: 0.0
         tracker.mapAxisBaseLocal = wrapAnglePi(corridorAxis - computed.psiRad)
     }
 
@@ -472,27 +685,64 @@ class IndoorNavigationBackend(
     }
 
     private fun buildSnapshot(pdr: PdrState): NavigationSnapshot {
-        val fId = activeFloorId
-        val plan = fId?.let(buildingGraph::floor)
-        val vectorPlan = fId?.let { synchronized(floorVectors) { floorVectors[it] } }
+        val uFloorId = userFloorId
+        val vFloorId = viewedFloorId ?: uFloorId
+        val vPlan = vFloorId?.let(buildingGraph::floor)
+        val uPlan = uFloorId?.let(buildingGraph::floor)
+        val vectorsSnapshot = synchronized(floorVectors) { LinkedHashMap(floorVectors) }
+        val vectorPlan = vFloorId?.let { vectorsSnapshot[it] }
         val anc = anchor
         val mapPos = anc?.toMap(pdr.position) ?: pdr.position
         val mapHeading = anc?.mapHeading(pdr.headingRadians) ?: pdr.headingRadians
         val route = resolveRoute(pdr, mapPos, mapHeading)
+
+        val nearbyConn = uFloorId?.let {
+            buildingGraph.findNearestVerticalConnector(it, mapPos, maxRadiusM = 8.5, accessibleOnly = accessibleOnly)
+        }
+        val nearbyVertical = if (uFloorId != null && nearbyConn != null) {
+            val vg = nearbyConn.verticalGroupId
+            val candidateUp = buildingGraph.adjacentFloorId(uFloorId, +1)?.takeIf { nextF ->
+                vg.isNullOrBlank() || buildingGraph.floor(nextF)?.nodes?.any { it.verticalGroupId == vg } == true
+            }
+            val candidateDown = buildingGraph.adjacentFloorId(uFloorId, -1)?.takeIf { prevF ->
+                vg.isNullOrBlank() || buildingGraph.floor(prevF)?.nodes?.any { it.verticalGroupId == vg } == true
+            }
+            if (candidateUp != null || candidateDown != null) {
+                NearbyVerticalOptions(nearbyConn, candidateUp, candidateDown)
+            } else {
+                null
+            }
+        } else {
+            null
+        }
+
+        val suggestedTransfer = computeSuggestedTransfer(uFloorId, mapPos, route)
+
         return NavigationSnapshot(
             pdr = pdr,
             geoOrigin = geoOrigin,
             osmSurroundings = osmSurroundings,
             floors = buildingGraph.floors,
-            activeFloorId = fId,
-            activeFloor = plan,
+            activeFloorId = vFloorId,
+            activeFloor = vPlan,
             activeFloorVector = vectorPlan,
-            startNodeId = startNodeId,
-            usingGpsStart = startNodeId == null && gpsStartOriginM != null,
+            loadedFloorVectors = vectorsSnapshot,
+            userFloorId = uFloorId,
+            userFloor = uPlan,
+            isViewingUserFloor = vFloorId == uFloorId,
+            startPose = startPose,
+            startNodeId = startPose?.nodeId,
+            usingGpsStart = usingGpsStart,
+            hasExplicitStart = startPose != null || usingGpsStart,
             facing = facing,
             anchor = anc,
             mapPositionM = mapPos,
             mapHeadingRad = mapHeading,
+            barometerAvailable = adapter.pressureSensor != null,
+            floorDeltaAltitudeM = floorDeltaAltitudeM,
+            inVerticalTransit = inVerticalTransit,
+            suggestedTransfer = suggestedTransfer,
+            nearbyVertical = nearbyVertical,
             locationPermissionGranted = locationPermissionGranted,
             latestGpsFix = latestGpsFix,
             destination = destination,
@@ -503,10 +753,40 @@ class IndoorNavigationBackend(
         )
     }
 
+    private fun computeSuggestedTransfer(
+        uFloorId: String?,
+        mapPos: PointM,
+        route: NavigationRoute?
+    ): SuggestedFloorTransfer? {
+        if (uFloorId == null || route == null) return null
+        val firstStep = route.steps.firstOrNull()
+        if (firstStep is RouteStep.FloorTransfer && firstStep.fromFloorId == uFloorId) {
+            return SuggestedFloorTransfer(
+                fromFloorId = firstStep.fromFloorId,
+                toFloorId = firstStep.toFloorId,
+                viaLabel = firstStep.viaLabel,
+                verticalGroupId = firstStep.verticalGroupId,
+                viaElevator = firstStep.viaElevator,
+                fromActiveRoute = true
+            )
+        }
+        val nearRouteTransfer = route.transfers.firstOrNull {
+            it.fromFloorId == uFloorId && it.departurePosM.distanceTo(mapPos) <= 8.0
+        } ?: return null
+        return SuggestedFloorTransfer(
+            fromFloorId = nearRouteTransfer.fromFloorId,
+            toFloorId = nearRouteTransfer.toFloorId,
+            viaLabel = nearRouteTransfer.viaLabel,
+            verticalGroupId = nearRouteTransfer.verticalGroupId,
+            viaElevator = nearRouteTransfer.viaElevator,
+            fromActiveRoute = true
+        )
+    }
+
     private fun resolveRoute(pdr: PdrState, mapPos: PointM, mapHeading: Double): NavigationRoute? {
         val dest = destination ?: return null
-        val floorId = activeFloorId ?: return null
-        if (startNodeId == null && gpsStartOriginM == null && pdr.stepCount == 0) {
+        val floorId = userFloorId ?: return null
+        if (startPose == null && !usingGpsStart && pdr.stepCount == 0) {
             return null
         }
         val headingBucket = if (pdr.headingValid) {
@@ -562,18 +842,18 @@ class IndoorNavigationBackend(
     }
 
     companion object {
+        private const val LOG_TAG = "IndoorNav"
         private const val PREFS_NAME = "pdr_prefs"
         private const val KEY_LAST_STEP_LENGTH = "last_step_length"
         private const val KEY_LAST_CADENCE = "last_cadence_hz"
         private const val SETTLING_DELAY_MS = 2_000L
         private const val DEFAULT_FLOOR_ID = "MB-2"
         private const val MAX_CAMPUS_RADIUS_M = 350.0
+        private const val NEAR_CONNECTOR_BARO_RADIUS_M = 7.0
+        private const val HIGH_PRECISION_OUTDOOR_GPS_M = 4.5
 
         fun loadBundledFloors(context: Context): List<FloorPlan> {
             val loaded = ArrayList<FloorPlan>()
-            runCatching {
-                context.assets.open("floorplan.json").use { loaded.add(FloorPlan.parse(it)) }
-            }
             runCatching {
                 val extra = context.assets.list("floors").orEmpty().sorted()
                 for (file in extra) {
@@ -584,6 +864,11 @@ class IndoorNavigationBackend(
                             loaded.add(plan)
                         }
                     }
+                }
+            }
+            if (loaded.isEmpty()) {
+                runCatching {
+                    context.assets.open("floorplan.json").use { loaded.add(FloorPlan.parse(it)) }
                 }
             }
             return loaded.sortedWith(compareBy { extractFloorNumber(it.floorId) })
