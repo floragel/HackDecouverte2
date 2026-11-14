@@ -20,7 +20,8 @@ object Routes {
     const val GROUP = "group/{id}"
     const val INDOOR = "indoor"
     const val INDOOR_DEV = "indoor-dev"
-    val tabs = setOf(HOME, NETWORK, MAP, PROFILE)
+    const val CALENDAR = "calendar"
+    val tabs = setOf(HOME, NETWORK, CALENDAR, MAP, PROFILE)
 }
 
 /** Screen-to-screen navigation, so screens never touch the NavController directly (iOS: a Router / NavigationPath). */
@@ -33,6 +34,7 @@ class Navigator(private val nav: NavHostController) {
     fun scan() = nav.navigate(Routes.SCAN)
     fun event(id: String) = nav.navigate("event/$id")
     fun group(id: String) = nav.navigate("group/$id")
+    fun calendar() = nav.navigate(Routes.CALENDAR)
     fun map() = nav.navigate(Routes.MAP) { launchSingleTop = true }
     fun indoor() = nav.navigate(Routes.INDOOR) { launchSingleTop = true }
     fun indoorDev() = nav.navigate(Routes.INDOOR_DEV) { launchSingleTop = true }

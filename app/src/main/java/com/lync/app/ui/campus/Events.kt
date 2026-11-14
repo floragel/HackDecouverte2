@@ -143,7 +143,24 @@ fun EventsTab() {
                 }
             }
         }
-        item { Text(stringResource(R.string.events_upcoming), style = MaterialTheme.typography.titleLarge, color = c.text, modifier = Modifier.padding(start = Tokens.Gutter, top = 18.dp, bottom = 6.dp)) }
+        item {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = Tokens.Gutter, end = Tokens.Gutter, top = 18.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(stringResource(R.string.events_upcoming), style = MaterialTheme.typography.titleLarge, color = c.text)
+                Pill(
+                    text = stringResource(R.string.calendar_my_schedule),
+                    onClick = { nav.calendar() },
+                    style = PillStyle.Tonal,
+                    icon = Icons.Outlined.CalendarMonth,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        }
         if (shown.isEmpty()) item {
             Text(stringResource(R.string.events_empty), style = MaterialTheme.typography.bodyMedium, color = c.textMuted, modifier = Modifier.padding(Tokens.Gutter))
         }

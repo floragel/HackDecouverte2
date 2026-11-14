@@ -32,6 +32,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.ScreenRotation
@@ -205,7 +206,21 @@ private fun AboutSection(courses: List<Course>, interests: List<String>) {
     val c = Campus.colors
     Column(Modifier.fillMaxWidth().padding(horizontal = Tokens.Gutter)) {
         if (courses.isNotEmpty()) {
-            Text(stringResource(R.string.profile_courses), style = MaterialTheme.typography.titleSmall, color = c.textMuted, modifier = Modifier.padding(top = 22.dp, bottom = 10.dp))
+            val nav = LocalNavigator.current
+            Row(
+                Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(stringResource(R.string.profile_courses), style = MaterialTheme.typography.titleSmall, color = c.textMuted)
+                Pill(
+                    text = stringResource(R.string.calendar_my_schedule),
+                    onClick = { nav.calendar() },
+                    style = PillStyle.Tonal,
+                    icon = Icons.Outlined.CalendarMonth,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { courses.forEach { Tag(it.code) } }
         }
         if (interests.isNotEmpty()) {
