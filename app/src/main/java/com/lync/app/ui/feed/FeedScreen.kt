@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.IosShare
@@ -205,6 +206,8 @@ fun FeedScreen() {
             Spacer(Modifier.width(8.dp))
             if (vm.isDemo) DemoBadge()
             Spacer(Modifier.weight(1f))
+            CircleIconButton(Icons.Outlined.CalendarMonth, stringResource(R.string.calendar_title), { nav.calendar() })
+            Spacer(Modifier.width(8.dp))
             CircleIconButton(Icons.Rounded.Add, stringResource(R.string.feed_new_post), { nav.compose() })
         }
 

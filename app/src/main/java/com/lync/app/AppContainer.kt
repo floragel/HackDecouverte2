@@ -4,6 +4,7 @@ import android.content.Context
 import com.lync.app.data.CampusRepository
 import com.lync.app.data.SessionStore
 import com.lync.app.data.demo.DemoRepository
+import com.lync.app.data.calendar.CalendarRepository
 import com.lync.app.data.location.LocationClient
 import com.lync.app.data.supabase.SupabaseProvider
 import com.lync.app.data.supabase.SupabaseRepository
@@ -16,6 +17,8 @@ class AppContainer(context: Context) {
     val repository: CampusRepository =
         if (SupabaseProvider.isConfigured) runCatching { SupabaseRepository(SupabaseProvider.create()) }.getOrNull() ?: demo()
         else demo()
+
+    val calendar: CalendarRepository = CalendarRepository(context, repository)
 
     /** App-wide scope (lives as long as the process) for background work like location pushes. */
     val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)

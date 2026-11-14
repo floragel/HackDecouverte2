@@ -135,7 +135,6 @@ fun MapScreen() {
     var showFriends by remember { mutableStateOf(true) }
     var showClassmates by remember { mutableStateOf(true) }
     var selected by remember { mutableStateOf<String?>(null) }
-    var myPos by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var searchQuery by remember { mutableStateOf("") }
 
     var hasPermission by remember { mutableStateOf(vm.tracker.hasPermission()) }
@@ -291,12 +290,12 @@ fun MapScreen() {
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        text = "Room ${room.name}",
+                                        text = stringResource(R.string.map_room_title, room.name),
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = c.text
                                     )
                                     Text(
-                                        text = "${room.buildingName} • Floor ${room.floor}",
+                                        text = stringResource(R.string.map_room_floor, room.buildingName, room.floor),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = c.textMuted
                                     )

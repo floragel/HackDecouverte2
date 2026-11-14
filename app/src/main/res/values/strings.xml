@@ -5,6 +5,7 @@
     <!-- Tabs -->
     <string name="tab_home">Home</string>
     <string name="tab_network">Network</string>
+    <string name="tab_calendar">Calendar</string>
     <string name="tab_map">Map</string>
     <string name="tab_profile">Profile</string>
 
@@ -243,4 +244,53 @@
     <string name="loc_notif_title">Your friends can see you</string>
     <string name="loc_notif_text">Lync is sharing your location with your connections</string>
     <string name="map_live">Live</string>
+    <string name="map_room_title">Room %1$s</string>
+    <string name="map_room_floor">%1$s • Floor %2$s</string>
+
+    <!-- Calendar -->
+    <string name="calendar_title">Calendar</string>
+    <string name="calendar_my_schedule">My calendar</string>
+    <string name="calendar_filter_all">All</string>
+    <string name="calendar_filter_courses">Courses</string>
+    <string name="calendar_filter_social">Social</string>
+    <string name="calendar_today">Today</string>
+    <string name="calendar_import">Import calendar</string>
+    <string name="calendar_import_desc">Import an .ics file or sync your university schedule.</string>
+    <string name="calendar_import_file">Import .ics file</string>
+    <string name="calendar_import_file_desc">From Google Calendar, Apple Calendar or Outlook</string>
+    <string name="calendar_import_uni">Sync Concordia schedule</string>
+    <string name="calendar_import_uni_desc">Courses, labs and exams for Fall 2026</string>
+    <string name="calendar_import_url">iCal link (URL)</string>
+    <string name="calendar_import_url_hint">https://.../calendar.ics</string>
+    <string name="calendar_import_demo">Load demo student schedule</string>
+    <string name="calendar_import_demo_desc">Includes courses, study sessions and campus events</string>
+    <string name="calendar_import_action">Import</string>
+    <string name="calendar_imported_count">%1$d events imported</string>
+    <string name="calendar_clear_imported">Clear imported events</string>
+    <string name="calendar_empty_title">Nothing scheduled</string>
+    <string name="calendar_empty_desc">Take a break or check campus events happening today.</string>
+    <string name="calendar_badge_course">Course</string>
+    <string name="calendar_badge_event">Event</string>
+    <string name="calendar_badge_plan">Plan</string>
+    <string name="calendar_badge_imported">Imported</string>
+    <string name="calendar_classmates_count">%1$d classmates in this class</string>
+    <string name="calendar_friends_going">%1$d friends going</string>
+    <string name="calendar_open_map">View location on map</string>
+    <string name="calendar_view_event">View event details</string>
+    <string name="calendar_events_count">%1$d events</string>
+    <string name="calendar_attendee_classmate_one">%1$s is in this class</string>
+    <string name="calendar_attendee_classmate_many">%1$s and %2$d others in this class</string>
+    <string name="calendar_attendee_friend_one">%1$s is going</string>
+    <string name="calendar_attendee_friend_many">%1$s and %2$d friends going</string>
+    <string name="calendar_classmates_section">Classmates in this class</string>
+    <string name="calendar_friends_section">Friends going</string>
+    <string name="calendar_tag_courses">%1$d courses</string>
+    <string name="calendar_tag_course_one">%1$d course</string>
+    <string name="calendar_tag_social">%1$d social</string>
+    <string name="calendar_msg_imported">%1$d events imported successfully</string>
+    <string name="calendar_msg_synced">Concordia schedule synced (%1$d classes and labs)</string>
+    <string name="calendar_msg_cleared">Imported events cleared</string>
+    <string name="calendar_msg_error_import">Import error: invalid or empty calendar file</string>
+    <string name="calendar_msg_error_url">Link error: check the calendar URL</string>
+    <string name="calendar_duration_minutes">%1$d min</string>
 </resources>
