@@ -83,12 +83,13 @@ fun UserProfileScreen(id: String) {
         }
     }
 
-    val shareTpl = stringResource(R.string.share_card_text)
+    var sharing by remember { mutableStateOf(false) }
+    person?.let { p -> if (sharing) com.lync.app.ui.card.ShareCardSheet(p.profile, uni) { sharing = false } }
     Column(Modifier.fillMaxSize().background(c.bg).windowInsetsPadding(WindowInsets.statusBars)) {
         Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.action_back), { nav.back() })
             Text(person?.profile?.username?.let { "@$it" } ?: "", style = MaterialTheme.typography.titleLarge, color = c.text, modifier = Modifier.weight(1f).padding(start = 12.dp))
-            person?.let { p -> CircleIconButton(Icons.Outlined.IosShare, stringResource(R.string.a11y_share), { shareText(context, shareTpl.format(p.profile.fullName, CardPayload.encode(p.profile.id))) }) }
+            person?.let { CircleIconButton(Icons.Outlined.IosShare, stringResource(R.string.a11y_share), { sharing = true }) }
         }
         val p = person ?: return@Column
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {

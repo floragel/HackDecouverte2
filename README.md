@@ -94,7 +94,7 @@ Full token table and Android ⇄ iOS component map: [design/README.md](design/RE
 - Location is **only** readable by accepted connections (and classmates if the user opts in). Enforced by Postgres RLS in `schema.sql`, not just by the app.
 - Ghost mode in one tap on the map. Location is only sent while the app is open.
 - Positions older than 2h are ignored.
-- Sign-up restricted to the university email domain.
+- Any email can sign up for now (university email verification planned).
 
 ## Business model
 

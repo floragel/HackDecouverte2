@@ -234,4 +234,7 @@
     <string name="onb_signin">I already have an account</string>
     <string name="signin_title">Welcome back</string>
     <string name="signin_button">Sign in</string>
+    <string name="onb_email_any">Email</string>
+    <string name="share_card_title">Share your card</string>
+    <string name="share_card_button">Share image</string>
 </resources>

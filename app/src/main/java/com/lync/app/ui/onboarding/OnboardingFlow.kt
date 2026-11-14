@@ -237,7 +237,7 @@ private fun SignInStep(s: OnbState, onBack: () -> Unit, edit: ((OnbState) -> Onb
         onBack = onBack,
         bottom = { PrimaryButton(stringResource(R.string.signin_button), onSubmit, enabled = s.email.contains('@') && s.password.isNotEmpty(), loading = s.loading) },
     ) {
-        Field(stringResource(R.string.onb_email), s.email, { v -> edit { it.copy(email = v) } }, KeyboardType.Email)
+        Field(stringResource(R.string.onb_email_any), s.email, { v -> edit { it.copy(email = v) } }, KeyboardType.Email)
         Field(stringResource(R.string.onb_password), s.password, { v -> edit { it.copy(password = v) } }, KeyboardType.Password, password = true)
         s.error?.let {
             Spacer(Modifier.height(8.dp))
@@ -313,11 +313,7 @@ private fun AboutStep(
     ) {
         Field(stringResource(R.string.onb_full_name), s.fullName, { v -> edit { it.copy(fullName = v) } })
         if (!isDemo) {
-            Field(stringResource(R.string.onb_email), s.email, { v -> edit { it.copy(email = v) } }, KeyboardType.Email)
-            s.university?.let {
-                Text(stringResource(R.string.onb_email_hint, "@${it.emailDomain}"), style = MaterialTheme.typography.bodySmall, color = c.textMuted,
-                    modifier = Modifier.padding(start = 4.dp, bottom = 12.dp).fillMaxWidth())
-            }
+            Field(stringResource(R.string.onb_email_any), s.email, { v -> edit { it.copy(email = v) } }, KeyboardType.Email)
             Field(stringResource(R.string.onb_password), s.password, { v -> edit { it.copy(password = v) } }, KeyboardType.Password, password = true)
         }
         ProgramField(s.program.ifBlank { null }, { v -> edit { it.copy(program = v) } }, Modifier.padding(bottom = 12.dp))

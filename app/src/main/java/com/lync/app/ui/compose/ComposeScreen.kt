@@ -143,6 +143,7 @@ fun ComposeScreen(storyMode: Boolean) {
     var note by remember { mutableStateOf("") }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { if (it != null) image = it }
+    val errorText = stringResource(R.string.error_generic)
 
     val valid = when (kind) {
         Kind.Photo -> image != null
@@ -177,6 +178,7 @@ fun ComposeScreen(storyMode: Boolean) {
             }
             publishing = false
             if (result.isSuccess) nav.back()
+            else android.widget.Toast.makeText(context, result.exceptionOrNull()?.message ?: errorText, android.widget.Toast.LENGTH_LONG).show()
         }
     }
 

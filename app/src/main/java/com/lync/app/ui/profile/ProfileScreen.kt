@@ -117,8 +117,9 @@ fun ProfileScreen() {
     var tab by rememberSaveable { mutableStateOf(ProfileTab.Posts) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.load() }
 
-    val shareTpl = stringResource(R.string.share_card_text)
-    val share: () -> Unit = { shareText(context, shareTpl.format(p.fullName, CardPayload.encode(p.id))) }
+    var sharing by rememberSaveable { mutableStateOf(false) }
+    val share: () -> Unit = { sharing = true }
+    if (sharing) com.lync.app.ui.card.ShareCardSheet(p, s.university) { sharing = false }
 
     LazyColumn(Modifier.fillMaxSize().background(c.bg).windowInsetsPadding(WindowInsets.statusBars), contentPadding = PaddingValues(bottom = 32.dp)) {
         item(key = "top") {

@@ -226,4 +226,7 @@
     <string name="onb_signin">J\'ai déjà un compte</string>
     <string name="signin_title">Content de te revoir</string>
     <string name="signin_button">Se connecter</string>
+    <string name="onb_email_any">Courriel</string>
+    <string name="share_card_title">Partager ta carte</string>
+    <string name="share_card_button">Partager l\'image</string>
 </resources>

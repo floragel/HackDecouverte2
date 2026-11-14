@@ -89,9 +89,7 @@ class SupabaseRepository(private val client: SupabaseClient) : CampusRepository 
 
     override suspend fun signUp(form: SignUpForm): Result<Profile> = runCatching {
         val email = form.email.trim().lowercase()
-        require(email.endsWith("@${form.university.emailDomain}") || email.endsWith(".${form.university.emailDomain}")) {
-            "Use your ${form.university.emailDomain} email"
-        }
+        // Any email is accepted for now (university email verification can come back later).
         client.auth.signUpWith(Email) { this.email = email; password = form.password }
         if (client.auth.currentUserOrNull() == null) {
             client.auth.signInWith(Email) { this.email = email; password = form.password }
@@ -325,7 +323,8 @@ class SupabaseRepository(private val client: SupabaseClient) : CampusRepository 
 
     override suspend fun stories(): List<StoryGroup> {
         val since = Instant.now().minusSeconds(24 * 3600).toString()
-        val rows = client.from("stories").select(Columns.raw("id, image_url, text, text_style, created_at, author:profiles(*)")) {
+        // explicit FK: stories <-> profiles is also linked through story_views, which makes a bare `profiles` embed ambiguous (PGRST201)
+        val rows = client.from("stories").select(Columns.raw("id, image_url, text, text_style, created_at, author:profiles!stories_author_id_fkey(*)")) {
             filter { gt("created_at", since) }; order("created_at", Order.ASCENDING)
         }.decodeList<StoryRow>()
         if (rows.isEmpty()) return emptyList()
