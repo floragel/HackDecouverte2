@@ -60,6 +60,7 @@
     <string name="map_updated">il y a %1$s</string>
     <string name="map_now">maintenant</string>
     <string name="map_permission">Autorise la localisation pour te voir sur la carte</string>
+    <string name="map_search">Chercher une salle…</string>
 
     <string name="profile_title">Profil</string>
     <string name="profile_posts">Publications</string>

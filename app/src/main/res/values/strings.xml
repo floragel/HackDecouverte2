@@ -65,6 +65,7 @@
     <string name="map_updated">%1$s ago</string>
     <string name="map_now">now</string>
     <string name="map_permission">Allow location to see yourself on the map</string>
+    <string name="map_search">Search for a room…</string>
 
     <!-- Profile -->
     <string name="profile_title">Profile</string>
