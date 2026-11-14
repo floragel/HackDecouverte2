@@ -86,6 +86,8 @@ data class NavigationSnapshot(
     val anchor: MapAnchor? = null,
     val mapPositionM: PointM = PointM(0.0, 0.0),
     val mapHeadingRad: Double = 0.0,
+    /** Map-space bearing of the recent displacement while walking (null when stationary). */
+    val mapMotionBearingRad: Double? = null,
     val barometerAvailable: Boolean = false,
     val floorDeltaAltitudeM: Double = 0.0,
     val inVerticalTransit: Boolean = false,
@@ -779,6 +781,7 @@ class IndoorNavigationBackend(
             anchor = anc,
             mapPositionM = mapPos,
             mapHeadingRad = mapHeading,
+            mapMotionBearingRad = pdr.motionBearingRad?.let { mb -> anc?.mapHeading(mb) ?: mb },
             barometerAvailable = adapter.pressureSensor != null,
             floorDeltaAltitudeM = floorDeltaAltitudeM,
             inVerticalTransit = inVerticalTransit,

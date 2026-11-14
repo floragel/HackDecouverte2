@@ -101,7 +101,8 @@ fun IndoorCanvas(
     val anchor = snapshot.anchor
     val route = snapshot.activeRoute
     val targetPosition = snapshot.mapPositionM
-    val smoothHeading = rememberSmoothHeadingRad(snapshot.mapHeadingRad)
+    // While walking, the dot and the map follow the direction of travel; at a stop, the phone heading.
+    val smoothHeading = rememberSmoothHeadingRad(snapshot.mapMotionBearingRad ?: snapshot.mapHeadingRad)
     val headingReady = state.headingValid && !state.tilted
 
     var renderedFloorPair by remember { mutableStateOf<Pair<String, Bitmap>?>(null) }

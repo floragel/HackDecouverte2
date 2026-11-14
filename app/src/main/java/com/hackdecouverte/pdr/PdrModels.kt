@@ -79,6 +79,8 @@ data class PdrState(
     val activityPermissionGranted: Boolean = false,
     val registrationFailed: Boolean = false,
     val corridorAssistEnabled: Boolean = false,
+    /** Direction of the recent displacement (last steps summed), fresher than ~2.5 s. */
+    val motionBearingRad: Double? = null,
     val trueNorthAligned: Boolean = false,
     val externalAccuracyM: Double? = null,
     val warnings: Set<PdrWarning> = emptySet()
