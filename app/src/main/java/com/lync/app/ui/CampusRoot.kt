@@ -57,6 +57,12 @@ fun CampusRoot(container: AppContainer) {
     val dark = when (themeMode) { "light" -> false; "dark" -> true; else -> androidx.compose.foundation.isSystemInDarkTheme() }
     val settings = remember { ThemeController { mode -> themeMode = mode; container.session.themeMode = mode } }
 
+    // Live location sharing follows the user's setting (and permission): runs as a foreground service.
+    val permissionTick by container.locationTracker.permissionTick.collectAsStateWithLifecycle()
+    LaunchedEffect(me?.id, me?.locationSharing, permissionTick) {
+        container.locationTracker.sync(sharingOn = me != null && me?.locationSharing != com.lync.app.data.model.LocationSharing.OFF)
+    }
+
     // After sign-in / session restore, re-tint the app with the user's university colors.
     LaunchedEffect(me?.universityId) {
         val id = me?.universityId ?: return@LaunchedEffect

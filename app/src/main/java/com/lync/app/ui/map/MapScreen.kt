@@ -72,7 +72,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.lync.app.R
 import com.lync.app.data.CampusRepository
-import com.lync.app.data.location.LocationClient
+import com.lync.app.data.location.LocationTracker
+import androidx.compose.runtime.key
 import com.lync.app.data.model.LocationSharing
 import com.lync.app.data.model.MapPin
 import com.lync.app.data.model.PinKind
@@ -97,44 +98,52 @@ import org.maplibre.android.maps.MapView
 private const val STYLE_LIGHT = "https://tiles.openfreemap.org/styles/positron"
 private const val STYLE_DARK = "https://tiles.openfreemap.org/styles/dark"
 
-class MapViewModel(private val repo: CampusRepository, private val location: LocationClient) : ViewModel() {
+class MapViewModel(private val repo: CampusRepository, val tracker: LocationTracker) : ViewModel() {
     val me = repo.me
     val pins = repo.mapPins().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun setGhost(ghost: Boolean) = viewModelScope.launch {
         runCatching { repo.setLocationSharing(if (ghost) LocationSharing.OFF else LocationSharing.FRIENDS) }
     }
-
-    fun locationUpdates() = location.updates()
-
-    fun push(lat: Double, lng: Double) = viewModelScope.launch {
-        if (repo.me.value?.locationSharing != LocationSharing.OFF) runCatching { repo.pushLocation(lat, lng) }
-    }
 }
+
+/** Location (+ notification on Android 13+, for the "friends can see you" notice). */
+fun locationPermissions(): Array<String> = buildList {
+    add(Manifest.permission.ACCESS_FINE_LOCATION); add(Manifest.permission.ACCESS_COARSE_LOCATION)
+    if (android.os.Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+}.toTypedArray()
 
 @Composable
 fun MapScreen() {
-    val vm = campusViewModel { MapViewModel(it.repository, it.location) }
+    val vm = campusViewModel { MapViewModel(it.repository, it.locationTracker) }
     val me by vm.me.collectAsStateWithLifecycle()
     val pins by vm.pins.collectAsStateWithLifecycle()
+    val myPos by vm.tracker.position.collectAsStateWithLifecycle()
     val c = Campus.colors
-    val context = LocalContext.current
 
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var cameraTick by remember { mutableIntStateOf(0) } // bumps on every camera move -> pins re-project
     var showFriends by remember { mutableStateOf(true) }
     var showClassmates by remember { mutableStateOf(true) }
     var selected by remember { mutableStateOf<String?>(null) }
-    var myPos by remember { mutableStateOf<Pair<Double, Double>?>(null) }
 
-    var hasPermission by remember {
-        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED)
+    var hasPermission by remember { mutableStateOf(vm.tracker.hasPermission()) }
+    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        hasPermission = vm.tracker.hasPermission()
+        vm.tracker.onPermissionChanged() // starts sharing if it is on
     }
-    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { hasPermission = it.values.any { g -> g } }
 
-    LaunchedEffect(hasPermission) {
-        if (hasPermission) vm.locationUpdates().collect { (lat, lng) -> myPos = lat to lng; vm.push(lat, lng) }
+    // GPS for your own dot while the map is open (sharing itself runs in LocationSharingService)
+    DisposableEffect(hasPermission) {
+        if (hasPermission) vm.tracker.acquire("map")
+        onDispose { vm.tracker.release("map") }
+    }
+
+    // first fix: center on me once
+    var centered by remember { mutableStateOf(false) }
+    LaunchedEffect(myPos, map) {
+        val p = myPos; val m = map
+        if (!centered && p != null && m != null) { centered = true; m.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(p.first, p.second), 16.0), 700) }
     }
 
     val ghost = me?.locationSharing == LocationSharing.OFF
@@ -153,12 +162,17 @@ fun MapScreen() {
             val tick = cameraTick // read so pins recompose when the camera moves
             val density = LocalDensity.current
             visible.forEach { pin ->
-                val pt = m.projection.toScreenLocation(LatLng(pin.lat, pin.lng))
-                FriendPin(
-                    pin = pin, selected = selected == pin.profile.id,
-                    modifier = Modifier.offset { IntOffset((pt.x - with(density) { 26.dp.toPx() }).toInt(), (pt.y - with(density) { 26.dp.toPx() }).toInt()) },
-                    onClick = { selected = pin.profile.id; flyTo(pin.lat, pin.lng) },
-                )
+                key(pin.profile.id) {
+                    // friends glide to their new position instead of jumping
+                    val lat by animateFloatAsState(pin.lat.toFloat(), tween(1200), label = "lat")
+                    val lng by animateFloatAsState(pin.lng.toFloat(), tween(1200), label = "lng")
+                    val pt = m.projection.toScreenLocation(LatLng(lat.toDouble(), lng.toDouble()))
+                    FriendPin(
+                        pin = pin, selected = selected == pin.profile.id,
+                        modifier = Modifier.offset { IntOffset((pt.x - with(density) { 26.dp.toPx() }).toInt(), (pt.y - with(density) { 26.dp.toPx() }).toInt()) },
+                        onClick = { selected = pin.profile.id; flyTo(pin.lat, pin.lng) },
+                    )
+                }
             }
             myPos?.let { (lat, lng) ->
                 val pt = m.projection.toScreenLocation(LatLng(lat, lng))
@@ -186,7 +200,7 @@ fun MapScreen() {
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 12.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                 AnimatedVisibility(!hasPermission, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.weight(1f)) {
-                    FloatingChip(onClick = { permLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }) {
+                    FloatingChip(onClick = { permLauncher.launch(locationPermissions()) }) {
                         Text(stringResource(R.string.map_permission), style = MaterialTheme.typography.labelLarge, color = c.text, modifier = Modifier.padding(horizontal = 6.dp))
                     }
                 }
@@ -265,6 +279,10 @@ private fun FriendPin(pin: MapPin, selected: Boolean, modifier: Modifier, onClic
     Box(modifier.size(52.dp).graphicsLayer { scaleX = scale; scaleY = scale }.pressable(onClick, 0.9f)) {
         Box(Modifier.shadow(6.dp, CircleShape).clip(CircleShape).background(Color.White).padding(2.5.dp).clip(CircleShape).border(2.dp, ring, CircleShape)) {
             Avatar(pin.profile.avatarUrl, pin.profile.initials, 47.dp)
+        }
+        if (isLive(pin)) {
+            // green "live" dot: position updated in the last 2 minutes
+            Box(Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp).size(14.dp).clip(CircleShape).background(Color.White).padding(2.5.dp).clip(CircleShape).background(Color(0xFF2FD07A)))
         }
         StatusPreset.of(pin.profile.statusKey)?.let {
             Box(Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp).size(22.dp).shadow(3.dp, CircleShape).clip(CircleShape).background(Color.White),
@@ -347,6 +365,8 @@ fun herePeople(bp: BuildingPresence): String = when (bp.people.size) {
     else -> stringResource(R.string.here_many, bp.people[0].firstName, bp.people.size - 1)
 }
 
+private fun isLive(pin: MapPin) = System.currentTimeMillis() - pin.updatedAtMillis < 2 * 60_000
+
 @Composable
 private fun PersonChip(pin: MapPin, selected: Boolean, onClick: () -> Unit) {
     val c = Campus.colors
@@ -361,10 +381,8 @@ private fun PersonChip(pin: MapPin, selected: Boolean, onClick: () -> Unit) {
         Spacer(Modifier.width(8.dp))
         Column {
             Text(pin.profile.firstName, style = MaterialTheme.typography.titleSmall, color = c.text)
-            Text(
-                if (ago.endsWith("s")) stringResource(R.string.map_now) else stringResource(R.string.map_updated, ago),
-                style = MaterialTheme.typography.bodySmall, color = c.textMuted,
-            )
+            if (isLive(pin)) Text(stringResource(R.string.map_live), style = MaterialTheme.typography.bodySmall, color = Color(0xFF1FA463))
+            else Text(stringResource(R.string.map_updated, ago), style = MaterialTheme.typography.bodySmall, color = c.textMuted)
         }
     }
 }

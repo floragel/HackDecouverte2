@@ -17,6 +17,10 @@ class AppContainer(context: Context) {
         if (SupabaseProvider.isConfigured) runCatching { SupabaseRepository(SupabaseProvider.create()) }.getOrNull() ?: demo()
         else demo()
 
+    /** App-wide scope (lives as long as the process) for background work like location pushes. */
+    val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
+    val locationTracker = com.lync.app.data.location.LocationTracker(context.applicationContext, repository, appScope)
+
     // Never crash on a bad key: fall back to the offline demo.
     private fun demo() = DemoRepository().also { d -> session.demoProfile?.let(d::restore) }
 }

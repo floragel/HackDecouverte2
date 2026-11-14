@@ -38,6 +38,8 @@ import io.github.jan.supabase.postgrest.query.PostgrestRequestBuilder
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import io.github.jan.supabase.realtime.realtime
+import kotlinx.coroutines.flow.collectLatest
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -115,6 +117,7 @@ class SupabaseRepository(private val client: SupabaseClient) : CampusRepository 
     }
 
     override suspend fun signOut() {
+        clearLocation() // don't leave a last position behind
         runCatching { client.auth.signOut() }
         _me.value = null
     }
@@ -563,11 +566,16 @@ class SupabaseRepository(private val client: SupabaseClient) : CampusRepository 
     override fun mapPins(): Flow<List<MapPin>> = channelFlow {
         val channel = client.channel("locations-live")
         val changes = channel.postgresChangeFlow<PostgresAction>(schema = "public") { table = "locations" }
-        launch { changes.collect { runCatching { send(fetchPins()) } } }
+        // every insert/update on `locations` the user is allowed to see (RLS) triggers a refresh
+        launch { changes.collectLatest { delay(300); runCatching { send(fetchPins()) } } }
         runCatching { channel.subscribe() }
-        while (true) {
-            runCatching { send(fetchPins()) }
-            delay(30_000)
+        try {
+            while (true) {
+                runCatching { send(fetchPins()) }
+                delay(15_000) // safety net if the realtime socket drops
+            }
+        } finally {
+            runCatching { client.realtime.removeChannel(channel) }
         }
     }
 }

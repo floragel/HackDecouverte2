@@ -333,15 +333,17 @@ private fun AboutStep(
 @Composable
 private fun LocationStep(loading: Boolean, onBack: () -> Unit, onDone: (LocationSharing) -> Unit) {
     val c = Campus.colors
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-        onDone(if (grants.values.any { it }) LocationSharing.FRIENDS else LocationSharing.OFF)
+    val tracker = com.lync.app.ui.LocalAppContainer.current.locationTracker
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        tracker.onPermissionChanged()
+        onDone(if (tracker.hasPermission()) LocationSharing.FRIENDS else LocationSharing.OFF)
     }
     StepScaffold(
         title = stringResource(R.string.onb_location_title),
         onBack = onBack,
         bottom = {
             PrimaryButton(stringResource(R.string.onb_location_allow), {
-                launcher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                launcher.launch(com.lync.app.ui.map.locationPermissions())
             }, loading = loading)
             Spacer(Modifier.height(8.dp))
             Box(Modifier.fillMaxWidth().height(48.dp).pressable({ onDone(LocationSharing.OFF) }), contentAlignment = Alignment.Center) {

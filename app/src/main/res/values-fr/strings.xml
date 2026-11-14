@@ -229,4 +229,9 @@
     <string name="onb_email_any">Courriel</string>
     <string name="share_card_title">Partager ta carte</string>
     <string name="share_card_button">Partager l\'image</string>
+    <string name="loc_channel">Partage de position</string>
+    <string name="loc_channel_desc">Affichée quand tes amis peuvent te voir sur la carte</string>
+    <string name="loc_notif_title">Tes amis te voient</string>
+    <string name="loc_notif_text">Lync partage ta position avec tes connexions</string>
+    <string name="map_live">En direct</string>
 </resources>

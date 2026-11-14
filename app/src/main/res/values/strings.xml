@@ -237,4 +237,9 @@
     <string name="onb_email_any">Email</string>
     <string name="share_card_title">Share your card</string>
     <string name="share_card_button">Share image</string>
+    <string name="loc_channel">Location sharing</string>
+    <string name="loc_channel_desc">Shown while your friends can see you on the map</string>
+    <string name="loc_notif_title">Your friends can see you</string>
+    <string name="loc_notif_text">Lync is sharing your location with your connections</string>
+    <string name="map_live">Live</string>
 </resources>
