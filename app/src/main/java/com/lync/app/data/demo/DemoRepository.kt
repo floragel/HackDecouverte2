@@ -174,6 +174,11 @@ class DemoRepository : CampusRepository {
         return Result.success(profile)
     }
 
+    override suspend fun signIn(email: String, password: String): Result<Profile> {
+        val name = email.substringBefore('@').split('.', '_').joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+        return signUp(SignUpForm(concordia, name, email, password, "Computer Science", 1))
+    }
+
     /** Used to restore the demo session after app restart. */
     fun restore(profile: Profile) { _me.value = if (profile.lyncCode == null) profile.copy(lyncCode = demoCode("me-" + profile.fullName)) else profile }
 

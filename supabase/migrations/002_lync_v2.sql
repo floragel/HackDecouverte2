@@ -88,24 +88,38 @@ language sql stable security definer set search_path = public as $$
     and university_id = (select university_id from profiles where id = auth.uid()));
 $$;
 
+drop policy if exists "poll options read" on public.poll_options;
 create policy "poll options read" on public.poll_options for select using (public.can_see_post(post_id));
+drop policy if exists "poll options write by author" on public.poll_options;
 create policy "poll options write by author" on public.poll_options for insert
   with check (exists (select 1 from public.posts where id = post_id and author_id = auth.uid()));
 
+drop policy if exists "votes read" on public.poll_votes;
 create policy "votes read" on public.poll_votes for select using (public.can_see_post(post_id));
+drop policy if exists "votes self" on public.poll_votes;
 create policy "votes self" on public.poll_votes for insert with check (profile_id = auth.uid() and public.can_see_post(post_id));
 
+drop policy if exists "plan read" on public.plan_participants;
 create policy "plan read" on public.plan_participants for select using (public.can_see_post(post_id));
+drop policy if exists "plan join self" on public.plan_participants;
 create policy "plan join self" on public.plan_participants for insert with check (profile_id = auth.uid() and public.can_see_post(post_id));
+drop policy if exists "plan leave self" on public.plan_participants;
 create policy "plan leave self" on public.plan_participants for delete using (profile_id = auth.uid());
 
+drop policy if exists "comments read" on public.comments;
 create policy "comments read" on public.comments for select using (public.can_see_post(post_id));
+drop policy if exists "comments write self" on public.comments;
 create policy "comments write self" on public.comments for insert with check (author_id = auth.uid() and public.can_see_post(post_id));
+drop policy if exists "comments delete self" on public.comments;
 create policy "comments delete self" on public.comments for delete using (author_id = auth.uid());
 
 -- Stories: visible to people of the same university
+drop policy if exists "stories read" on public.stories;
 create policy "stories read" on public.stories for select using (author_id = auth.uid() or public.same_university(auth.uid(), author_id));
+drop policy if exists "stories write self" on public.stories;
 create policy "stories write self" on public.stories for insert with check (author_id = auth.uid());
+drop policy if exists "stories delete self" on public.stories;
 create policy "stories delete self" on public.stories for delete using (author_id = auth.uid());
 
+drop policy if exists "story views self" on public.story_views;
 create policy "story views self" on public.story_views for all using (viewer_id = auth.uid()) with check (viewer_id = auth.uid());

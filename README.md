@@ -37,6 +37,16 @@ Starting with Concordia. Bilingual EN (default) / FR. Android first (Kotlin + Je
 - `code/LyncCodeView.kt` — renderer. `code/NfcCard.kt` — NFC: the phone showing its card answers taps (HCE); the scanner reads phones and Lync NFC stickers (`https://lync.app/c/<code>`).
 - iPhone can read but not emulate NFC: on iOS the card shows the Lync code and the scanner reads Android cards / stickers.
 
+### Real database with fake data (recommended for the demo)
+In Supabase › SQL Editor, run in this order (all files are safe to re-run):
+1. `supabase/schema.sql` (only the first time)
+2. `supabase/migrations/002_lync_v2.sql`
+3. `supabase/migrations/003_campus_life.sql`
+4. `supabase/seed/seed_demo.sql` — 13 fake Concordia students, clubs, posts, polls, plans, stories, events, groups, map positions.
+
+Then in the app: **I already have an account** → sign in with the demo account written at the top of `seed_demo.sql`.
+To plug your own account into the fake network: `select public.lync_demo_adopt('you@live.concordia.ca');`
+
 ### Demo mode
 With Supabase keys the app uses the real backend. Force the offline demo with `lync.demo=true` in `local.properties` (or `./gradlew assembleDebug -Plync.demo=true`).
 If you already ran the first `schema.sql`, run `supabase/migrations/002_lync_v2.sql` (polls, plans, comments, stories, Lync code) then `003_campus_life.sql` (events, groups).

@@ -223,4 +223,7 @@
     <plurals name="celebrate_courses"><item quantity="one">%d cours en commun</item><item quantity="other">%d cours en commun</item></plurals>
     <string name="celebrate_title">Toi et %1$s êtes connecté·e·s</string>
     <string name="scan_simulate">Démo : simuler un scan</string>
+    <string name="onb_signin">J\'ai déjà un compte</string>
+    <string name="signin_title">Content de te revoir</string>
+    <string name="signin_button">Se connecter</string>
 </resources>

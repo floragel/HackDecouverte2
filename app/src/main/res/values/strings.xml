@@ -231,4 +231,7 @@
     <plurals name="celebrate_courses"><item quantity="one">%d course in common</item><item quantity="other">%d courses in common</item></plurals>
     <string name="celebrate_title">You and %1$s are connected</string>
     <string name="scan_simulate">Demo: simulate a scan</string>
+    <string name="onb_signin">I already have an account</string>
+    <string name="signin_title">Welcome back</string>
+    <string name="signin_button">Sign in</string>
 </resources>

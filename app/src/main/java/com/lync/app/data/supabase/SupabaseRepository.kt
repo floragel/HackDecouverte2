@@ -108,6 +108,14 @@ class SupabaseRepository(private val client: SupabaseClient) : CampusRepository 
         saved
     }
 
+    override suspend fun signIn(email: String, password: String): Result<Profile> = runCatching {
+        client.auth.signInWith(Email) { this.email = email.trim().lowercase(); this.password = password }
+        val profile = client.from("profiles").select { filter { eq("id", uid) } }.decodeSingleOrNull<Profile>()
+            ?: error("No Lync profile for this account yet. Create an account instead.")
+        _me.value = profile
+        profile
+    }
+
     override suspend fun signOut() {
         runCatching { client.auth.signOut() }
         _me.value = null

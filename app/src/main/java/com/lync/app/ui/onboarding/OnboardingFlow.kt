@@ -80,7 +80,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class OnbStep { Welcome, University, About, Location }
+enum class OnbStep { Welcome, University, About, Location, SignIn }
 
 data class OnbState(
     val step: OnbStep = OnbStep.Welcome,
@@ -107,7 +107,7 @@ class OnboardingViewModel(private val repo: CampusRepository) : ViewModel() {
     }
 
     fun go(step: OnbStep) = _state.update { it.copy(step = step, error = null) }
-    fun back() = _state.update { s -> s.copy(step = OnbStep.entries[(s.step.ordinal - 1).coerceAtLeast(0)], error = null) }
+    fun back() = _state.update { s -> s.copy(step = if (s.step == OnbStep.SignIn) OnbStep.Welcome else OnbStep.entries[(s.step.ordinal - 1).coerceAtLeast(0)], error = null) }
     fun pick(u: University) = _state.update { it.copy(university = u) }
     fun edit(f: (OnbState) -> OnbState) = _state.update(f)
 
@@ -115,6 +115,16 @@ class OnboardingViewModel(private val repo: CampusRepository) : ViewModel() {
         get() = with(_state.value) {
             fullName.isNotBlank() && (isDemo || (email.contains('@') && password.length >= 6))
         }
+
+    fun signIn() {
+        val s = _state.value
+        _state.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            repo.signIn(s.email, s.password)
+                .onSuccess { p -> runCatching { repo.university(p.universityId) }.getOrNull()?.let { u -> _state.update { it.copy(university = u) } } }
+                .onFailure { e -> _state.update { it.copy(loading = false, error = e.message) } }
+        }
+    }
 
     fun finish(sharing: LocationSharing) {
         val s = _state.value
@@ -150,7 +160,8 @@ fun OnboardingFlow(onUniversityColors: (String, String) -> Unit) {
             label = "onb",
         ) { step ->
             when (step) {
-                OnbStep.Welcome -> Welcome(vm.isDemo) { vm.go(OnbStep.University) }
+                OnbStep.Welcome -> Welcome(vm.isDemo, onSignIn = { vm.go(OnbStep.SignIn) }) { vm.go(OnbStep.University) }
+                OnbStep.SignIn -> SignInStep(s, vm::back, vm::edit) { vm.signIn() }
                 OnbStep.University -> UniversityStep(s, vm::back, vm::pick) { vm.go(OnbStep.About) }
                 OnbStep.About -> AboutStep(s, vm.isDemo, vm::back, vm::edit, vm.aboutValid) { vm.go(OnbStep.Location) }
                 OnbStep.Location -> LocationStep(s.loading, vm::back) { vm.finish(it) }
@@ -185,7 +196,7 @@ private fun StepScaffold(
 }
 
 @Composable
-private fun Welcome(isDemo: Boolean, onStart: () -> Unit) {
+private fun Welcome(isDemo: Boolean, onSignIn: () -> Unit, onStart: () -> Unit) {
     Box(Modifier.fillMaxSize()) {
         Image(
             painterResource(R.drawable.onboarding_hero), contentDescription = null,
@@ -211,6 +222,26 @@ private fun Welcome(isDemo: Boolean, onStart: () -> Unit) {
                 Modifier.fillMaxWidth().height(56.dp).clip(RoundedCornerShape(Tokens.RadiusControl)).background(Color.White).pressable(onStart, 0.98f),
                 contentAlignment = Alignment.Center,
             ) { Text(stringResource(R.string.onb_start), style = MaterialTheme.typography.titleMedium, color = Tokens.Night) }
+            Spacer(Modifier.height(6.dp))
+            Box(Modifier.fillMaxWidth().height(48.dp).pressable(onSignIn), contentAlignment = Alignment.Center) {
+                Text(stringResource(R.string.onb_signin), style = MaterialTheme.typography.titleSmall, color = Color.White.copy(alpha = 0.85f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SignInStep(s: OnbState, onBack: () -> Unit, edit: ((OnbState) -> OnbState) -> Unit, onSubmit: () -> Unit) {
+    StepScaffold(
+        title = stringResource(R.string.signin_title),
+        onBack = onBack,
+        bottom = { PrimaryButton(stringResource(R.string.signin_button), onSubmit, enabled = s.email.contains('@') && s.password.isNotEmpty(), loading = s.loading) },
+    ) {
+        Field(stringResource(R.string.onb_email), s.email, { v -> edit { it.copy(email = v) } }, KeyboardType.Email)
+        Field(stringResource(R.string.onb_password), s.password, { v -> edit { it.copy(password = v) } }, KeyboardType.Password, password = true)
+        s.error?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

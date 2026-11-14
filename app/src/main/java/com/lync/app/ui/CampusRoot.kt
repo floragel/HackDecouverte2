@@ -57,6 +57,12 @@ fun CampusRoot(container: AppContainer) {
     val dark = when (themeMode) { "light" -> false; "dark" -> true; else -> androidx.compose.foundation.isSystemInDarkTheme() }
     val settings = remember { ThemeController { mode -> themeMode = mode; container.session.themeMode = mode } }
 
+    // After sign-in / session restore, re-tint the app with the user's university colors.
+    LaunchedEffect(me?.universityId) {
+        val id = me?.universityId ?: return@LaunchedEffect
+        runCatching { container.repository.university(id) }.getOrNull()?.let { onUniversityColors(it.primaryColor, it.secondaryColor) }
+    }
+
     CompositionLocalProvider(
         LocalAppContainer provides container, LocalThemeController provides settings,
         com.lync.app.ui.motion.LocalReducedMotion provides reducedMotion,

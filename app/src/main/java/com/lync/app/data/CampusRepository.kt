@@ -42,6 +42,7 @@ interface CampusRepository {
     suspend fun universities(): List<University>
     suspend fun university(id: String): University?
     suspend fun signUp(form: SignUpForm): Result<Profile>
+    suspend fun signIn(email: String, password: String): Result<Profile>
     suspend fun signOut()
 
     // Me
