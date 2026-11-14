@@ -1,0 +1,7 @@
+<!-- Lync mark: two interlocking links forming an L. Source: design/lync-mark.svg -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="1024" android:viewportHeight="1024">
+    <path android:fillColor="#FF000000" android:pathData="M546 558H434V297a71 71 0 0 0-142 0v307c-42 44-60 120-34 194-48-32-78-88-78-150V297a183 183 0 0 1 366 0Z" />
+    <path android:fillColor="#FF000000" android:fillType="evenOdd" android:pathData="M435 552h231a179 179 0 0 1 0 358H435a179 179 0 0 1 0-358Zm3 110a69 69 0 0 0 0 138h225a69 69 0 0 0 0-138Z" />
+</vector>

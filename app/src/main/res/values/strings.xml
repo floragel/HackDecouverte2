@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lync</string>
+
+    <!-- Tabs -->
+    <string name="tab_home">Home</string>
+    <string name="tab_network">Network</string>
+    <string name="tab_map">Map</string>
+    <string name="tab_profile">Profile</string>
+
+    <!-- Onboarding -->
+    <string name="onb_title">Your campus,\nin your pocket.</string>
+    <string name="onb_subtitle">Meet your classmates, find your friends, never get lost again.</string>
+    <string name="onb_start">Get started</string>
+    <string name="onb_pick_uni">Pick your university</string>
+    <string name="onb_more_soon">More universities soon</string>
+    <string name="onb_about_you">About you</string>
+    <string name="onb_full_name">Full name</string>
+    <string name="onb_email">University email</string>
+    <string name="onb_password">Password</string>
+    <string name="onb_program">Program</string>
+    <string name="onb_year">Year</string>
+    <string name="onb_continue">Continue</string>
+    <string name="onb_email_hint">We only accept %1$s emails</string>
+    <string name="onb_location_title">See your friends on the map</string>
+    <string name="onb_location_body">Only your accepted connections can see you. Go ghost anytime, in one tap.</string>
+    <string name="onb_location_allow">Share with friends</string>
+    <string name="onb_location_skip">Not now</string>
+
+    <!-- Feed -->
+    <string name="feed_title">Home</string>
+    <string name="feed_sponsored">Sponsored</string>
+    <string name="feed_new_post">New post</string>
+    <string name="feed_empty">Follow people and clubs to fill your feed.</string>
+    <string name="feed_caption_hint">Say something…</string>
+    <string name="feed_publish">Post</string>
+
+    <!-- Network -->
+    <string name="net_title">Network</string>
+    <string name="net_search">Search students, programs, clubs</string>
+    <string name="net_requests">Requests</string>
+    <string name="net_in_your_classes">In your classes</string>
+    <string name="net_suggested">You might know</string>
+    <string name="net_clubs">Clubs</string>
+    <string name="net_connect">Connect</string>
+    <string name="net_pending">Pending</string>
+    <string name="net_connected">Connected</string>
+    <string name="net_accept">Accept</string>
+    <string name="net_decline">Decline</string>
+    <string name="net_follow">Follow</string>
+    <string name="net_following">Following</string>
+    <string name="net_shared_courses">%1$d shared courses</string>
+    <string name="net_mutuals">%1$d mutual</string>
+    <string name="net_scan">Scan a card</string>
+    <string name="net_scan_added">Request sent to %1$s</string>
+    <string name="net_scan_invalid">That code isn\'t a student card</string>
+
+    <!-- Map -->
+    <string name="map_title">Map</string>
+    <string name="map_friends">Friends</string>
+    <string name="map_classmates">Classmates</string>
+    <string name="map_ghost">Ghost mode</string>
+    <string name="map_ghost_on">You\'re invisible</string>
+    <string name="map_ghost_off">Friends can see you</string>
+    <string name="map_updated">%1$s ago</string>
+    <string name="map_now">now</string>
+    <string name="map_permission">Allow location to see yourself on the map</string>
+
+    <!-- Profile -->
+    <string name="profile_title">Profile</string>
+    <string name="profile_posts">Posts</string>
+    <string name="profile_connections">Connections</string>
+    <string name="profile_followers">Followers</string>
+    <string name="profile_edit">Edit profile</string>
+    <string name="profile_card_hint">Turn your phone sideways to show your card</string>
+    <string name="profile_language">Language</string>
+    <string name="profile_courses">Courses</string>
+    <string name="profile_interests">Interests</string>
+    <string name="profile_sign_out">Sign out</string>
+    <string name="profile_year">Year %1$d</string>
+
+    <!-- Card -->
+    <string name="card_student">Student</string>
+    <string name="card_tap_flip">Tap to flip</string>
+    <string name="card_scan_me">Scan to connect</string>
+    <string name="card_status">Status</string>
+
+    <!-- Status presets -->
+    <string name="status_coffee">Up for a coffee</string>
+    <string name="status_study">Looking for a study buddy</string>
+    <string name="status_lunch">Eating at the cafeteria</string>
+    <string name="status_busy">Busy, in class</string>
+
+    <string name="demo_mode">Demo</string>
+    <string name="error_generic">Something went wrong. Try again.</string>
+    <string name="profile_year_short">year %1$d</string>
+    <string name="profile_share_card">Share card</string>
+    <string name="profile_about">About</string>
+    <string name="profile_settings">Settings</string>
+    <string name="profile_no_posts">Your first post will show up here.</string>
+    <string name="profile_ghost_desc">Hide your position from everyone</string>
+    <string name="net_scan_short">Scan</string>
+    <string name="card_tap_nfc">Or tap phones back to back.</string>
+    <string name="nfc_service_desc">Lync card</string>
+    <string name="action_close">Close</string>
+    <string name="action_back">Back</string>
+    <string name="action_save">Save</string>
+    <string name="compose_story_title">New story</string>
+    <string name="compose_share_story">Share</string>
+    <string name="compose_photo">Photo</string>
+    <string name="compose_text">Text</string>
+    <string name="compose_poll">Poll</string>
+    <string name="compose_plan">Plan</string>
+    <string name="compose_pick_photo">Choose a photo</string>
+    <string name="compose_text_hint">What\'s on your mind?</string>
+    <string name="compose_poll_question">Ask something…</string>
+    <string name="compose_poll_option">Option %1$d</string>
+    <string name="compose_poll_add">Add an option</string>
+    <string name="compose_poll_duration">Poll length</string>
+    <string name="compose_plan_what">What</string>
+    <string name="compose_plan_when">When</string>
+    <string name="compose_plan_where">Where</string>
+    <string name="compose_plan_place_hint">Place on campus</string>
+    <string name="compose_plan_spots">Spots</string>
+    <string name="compose_plan_no_limit">No limit</string>
+    <string name="compose_plan_note">Note</string>
+    <string name="compose_plan_note_hint">Bring your notes, meet at the entrance…</string>
+    <string name="plan_gym">Gym</string>
+    <string name="plan_library">Library</string>
+    <string name="plan_coffee">Coffee</string>
+    <string name="plan_lunch">Lunch</string>
+    <string name="plan_study">Study</string>
+    <string name="plan_sport">Sport</string>
+    <string name="plan_party">Party</string>
+    <string name="plan_other">Other</string>
+    <string name="when_now">Now</string>
+    <string name="when_30">In 30 min</string>
+    <string name="when_1h">In 1 hour</string>
+    <string name="when_tonight">Tonight 7 pm</string>
+    <string name="when_tomorrow">Tomorrow noon</string>
+    <string name="plan_join">I\'m in</string>
+    <string name="plan_going_me">Going</string>
+    <string name="plan_full">Full</string>
+    <string name="plan_going_spots">%1$d of %2$d going</string>
+    <string name="plan_now">Now</string>
+    <string name="plan_in_min">In %1$d min, %2$s</string>
+    <string name="plan_today">Today, %1$s</string>
+    <string name="plan_tomorrow">Tomorrow, %1$s</string>
+    <string name="poll_left">%1$dh left</string>
+    <string name="poll_closed">closed</string>
+    <string name="story_yours">Your story</string>
+    <string name="share_post_text">%1$s on Lync: %2$s\n%3$s</string>
+    <string name="share_card_text">Add %1$s on Lync\n%2$s</string>
+    <string name="a11y_like">Like</string>
+    <string name="a11y_comment">Comment</string>
+    <string name="a11y_share">Share</string>
+    <string name="comments_title">Comments</string>
+    <string name="comments_empty">No comments yet. Start the conversation.</string>
+    <string name="comments_hint">Add a comment…</string>
+    <string name="comments_send">Send</string>
+    <string name="scan_title">Scan a Lync code</string>
+    <string name="scan_hint">Center the code in the circle, or tap phones back to back.</string>
+    <string name="scan_need_camera">Allow the camera to scan codes. NFC still works.</string>
+    <string name="scan_nfc_ready">NFC ready</string>
+    <string name="scan_nfc_off">Turn on NFC to tap phones</string>
+    <string name="scan_connected">You and %1$s are connected</string>
+    <string name="scan_requested">Request sent to %1$s</string>
+    <string name="scan_again">Scan again</string>
+    <string name="scan_view_profile">View profile</string>
+    <string name="program_pick_title">Your program</string>
+    <string name="program_search">Search 165 programs</string>
+    <string name="edit_bio">Bio</string>
+    <string name="edit_bio_hint">A line about you</string>
+    <string name="edit_add_interest">Add an interest</string>
+    <string name="edit_add">Add</string>
+    <string name="settings_account">Account</string>
+    <string name="settings_invite">Invite friends to Lync</string>
+    <string name="settings_invite_text">I\'m on Lync, the app for students at our university. Join me: https://lync.app</string>
+    <string name="settings_location">Who sees me on the map</string>
+    <string name="settings_loc_friends">Connections only</string>
+    <string name="settings_loc_classmates">Connections and classmates</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_theme_system">Match my phone</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_notif_title">Push notifications</string>
+    <string name="settings_notif_desc">Requests, comments and plans you join</string>
+    <plurals name="likes"><item quantity="one">%d like</item><item quantity="other">%d likes</item></plurals>
+    <plurals name="votes"><item quantity="one">%d vote</item><item quantity="other">%d votes</item></plurals>
+    <plurals name="view_comments"><item quantity="one">View %d comment</item><item quantity="other">View all %d comments</item></plurals>
+    <plurals name="plan_going"><item quantity="one">%d going</item><item quantity="other">%d going</item></plurals>
+</resources>

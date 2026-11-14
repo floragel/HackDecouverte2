@@ -1,0 +1,18 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/app/build/
+/captures
+.externalNativeBuild
+.cxx
+.kotlin/
+
+# iCloud Drive duplicates ("file 2.kt") when the project lives in ~/Desktop or ~/Documents
+* 2
+* 2.*
+
+# never commit keys
+local.properties
