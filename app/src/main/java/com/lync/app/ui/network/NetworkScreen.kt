@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -143,6 +144,25 @@ fun NetworkScreen() {
         ScreenHeader(stringResource(R.string.net_title), trailing = {
             CircleIconButton(Icons.Rounded.QrCodeScanner, stringResource(R.string.net_scan), scan, filled = true)
         })
+        var tab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
+        com.lync.app.ui.components.Segmented(
+            listOf(stringResource(R.string.net_tab_people), stringResource(R.string.net_tab_events), stringResource(R.string.net_tab_groups)),
+            tab, { tab = it }, Modifier.padding(horizontal = Tokens.Gutter, vertical = 6.dp),
+        )
+        AnimatedContent(tab, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "tab") { t ->
+            when (t) {
+                1 -> EventsTab()
+                2 -> GroupsTab()
+                else -> PeopleTab(vm, s)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PeopleTab(vm: NetworkViewModel, s: NetworkState) {
+    val nav = com.lync.app.ui.LocalNavigator.current
+    Column(Modifier.fillMaxSize()) {
         SearchBar(s.query, vm::search)
 
         AnimatedContent(targetState = s.query.isBlank(), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "search") { idle ->

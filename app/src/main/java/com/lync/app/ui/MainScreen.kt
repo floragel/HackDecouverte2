@@ -124,6 +124,8 @@ fun MainScreen() {
                 composable(Routes.EDIT) { EditProfileScreen() }
                 composable(Routes.SETTINGS) { SettingsScreen() }
                 composable(Routes.SCAN) { ScannerScreen() }
+                composable(Routes.EVENT) { com.lync.app.ui.network.EventDetailScreen(it.arguments?.getString("id").orEmpty()) }
+                composable(Routes.GROUP) { com.lync.app.ui.network.GroupScreen(it.arguments?.getString("id").orEmpty()) }
             }
             AnimatedVisibility(showBar, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
                 BottomBar(current) { tab ->

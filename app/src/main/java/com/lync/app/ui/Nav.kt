@@ -16,6 +16,8 @@ object Routes {
     const val EDIT = "edit"
     const val SETTINGS = "settings"
     const val SCAN = "scan"
+    const val EVENT = "event/{id}"
+    const val GROUP = "group/{id}"
     val tabs = setOf(HOME, NETWORK, MAP, PROFILE)
 }
 
@@ -27,6 +29,9 @@ class Navigator(private val nav: NavHostController) {
     fun editProfile() = nav.navigate(Routes.EDIT)
     fun settings() = nav.navigate(Routes.SETTINGS)
     fun scan() = nav.navigate(Routes.SCAN)
+    fun event(id: String) = nav.navigate("event/$id")
+    fun group(id: String) = nav.navigate("group/$id")
+    fun map() = nav.navigate(Routes.MAP) { launchSingleTop = true }
     fun back() { nav.popBackStack() }
 }
 

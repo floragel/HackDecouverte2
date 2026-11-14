@@ -182,4 +182,41 @@
     <plurals name="votes"><item quantity="one">%d vote</item><item quantity="other">%d votes</item></plurals>
     <plurals name="view_comments"><item quantity="one">Voir %d commentaire</item><item quantity="other">Voir les %d commentaires</item></plurals>
     <plurals name="plan_going"><item quantity="one">%d participant·e</item><item quantity="other">%d participant·e·s</item></plurals>
+    <string name="net_tab_people">Personnes</string>
+    <string name="net_tab_events">Événements</string>
+    <string name="net_tab_groups">Groupes</string>
+    <string name="evcat_social">Social</string>
+    <string name="evcat_academic">Études</string>
+    <string name="evcat_sport">Sport</string>
+    <string name="evcat_career">Carrière</string>
+    <string name="evcat_culture">Culture</string>
+    <string name="evcat_tech">Tech</string>
+    <string name="events_all">Tout</string>
+    <string name="events_featured">À la une</string>
+    <string name="events_upcoming">À venir</string>
+    <string name="events_empty">Aucun événement dans cette catégorie pour l\'instant.</string>
+    <string name="events_rsvp">J\'y vais ?</string>
+    <string name="events_going_me">J\'y vais</string>
+    <string name="events_friend_going">%1$s y va</string>
+    <string name="events_until">Jusqu\'à %1$s</string>
+    <string name="events_add_calendar">Ajouter au calendrier</string>
+    <string name="events_share_text">%1$s, %2$s. On s\'y voit ? %3$s</string>
+    <string name="groups_yours">Tes groupes</string>
+    <string name="groups_discover">Découvrir</string>
+    <string name="groups_create">Créer</string>
+    <string name="groups_create_title">Nouveau groupe</string>
+    <string name="groups_name_hint">Nom du groupe</string>
+    <string name="groups_desc_hint">C\'est à propos de quoi ?</string>
+    <string name="groups_join">Rejoindre</string>
+    <string name="groups_joined">Membre</string>
+    <string name="groups_post_hint">Écris au groupe…</string>
+    <string name="groups_empty">Rien pour l\'instant. Lance la première discussion.</string>
+    <string name="groups_share_text">Rejoins %1$s sur Lync : %2$s</string>
+    <string name="here_title">Qui est là ?</string>
+    <string name="here_you_are">Tu es ici</string>
+    <string name="here_two">%1$s et %2$s</string>
+    <string name="here_many">%1$s et %2$d autres</string>
+    <plurals name="events_going"><item quantity="one">%d participant·e</item><item quantity="other">%d participant·e·s</item></plurals>
+    <plurals name="groups_members"><item quantity="one">%d membre</item><item quantity="other">%d membres</item></plurals>
+    <plurals name="events_friends_going"><item quantity="one">%1$s et %2$d ami·e</item><item quantity="other">%1$s et %2$d ami·e·s</item></plurals>
 </resources>

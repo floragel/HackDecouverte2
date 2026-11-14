@@ -113,6 +113,8 @@ import com.lync.app.ui.theme.DisplayFamily
 import com.lync.app.ui.theme.Tokens
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -126,6 +128,11 @@ data class FeedState(
 )
 
 class FeedViewModel(private val repo: CampusRepository) : ViewModel() {
+    /** « Qui est là ? » for the strip under stories (friends only, from live positions). */
+    val presence = repo.mapPins()
+        .map { pins -> com.lync.app.data.Buildings.presence(pins.filter { it.kind == com.lync.app.data.model.PinKind.FRIEND }, null, null) }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val _state = MutableStateFlow(FeedState())
     val state = _state.asStateFlow()
     val isDemo = repo.isDemo
@@ -182,6 +189,7 @@ fun FeedScreen() {
     val vm = campusViewModel { FeedViewModel(it.repository) }
     val s by vm.state.collectAsStateWithLifecycle()
     val me by vm.me.collectAsStateWithLifecycle()
+    val presence by vm.presence.collectAsStateWithLifecycle()
     val c = Campus.colors
     val nav = LocalNavigator.current
     val context = LocalContext.current
@@ -205,6 +213,7 @@ fun FeedScreen() {
                 item(key = "stories") {
                     StoriesRow(me, s.stories, onMine = { mine -> if (mine != null) nav.stories(mine.profile.id) else nav.compose(story = true) }, onOpen = { nav.stories(it) })
                 }
+                if (presence.isNotEmpty()) item(key = "here") { WhosHereStrip(presence) { nav.map() } }
                 if (s.firstLoad) items(3) { PostSkeleton() }
                 items(s.posts, key = { it.id }) { post ->
                     PostCard(
@@ -223,7 +232,7 @@ fun FeedScreen() {
         }
     }
 
-    commentsFor?.let { post -> CommentsSheet(post, vm, onDismiss = { commentsFor = null }, onPerson = { commentsFor = null; nav.user(it) }) }
+    commentsFor?.let { post -> CommentsSheet(post, load = { vm.comments(post.id) }, add = { vm.addComment(post.id, it) }, onDismiss = { commentsFor = null }, onPerson = { commentsFor = null; nav.user(it) }) }
 }
 
 /** Stories (24h) — "Your story" first, unseen ones get the university-colored ring. */
@@ -263,8 +272,30 @@ private fun StoriesRow(me: com.lync.app.data.model.Profile?, groups: List<StoryG
     Box(Modifier.fillMaxWidth().height(0.5.dp).background(c.border))
 }
 
+/** One line per building with friends in it — tap to open the map. */
 @Composable
-private fun PostCard(
+private fun WhosHereStrip(presence: List<com.lync.app.data.model.BuildingPresence>, onOpen: () -> Unit) {
+    val c = Campus.colors
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp).clip(RoundedCornerShape(Tokens.RadiusMedia)).background(c.surface).pressable(onOpen, 0.99f).padding(horizontal = 14.dp, vertical = 12.dp)) {
+        Text(stringResource(R.string.here_title), style = MaterialTheme.typography.titleSmall, color = c.text)
+        presence.take(3).forEach { bp ->
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+                    bp.people.take(3).forEach { p -> Box(Modifier.clip(CircleShape).background(c.surface).padding(1.5.dp)) { Avatar(p.avatarUrl, p.initials, 26.dp) } }
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(buildAnnotatedString {
+                    append(com.lync.app.ui.map.herePeople(bp)); append("  ")
+                    pushStyle(SpanStyle(color = c.textMuted)); append(bp.building.name); pop()
+                }, style = MaterialTheme.typography.bodyMedium, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@Composable
+fun PostCard(
     post: FeedPost,
     onAuthor: () -> Unit,
     onLike: () -> Unit,
@@ -461,12 +492,12 @@ private fun planTime(millis: Long): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CommentsSheet(post: FeedPost, vm: FeedViewModel, onDismiss: () -> Unit, onPerson: (String) -> Unit) {
+fun CommentsSheet(post: FeedPost, load: suspend () -> List<Comment>, add: suspend (String) -> Comment?, onDismiss: () -> Unit, onPerson: (String) -> Unit) {
     val c = Campus.colors
     val scope = rememberCoroutineScope()
     var comments by remember { mutableStateOf<List<Comment>>(emptyList()) }
     var draft by remember { mutableStateOf("") }
-    LaunchedEffect(post.id) { comments = vm.comments(post.id) }
+    LaunchedEffect(post.id) { comments = load() }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = c.bg) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
@@ -500,7 +531,7 @@ private fun CommentsSheet(post: FeedPost, vm: FeedViewModel, onDismiss: () -> Un
                 CircleIconButton(Icons.AutoMirrored.Rounded.Send, stringResource(R.string.comments_send), {
                     val text = draft.trim()
                     if (text.isNotEmpty()) scope.launch {
-                        vm.addComment(post.id, text)?.let { comments = comments + it; draft = "" }
+                        add(text)?.let { comments = comments + it; draft = "" }
                     }
                 }, filled = draft.isNotBlank())
             }

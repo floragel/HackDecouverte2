@@ -192,3 +192,45 @@ enum class StatusPreset(val key: String, val emoji: String) {
         fun of(key: String?) = entries.firstOrNull { it.key == key }
     }
 }
+
+// ------------------------------------------------------------------ Campus life
+
+enum class EventCategory(val key: String, val emoji: String) {
+    SOCIAL("social", "🎉"), ACADEMIC("academic", "🎓"), SPORT("sport", "🏀"), CAREER("career", "💼"),
+    CULTURE("culture", "🎭"), TECH("tech", "💻");
+
+    companion object { fun of(key: String?) = entries.firstOrNull { it.key == key } ?: SOCIAL }
+}
+
+/** Published by a club (organizations). Clubs on a paid plan can be "featured". */
+data class CampusEvent(
+    val id: String,
+    val title: String,
+    val description: String,
+    val organizer: Organization,
+    val category: EventCategory,
+    val startsAtMillis: Long,
+    val endsAtMillis: Long,
+    val place: String,
+    val coverUrl: String?,
+    val goingCount: Int,
+    val imGoing: Boolean,
+    val friendsGoing: List<Profile>,
+    val featured: Boolean,
+)
+
+data class InterestGroup(
+    val id: String,
+    val name: String,
+    val emoji: String,
+    val description: String,
+    val memberCount: Int,
+    val isMember: Boolean,
+    val members: List<Profile>,
+)
+
+/** A campus building, used to answer "who's here?". */
+data class Building(val code: String, val name: String, val lat: Double, val lng: Double, val radiusM: Double)
+
+/** Friends currently inside a building. */
+data class BuildingPresence(val building: Building, val people: List<Profile>, val includesMe: Boolean)

@@ -27,7 +27,9 @@ Starting with Concordia. Bilingual EN (default) / FR. Android first (Kotlin + Je
 - **Network**: requests, classmates (shared courses), clubs, search, profiles with Connect + Follow.
 - **Lync card**: turn the phone sideways anywhere. Holographic foil driven by the gyroscope. Back = **Lync code**.
 - **Lync code**: our own circular code (not a QR). Scan it with the camera, or **tap phones back to back (NFC)**.
-- **Map**: friends and classmates live, ghost mode.
+- **Map**: friends and classmates live, ghost mode, **« Qui est là ? »** (friends grouped by Concordia building, also on Home).
+- **Events**: club events with categories, featured events (paid), RSVP, friends going, add to calendar, share.
+- **Groups**: interest groups (join, create, group feed with posts, plans and comments).
 - **Settings**: edit profile (program picker with all 165 Concordia programs), location privacy, theme, language, notifications.
 
 ### Lync code & NFC
@@ -37,7 +39,7 @@ Starting with Concordia. Bilingual EN (default) / FR. Android first (Kotlin + Je
 
 ### Demo mode
 With Supabase keys the app uses the real backend. Force the offline demo with `lync.demo=true` in `local.properties` (or `./gradlew assembleDebug -Plync.demo=true`).
-If you already ran the first `schema.sql`, run `supabase/migrations/002_lync_v2.sql` for polls, plans, comments, stories and the Lync code.
+If you already ran the first `schema.sql`, run `supabase/migrations/002_lync_v2.sql` (polls, plans, comments, stories, Lync code) then `003_campus_life.sql` (events, groups).
 
 > ⚠️ Don't keep the project in an iCloud-synced folder (Desktop / Documents): iCloud creates `file 2.kt` copies that break the build. If it happens: delete `app/build` and rebuild.
 

@@ -208,3 +208,20 @@ fun timeAgo(millis: Long, now: Long = System.currentTimeMillis()): String {
         else -> "${s / 604800}w"
     }
 }
+
+/** Segmented control (iOS-style). Same on SwiftUI: `Picker(...).pickerStyle(.segmented)` restyled. */
+@Composable
+fun Segmented(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val c = Campus.colors
+    Row(modifier.fillMaxWidth().clip(CircleShape).background(c.surface).padding(4.dp)) {
+        options.forEachIndexed { i, label ->
+            val on = i == selected
+            val bg by androidx.compose.animation.animateColorAsState(if (on) c.bg else c.surface, label = "seg")
+            val fg by androidx.compose.animation.animateColorAsState(if (on) c.text else c.textMuted, label = "segf")
+            Box(
+                Modifier.weight(1f).clip(CircleShape).background(bg).pressable({ onSelect(i) }, 0.97f).padding(vertical = 9.dp),
+                contentAlignment = Alignment.Center,
+            ) { Text(label, style = MaterialTheme.typography.labelLarge, color = fg, maxLines = 1) }
+        }
+    }
+}

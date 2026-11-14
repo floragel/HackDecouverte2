@@ -1,6 +1,8 @@
 package com.lync.app.data
 
+import com.lync.app.data.model.CampusEvent
 import com.lync.app.data.model.Comment
+import com.lync.app.data.model.InterestGroup
 import com.lync.app.data.model.Course
 import com.lync.app.data.model.FeedPost
 import com.lync.app.data.model.LocationSharing
@@ -53,7 +55,7 @@ interface CampusRepository {
     // Instagram side
     suspend fun feed(): List<FeedPost>
     suspend fun setLiked(postId: String, liked: Boolean)
-    suspend fun createPost(draft: PostDraft): Result<Unit>
+    suspend fun createPost(draft: PostDraft, groupId: String? = null): Result<Unit>
     suspend fun vote(postId: String, optionId: String)
     suspend fun setGoing(postId: String, going: Boolean)
     suspend fun comments(postId: String): List<Comment>
@@ -74,6 +76,16 @@ interface CampusRepository {
     suspend fun connect(profileId: String, source: String = "app")
     suspend fun respond(profileId: String, accept: Boolean)
     suspend fun setFollowing(profileId: String, follow: Boolean)
+
+    // Campus life
+    suspend fun events(): List<CampusEvent>
+    suspend fun event(id: String): CampusEvent?
+    suspend fun setRsvp(eventId: String, going: Boolean)
+    suspend fun groups(): List<InterestGroup>
+    suspend fun group(id: String): InterestGroup?
+    suspend fun setMember(groupId: String, join: Boolean)
+    suspend fun groupPosts(groupId: String): List<FeedPost>
+    suspend fun createGroup(name: String, emoji: String, description: String): Result<InterestGroup>
 
     // Snap side
     suspend fun pushLocation(lat: Double, lng: Double)

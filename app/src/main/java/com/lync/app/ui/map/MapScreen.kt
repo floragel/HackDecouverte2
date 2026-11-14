@@ -77,6 +77,8 @@ import com.lync.app.data.model.LocationSharing
 import com.lync.app.data.model.MapPin
 import com.lync.app.data.model.PinKind
 import com.lync.app.data.model.StatusPreset
+import com.lync.app.data.model.BuildingPresence
+import com.lync.app.data.Buildings
 import com.lync.app.ui.campusViewModel
 import com.lync.app.ui.components.Avatar
 import com.lync.app.ui.components.pressable
@@ -196,7 +198,15 @@ fun MapScreen() {
                     contentAlignment = Alignment.Center,
                 ) { Icon(Icons.Rounded.MyLocation, null, tint = c.text) }
             }
-            Spacer(Modifier.height(10.dp))
+            // « Qui est là ? » — friends grouped by the building they're in
+            val presence = remember(visible, myPos) { Buildings.presence(visible, me, myPos) }
+            if (presence.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(presence, key = { it.building.code }) { bp -> BuildingCard(bp) { flyTo(bp.building.lat, bp.building.lng, 17.5) } }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(visible, key = { it.profile.id }) { pin ->
                     PersonChip(pin, selected == pin.profile.id) { selected = pin.profile.id; flyTo(pin.lat, pin.lng) }
@@ -308,6 +318,33 @@ private fun FilterChip(label: String, on: Boolean, dot: Color, onClick: () -> Un
         Spacer(Modifier.width(6.dp))
         Text(label, style = MaterialTheme.typography.labelLarge, color = if (on) c.text else c.textMuted)
     }
+}
+
+@Composable
+private fun BuildingCard(bp: BuildingPresence, onClick: () -> Unit) {
+    val c = Campus.colors
+    Column(
+        Modifier.width(210.dp).shadow(8.dp, RoundedCornerShape(18.dp)).clip(RoundedCornerShape(18.dp)).background(c.text)
+            .pressable(onClick).padding(14.dp),
+    ) {
+        Text(stringResource(if (bp.includesMe) R.string.here_you_are else R.string.here_title), style = MaterialTheme.typography.labelMedium, color = c.bg.copy(alpha = 0.6f))
+        Text(bp.building.name, style = MaterialTheme.typography.titleMedium, color = c.bg, maxLines = 1)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+                bp.people.take(4).forEach { p -> Box(Modifier.clip(CircleShape).background(c.text).padding(1.5.dp)) { Avatar(p.avatarUrl, p.initials, 24.dp) } }
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(herePeople(bp), style = MaterialTheme.typography.labelMedium, color = c.bg, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+fun herePeople(bp: BuildingPresence): String = when (bp.people.size) {
+    1 -> bp.people[0].firstName
+    2 -> stringResource(R.string.here_two, bp.people[0].firstName, bp.people[1].firstName)
+    else -> stringResource(R.string.here_many, bp.people[0].firstName, bp.people.size - 1)
 }
 
 @Composable

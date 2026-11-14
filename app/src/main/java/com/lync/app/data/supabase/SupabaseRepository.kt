@@ -2,7 +2,10 @@ package com.lync.app.data.supabase
 
 import com.lync.app.data.CampusRepository
 import com.lync.app.data.SignUpForm
+import com.lync.app.data.model.CampusEvent
 import com.lync.app.data.model.Comment
+import com.lync.app.data.model.EventCategory
+import com.lync.app.data.model.InterestGroup
 import com.lync.app.data.model.ConnectionState
 import com.lync.app.data.model.Course
 import com.lync.app.data.model.FeedPost
@@ -235,7 +238,7 @@ class SupabaseRepository(private val client: SupabaseClient) : CampusRepository 
     }
 
     override suspend fun feed(): List<FeedPost> =
-        toFeed(client.from("posts").select(postColumns) { order("created_at", Order.DESCENDING); limit(50) }.decodeList())
+        toFeed(client.from("posts").select(postColumns) { filter { exact("group_id", null) }; order("created_at", Order.DESCENDING); limit(50) }.decodeList())
 
     override suspend fun posts(authorId: String): List<FeedPost> = toFeed(
         client.from("posts").select(postColumns) { filter { eq("author_id", authorId) }; order("created_at", Order.DESCENDING) }.decodeList()
@@ -248,10 +251,11 @@ class SupabaseRepository(private val client: SupabaseClient) : CampusRepository 
 
     @Serializable private data class IdRow(val id: String)
 
-    override suspend fun createPost(draft: PostDraft): Result<Unit> = runCatching {
+    override suspend fun createPost(draft: PostDraft, groupId: String?): Result<Unit> = runCatching {
         val me = _me.value ?: error("No profile")
         val row = buildJsonObject {
             put("author_id", uid); put("university_id", me.universityId)
+            groupId?.let { put("group_id", it) }
             when (draft) {
                 is PostDraft.Photo -> { put("kind", "photo"); put("image_url", upload("posts", draft.image)); put("caption", draft.caption) }
                 is PostDraft.Text -> { put("kind", "text"); put("caption", draft.text); put("text_style", draft.style) }
@@ -432,6 +436,90 @@ class SupabaseRepository(private val client: SupabaseClient) : CampusRepository 
     override suspend fun setFollowing(profileId: String, follow: Boolean) {
         if (follow) client.from("follows").upsert(buildJsonObject { put("follower_id", uid); put("followee_id", profileId) })
         else client.from("follows").delete { filter { eq("follower_id", uid); eq("followee_id", profileId) } }
+    }
+
+    // ------------------------------------------------------------- Campus life
+    @Serializable private data class EventRow(
+        val id: String,
+        val title: String,
+        val description: String = "",
+        val category: String = "social",
+        @SerialName("starts_at") val startsAt: String,
+        @SerialName("ends_at") val endsAt: String,
+        val place: String = "",
+        @SerialName("cover_url") val coverUrl: String? = null,
+        val featured: Boolean = false,
+        val organizer: Organization,
+        @SerialName("event_rsvps") val rsvps: List<CountRow> = emptyList(),
+    )
+    @Serializable private data class RsvpRow(@SerialName("event_id") val eventId: String, @SerialName("profile_id") val profileId: String)
+
+    private val eventColumns = Columns.raw("id, title, description, category, starts_at, ends_at, place, cover_url, featured, " +
+        "organizer:organizations(id, name, handle, avatar_url, verified), event_rsvps(count)")
+
+    private suspend fun toEvents(rows: List<EventRow>): List<CampusEvent> {
+        if (rows.isEmpty()) return emptyList()
+        val rsvps = client.from("event_rsvps").select { filter { isIn("event_id", rows.map { it.id }) } }.decodeList<RsvpRow>()
+        val friends = friendIds().toSet()
+        val friendProfiles = profilesById(rsvps.map { it.profileId }.filter { it in friends }.distinct()).associateBy { it.id }
+        return rows.map { r ->
+            val mine = rsvps.filter { it.eventId == r.id }
+            CampusEvent(r.id, r.title, r.description, r.organizer, EventCategory.of(r.category), ts(r.startsAt), ts(r.endsAt), r.place, r.coverUrl,
+                r.rsvps.firstOrNull()?.count ?: mine.size, mine.any { it.profileId == uid }, mine.mapNotNull { friendProfiles[it.profileId] }, r.featured)
+        }
+    }
+
+    override suspend fun events(): List<CampusEvent> = toEvents(
+        client.from("events").select(eventColumns) { filter { gt("ends_at", Instant.now().toString()) }; order("starts_at", Order.ASCENDING); limit(50) }.decodeList()
+    )
+
+    override suspend fun event(id: String): CampusEvent? =
+        toEvents(client.from("events").select(eventColumns) { filter { eq("id", id) } }.decodeList()).firstOrNull()
+
+    override suspend fun setRsvp(eventId: String, going: Boolean) {
+        if (going) client.from("event_rsvps").upsert(buildJsonObject { put("event_id", eventId); put("profile_id", uid) })
+        else client.from("event_rsvps").delete { filter { eq("event_id", eventId); eq("profile_id", uid) } }
+    }
+
+    @Serializable private data class GroupRow(
+        val id: String, val name: String, val emoji: String = "✨", val description: String = "",
+        @SerialName("group_members") val members: List<CountRow> = emptyList(),
+    )
+    @Serializable private data class MemberRow(@SerialName("group_id") val groupId: String, val profile: Profile)
+
+    private suspend fun toGroups(rows: List<GroupRow>): List<InterestGroup> {
+        if (rows.isEmpty()) return emptyList()
+        val members = client.from("group_members").select(Columns.raw("group_id, profile:profiles(*)")) {
+            filter { isIn("group_id", rows.map { it.id }) }; limit(400)
+        }.decodeList<MemberRow>()
+        return rows.map { r ->
+            val m = members.filter { it.groupId == r.id }.map { it.profile }
+            InterestGroup(r.id, r.name, r.emoji, r.description, r.members.firstOrNull()?.count ?: m.size, m.any { it.id == uid }, m.take(8))
+        }.sortedByDescending { it.isMember }
+    }
+
+    private val groupColumns = Columns.raw("id, name, emoji, description, group_members(count)")
+
+    override suspend fun groups(): List<InterestGroup> = toGroups(client.from("groups").select(groupColumns) { limit(50) }.decodeList())
+
+    override suspend fun group(id: String): InterestGroup? = toGroups(client.from("groups").select(groupColumns) { filter { eq("id", id) } }.decodeList()).firstOrNull()
+
+    override suspend fun setMember(groupId: String, join: Boolean) {
+        if (join) client.from("group_members").upsert(buildJsonObject { put("group_id", groupId); put("profile_id", uid) })
+        else client.from("group_members").delete { filter { eq("group_id", groupId); eq("profile_id", uid) } }
+    }
+
+    override suspend fun groupPosts(groupId: String): List<FeedPost> = toFeed(
+        client.from("posts").select(postColumns) { filter { eq("group_id", groupId) }; order("created_at", Order.DESCENDING); limit(50) }.decodeList()
+    )
+
+    override suspend fun createGroup(name: String, emoji: String, description: String): Result<InterestGroup> = runCatching {
+        val me = _me.value ?: error("No profile")
+        val id = client.from("groups").insert(buildJsonObject {
+            put("university_id", me.universityId); put("name", name.trim()); put("emoji", emoji); put("description", description.trim()); put("created_by", uid)
+        }) { select(Columns.list("id")) }.decodeSingle<IdRow>().id
+        client.from("group_members").insert(buildJsonObject { put("group_id", id); put("profile_id", uid) })
+        group(id) ?: error("Group not found")
     }
 
     // ------------------------------------------------------------- Map

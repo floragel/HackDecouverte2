@@ -77,8 +77,10 @@ fun rememberTilt(): Offset {
                     tx = -gx / 9.81f * 1.6f
                     ty = (gy / 9.81f - 0.5f) * 1.6f
                 }
+                if (tx.isNaN() || ty.isNaN()) { basePitch = Float.NaN; return }
                 x += (tx.coerceIn(-1f, 1f) - x) * 0.18f
                 y += (ty.coerceIn(-1f, 1f) - y) * 0.18f
+                if (x.isNaN() || y.isNaN()) { x = 0f; y = 0f }
             }
             override fun onAccuracyChanged(s: Sensor?, a: Int) = Unit
         }
@@ -99,9 +101,11 @@ private val Sparkles: List<Triple<Float, Float, Float>> = run {
  * Holographic foil: a rainbow film whose angle follows the tilt, a moving glint,
  * twinkling sparkles and an edge light. [strength] 0..1.
  */
-fun Modifier.hologram(tilt: Offset, strength: Float = 1f) = this.drawWithContent {
+fun Modifier.hologram(rawTilt: Offset, strength: Float = 1f) = this.drawWithContent {
     drawContent()
     val w = size.width; val h = size.height
+    if (w <= 0f || h <= 0f) return@drawWithContent
+    val tilt = if (rawTilt.x.isNaN() || rawTilt.y.isNaN()) Offset.Zero else rawTilt
     val mag = (abs(tilt.x) + abs(tilt.y)).coerceIn(0f, 1.4f)
     val k = strength * (0.45f + 0.55f * mag)
 

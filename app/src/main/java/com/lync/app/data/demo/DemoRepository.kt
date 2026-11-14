@@ -2,7 +2,10 @@ package com.lync.app.data.demo
 
 import com.lync.app.data.CampusRepository
 import com.lync.app.data.SignUpForm
+import com.lync.app.data.model.CampusEvent
 import com.lync.app.data.model.Comment
+import com.lync.app.data.model.EventCategory
+import com.lync.app.data.model.InterestGroup
 import com.lync.app.data.model.ConnectionState
 import com.lync.app.data.model.Course
 import com.lync.app.data.model.FeedPost
@@ -226,7 +229,7 @@ class DemoRepository : CampusRepository {
         p.copy(plan = plan.copy(going = list, imGoing = going))
     }
 
-    override suspend fun createPost(draft: PostDraft): Result<Unit> {
+    override suspend fun createPost(draft: PostDraft, groupId: String?): Result<Unit> {
         val m = _me.value ?: return Result.failure(IllegalStateException("not signed in"))
         val base = FeedPost(
             id = UUID.randomUUID().toString(), authorId = m.id, authorName = m.fullName, authorHandle = m.username,
@@ -245,7 +248,8 @@ class DemoRepository : CampusRepository {
                 plan = Plan(draft.activity, draft.place, draft.startsAtMillis, draft.spots, listOf(m), true),
             )
         }
-        posts.value = listOf(post) + posts.value
+        if (groupId != null) groupFeed.value = groupFeed.value + (groupId to (listOf(post) + groupFeed.value[groupId].orEmpty()))
+        else posts.value = listOf(post) + posts.value
         return Result.success(Unit)
     }
 
@@ -311,6 +315,76 @@ class DemoRepository : CampusRepository {
 
     override suspend fun setFollowing(profileId: String, follow: Boolean) {
         following.value = if (follow) following.value + profileId else following.value - profileId
+    }
+
+    // ------------------------------------------------------------- Campus life
+    private fun at(daysFromNow: Int, hour: Int, minute: Int = 0): Long = java.util.Calendar.getInstance().apply {
+        add(java.util.Calendar.DAY_OF_YEAR, daysFromNow); set(java.util.Calendar.HOUR_OF_DAY, hour); set(java.util.Calendar.MINUTE, minute)
+    }.timeInMillis
+
+    private val eventData = MutableStateFlow(
+        listOf(
+            CampusEvent("e1", "Robotics open lab", "Come see the rover we're sending to the University Rover Challenge. Pizza after 6.",
+                clubs[0], EventCategory.TECH, at(0, 17), at(0, 20), "EV 11.119", photo("robot"), 42, false, listOf(person("u2")!!, person("u5")!!), featured = true),
+            CampusEvent("e2", "Free movie night: Dune", "Big screen, free popcorn, bring a friend.",
+                clubs[2], EventCategory.CULTURE, at(0, 19), at(0, 22), "H-110", photo("cinema"), 88, false, listOf(person("u3")!!), featured = false),
+            CampusEvent("e3", "Bouldering for beginners", "No experience needed, shoes provided. Meet in the lobby.",
+                clubs[3], EventCategory.SPORT, at(1, 18), at(1, 20), "Le Gym, EV building", photo("campus"), 23, false, listOf(person("u1")!!), featured = false),
+            CampusEvent("e4", "Hackathon info session", "Everything about HackConcordia's next events, teams and prizes.",
+                clubs[1], EventCategory.TECH, at(2, 12), at(2, 13), "Webster Library, LB-322", photo("hackathon"), 61, false, emptyList(), featured = false),
+            CampusEvent("e5", "Career fair: tech & engineering", "60 companies hiring interns. Bring your CV.",
+                clubs[1], EventCategory.CAREER, at(4, 10), at(4, 16), "JMSB atrium", photo("city"), 310, false, listOf(person("u2")!!, person("u6")!!, person("u8")!!), featured = true),
+        )
+    )
+
+    override suspend fun events(): List<CampusEvent> = eventData.value.sortedBy { it.startsAtMillis }
+    override suspend fun event(id: String) = eventData.value.firstOrNull { it.id == id }
+
+    override suspend fun setRsvp(eventId: String, going: Boolean) {
+        eventData.value = eventData.value.map {
+            if (it.id == eventId && it.imGoing != going) it.copy(imGoing = going, goingCount = it.goingCount + if (going) 1 else -1) else it
+        }
+    }
+
+    private val groupData = MutableStateFlow(
+        listOf(
+            InterestGroup("g1", "Climbing crew", "🧗", "Bouldering sessions every week, all levels.", 64, true, listOf(person("u1")!!, person("u6")!!)),
+            InterestGroup("g2", "F1 & motorsport", "🏎️", "Race weekends, watch parties, hot takes.", 41, false, listOf(person("u2")!!)),
+            InterestGroup("g3", "K-pop dance", "💃", "Learn choreos, perform at Shuffle.", 87, false, listOf(person("u3")!!)),
+            InterestGroup("g4", "Chess club", "♟️", "Blitz at the library café, Thursdays.", 33, false, listOf(person("u8")!!)),
+            InterestGroup("g5", "Photo walks", "📷", "Montreal photo walks, film and digital.", 52, true, listOf(person("u3")!!, person("u7")!!)),
+            InterestGroup("g6", "AI & machine learning", "🤖", "Paper club, projects, Kaggle teams.", 120, false, listOf(person("u10")!!, person("u5")!!)),
+        )
+    )
+
+    private val groupFeed = MutableStateFlow(
+        mapOf(
+            "g1" to listOf(base("gp1", "u1", 3 * 60 * min, 12).copy(kind = PostKind.PLAN, caption = "Who's in for a session tonight?",
+                plan = Plan(PlanActivity.SPORT, "Allez Up, Saint-Henri", System.currentTimeMillis() + 4 * 60 * min, 6, listOf(person("u6")!!), false))),
+            "g5" to listOf(base("gp2", "u3", 26 * 60 * min, 30).copy(kind = PostKind.PHOTO, imageUrl = photo("city"), caption = "Golden hour on Sainte-Catherine")),
+        )
+    )
+
+    override suspend fun groups(): List<InterestGroup> = groupData.value.sortedByDescending { it.isMember }
+    override suspend fun group(id: String) = groupData.value.firstOrNull { it.id == id }
+
+    override suspend fun setMember(groupId: String, join: Boolean) {
+        val m = _me.value
+        groupData.value = groupData.value.map {
+            if (it.id == groupId && it.isMember != join) it.copy(
+                isMember = join, memberCount = it.memberCount + if (join) 1 else -1,
+                members = if (join && m != null) listOf(m) + it.members else it.members.filterNot { p -> p.id == m?.id },
+            ) else it
+        }
+    }
+
+    override suspend fun groupPosts(groupId: String): List<FeedPost> = groupFeed.value[groupId].orEmpty()
+
+    override suspend fun createGroup(name: String, emoji: String, description: String): Result<InterestGroup> {
+        val m = _me.value ?: return Result.failure(IllegalStateException())
+        val g = InterestGroup(UUID.randomUUID().toString(), name.trim(), emoji, description.trim(), 1, true, listOf(m))
+        groupData.value = listOf(g) + groupData.value
+        return Result.success(g)
     }
 
     private val myLocation = MutableStateFlow<Pair<Double, Double>?>(null)
