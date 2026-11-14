@@ -467,7 +467,7 @@ fun ThemeToggleButton() {
 
 /** Vertical floor switcher (7 at the top), floating on the plan. Active floor = ink, like a selected choice. */
 @Composable
-private fun FloorPicker(floors: List<String>, active: String?, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
+internal fun FloorPicker(floors: List<String>, active: String?, onPick: (String) -> Unit, modifier: Modifier = Modifier) {
     val c = Campus.colors
     if (floors.size < 2) return
     Column(
@@ -544,11 +544,11 @@ private fun AccessibleRow(on: Boolean, onChange: (Boolean) -> Unit) {
     }
 }
 
-private data class RoomItem(val floorId: String, val nodeId: String, val label: String, val name: String)
+internal data class RoomItem(val floorId: String, val nodeId: String, val label: String, val name: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RoomPickerSheet(title: String, items: List<RoomItem>, onPick: (RoomItem) -> Unit, onDismiss: () -> Unit) {
+internal fun RoomPickerSheet(title: String, items: List<RoomItem>, onPick: (RoomItem) -> Unit, onDismiss: () -> Unit) {
     val c = Campus.colors
     var query by remember { mutableStateOf("") }
     val filtered = remember(query, items) {

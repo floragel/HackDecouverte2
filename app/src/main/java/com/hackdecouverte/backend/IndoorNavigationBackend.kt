@@ -18,6 +18,8 @@ import com.hackdecouverte.map.NavigationRoute
 import com.hackdecouverte.map.NodeKey
 import com.hackdecouverte.map.OsmSurroundings
 import com.hackdecouverte.map.RouteStep
+import com.hackdecouverte.pdr.AltitudeFloorEstimate
+import com.hackdecouverte.pdr.AltitudeFloorEstimator
 import com.hackdecouverte.pdr.CorridorConstraintResult
 import com.hackdecouverte.pdr.FloorTransitionTracker
 import com.hackdecouverte.pdr.PdrPhase
@@ -95,7 +97,11 @@ data class NavigationSnapshot(
     val accessibleOnly: Boolean = false,
     val activeRoute: NavigationRoute? = null,
     val destinations: List<DestinationItem> = emptyList(),
-    val savedStepLengthM: Double? = null
+    val savedStepLengthM: Double? = null,
+    /** Absolute floor from barometric altitude above the street (see [AltitudeFloorEstimator]). */
+    val altitudeFloor: AltitudeFloorEstimate? = null,
+    /** True once a street-level pressure was captured outdoors near the building. */
+    val hasStreetPressureReference: Boolean = false
 )
 
 class IndoorNavigationBackend(
@@ -113,6 +119,9 @@ class IndoorNavigationBackend(
     }
 
     private val floorTracker = FloorTransitionTracker()
+    private val altitudeFloors = AltitudeFloorEstimator()
+    private var latestPressureHpa: Double? = null
+    private var latestPressureNs: Long = Long.MIN_VALUE
 
     private val adapter = PdrSensorAdapter(
         context = appContext,
@@ -427,6 +436,28 @@ class IndoorNavigationBackend(
         invalidateRouteAndPublish()
     }
 
+    /**
+     * Outdoor → indoor hand-off: the user just entered the building (or opened navigation inside).
+     * Puts them on [floorId] at the node closest to [nearM] (entrances first on the ground floor,
+     * so the trace starts at the door they came through) and starts step tracking right away.
+     * Returns false if the floor is unknown.
+     */
+    fun enterBuilding(floorId: String, nearM: PointM?): Boolean {
+        val plan = buildingGraph.floor(floorId) ?: return false
+        val around = nearM ?: PointM(0.0, 0.0)
+        val doors = plan.nodes.filter { it.type == "exit" || it.type == "entrance" }
+        val candidates = doors.takeIf { it.isNotEmpty() && around.norm() > ENTRANCE_SNAP_MIN_DIST_M }
+            ?: plan.nodes.filter { it.type != "corridor" || it.label.isNotBlank() || it.name.isNotBlank() }.ifEmpty { plan.nodes }
+        val start = candidates.minByOrNull { it.posM.distanceTo(around) } ?: return false
+        setStartPose(floorId, start.id)
+        if (tracker.state.value.phase == PdrPhase.IDLE) startWithSavedOrDefaultStepLength()
+        return true
+    }
+
+    /** Current altitude-based floor estimate (also published in the snapshot). */
+    fun estimateAltitudeFloor(): AltitudeFloorEstimate =
+        altitudeFloors.estimate(latestPressureNs, latestPressureHpa)
+
     fun setDestination(target: NodeKey?) {
         destination = target
         invalidateRouteAndPublish()
@@ -560,6 +591,8 @@ class IndoorNavigationBackend(
     }
 
     private fun handlePressureSample(timestampNs: Long, pressureHpa: Double) {
+        latestPressureHpa = pressureHpa
+        latestPressureNs = timestampNs
         val uFloor = userFloorId ?: return
         val currentMapPos = anchor?.toMap(tracker.state.value.position) ?: currentFloorOriginM
         val nearConnector = buildingGraph.findNearestVerticalConnector(
@@ -613,6 +646,14 @@ class IndoorNavigationBackend(
 
     private fun handleGpsFix(fix: GpsFix) {
         latestGpsFix = fix
+        // Outdoors next to MB with a clean fix: this pressure is the street level for the altitude floor estimate
+        val distFromCoreM = fix.eastNorthM.norm()
+        val pressure = latestPressureHpa
+        if (pressure != null && fix.accuracyM <= STREET_REFERENCE_MAX_ACCURACY_M &&
+            distFromCoreM in STREET_REFERENCE_MIN_DIST_M..STREET_REFERENCE_MAX_DIST_M
+        ) {
+            altitudeFloors.captureStreetReference(latestPressureNs, pressure)
+        }
         adapter.magneticDeclinationDeg = fix.magneticDeclinationDeg
         fix.trueNorthBearingRad?.let { bearing ->
             tracker.onTrueNorthBearingFromGps(fix.elapsedRealtimeNs, bearing)
@@ -749,7 +790,9 @@ class IndoorNavigationBackend(
             accessibleOnly = accessibleOnly,
             activeRoute = route,
             destinations = buildingGraph.destinations,
-            savedStepLengthM = savedStepLengthM
+            savedStepLengthM = savedStepLengthM,
+            altitudeFloor = if (latestPressureHpa != null || altitudeFloors.hasStreetReference) estimateAltitudeFloor() else null,
+            hasStreetPressureReference = altitudeFloors.hasStreetReference
         )
     }
 
@@ -851,6 +894,10 @@ class IndoorNavigationBackend(
         private const val MAX_CAMPUS_RADIUS_M = 350.0
         private const val NEAR_CONNECTOR_BARO_RADIUS_M = 7.0
         private const val HIGH_PRECISION_OUTDOOR_GPS_M = 4.5
+        private const val STREET_REFERENCE_MAX_ACCURACY_M = 15.0
+        private const val STREET_REFERENCE_MIN_DIST_M = 45.0
+        private const val STREET_REFERENCE_MAX_DIST_M = 160.0
+        private const val ENTRANCE_SNAP_MIN_DIST_M = 15.0
 
         fun loadBundledFloors(context: Context): List<FloorPlan> {
             val loaded = ArrayList<FloorPlan>()

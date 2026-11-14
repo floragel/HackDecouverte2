@@ -301,7 +301,8 @@ fun CalendarScreen() {
             onDismiss = { vm.selectItemForDetail(null) },
             onOpenMap = {
                 vm.selectItemForDetail(null)
-                nav.map()
+                val loc = item.location
+                if (loc != null && com.lync.app.data.places.CampusPlaces.resolve(loc) != null) nav.go(loc) else nav.map()
             },
             onOpenEvent = { eventId ->
                 vm.selectItemForDetail(null)

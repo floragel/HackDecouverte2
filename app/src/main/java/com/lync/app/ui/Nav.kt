@@ -21,6 +21,7 @@ object Routes {
     const val INDOOR = "indoor"
     const val INDOOR_DEV = "indoor-dev"
     const val CALENDAR = "calendar"
+    const val GO = "go/{place}"
     val tabs = setOf(HOME, NETWORK, CALENDAR, MAP, PROFILE)
 }
 
@@ -37,6 +38,8 @@ class Navigator(private val nav: NavHostController) {
     fun calendar() = nav.navigate(Routes.CALENDAR)
     fun map() = nav.navigate(Routes.MAP) { launchSingleTop = true }
     fun indoor() = nav.navigate(Routes.INDOOR) { launchSingleTop = true }
+    /** Door-to-door directions to a room / building ("MB-2.210", "H-920", "JMSB, MB-1.437"). */
+    fun go(place: String) = nav.navigate("go/" + android.net.Uri.encode(place)) { launchSingleTop = true }
     fun indoorDev() = nav.navigate(Routes.INDOOR_DEV) { launchSingleTop = true }
     fun back() { nav.popBackStack() }
 }
