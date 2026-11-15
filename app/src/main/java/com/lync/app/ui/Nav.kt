@@ -2,6 +2,7 @@ package com.lync.app.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.navigation.NavHostController
 
@@ -18,7 +19,7 @@ object Routes {
     const val SCAN = "scan"
     const val EVENT = "event/{id}"
     const val GROUP = "group/{id}"
-    const val INDOOR = "indoor"
+    const val INDOOR = "indoor?floor={floor}&node={node}"
     const val INDOOR_DEV = "indoor-dev"
     const val CALENDAR = "calendar"
     const val GO = "go/{place}"
@@ -37,9 +38,13 @@ class Navigator(private val nav: NavHostController) {
     fun group(id: String) = nav.navigate("group/$id")
     fun calendar() = nav.navigate(Routes.CALENDAR)
     fun map() = nav.navigate(Routes.MAP) { launchSingleTop = true }
-    fun indoor() = nav.navigate(Routes.INDOOR) { launchSingleTop = true }
     /** Door-to-door directions to a room / building ("MB-2.210", "H-920", "JMSB, MB-1.437"). */
     fun go(place: String) = nav.navigate("go/" + android.net.Uri.encode(place)) { launchSingleTop = true }
+    /** Opens « Find a room »; with [floorId]/[nodeId] the room is pre-filled in « Going to ». */
+    fun indoor(floorId: String? = null, nodeId: String? = null) {
+        val route = if (floorId != null && nodeId != null) "indoor?floor=${Uri.encode(floorId)}&node=${Uri.encode(nodeId)}" else "indoor"
+        nav.navigate(route) { launchSingleTop = true }
+    }
     fun indoorDev() = nav.navigate(Routes.INDOOR_DEV) { launchSingleTop = true }
     fun back() { nav.popBackStack() }
 }

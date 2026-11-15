@@ -57,6 +57,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -95,6 +96,12 @@ import androidx.compose.runtime.produceState
 import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
 import androidx.compose.material.icons.rounded.Apartment
 import androidx.compose.ui.text.style.TextOverflow
+import com.hackdecouverte.backend.IndoorNavigationBackend
+import com.hackdecouverte.map.BuildingGraph
+import com.hackdecouverte.map.DestinationItem
+import com.lync.app.ui.indoor.floorNumber
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.lync.app.ui.campusViewModel
 import com.lync.app.ui.components.Avatar
 import com.lync.app.ui.components.pressable
@@ -144,6 +151,13 @@ fun MapScreen() {
     var showClassmates by remember { mutableStateOf(true) }
     var selected by remember { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+    // Real MB rooms (same floor plans as « Find a room »), loaded off the main thread
+    val appContext = LocalContext.current.applicationContext
+    val indoorDestinations by produceState(emptyList<DestinationItem>()) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { BuildingGraph(IndoorNavigationBackend.loadBundledFloors(appContext)).destinations }.getOrDefault(emptyList())
+        }
+    }
 
     var hasPermission by remember { mutableStateOf(vm.tracker.hasPermission()) }
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -273,6 +287,68 @@ fun MapScreen() {
                                 onOpen = { flyTo(place.building.lat, place.building.lng, 18.0) },
                                 onGo = { searchQuery = ""; navigator.go(place.query) },
                             )
+            // Room search results dropdown
+            val matchingRooms = remember(searchQuery, indoorDestinations) {
+                if (searchQuery.isBlank()) emptyList()
+                else indoorDestinations
+                    .filter { BuildingGraph.matchesSearchQuery(searchQuery, it.label, it.name, it.key.floorId) }
+                    .take(40)
+            }
+            if (matchingRooms.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .shadow(8.dp, RoundedCornerShape(Tokens.RadiusControl))
+                        .clip(RoundedCornerShape(Tokens.RadiusControl))
+                        .background(c.surface)
+                        .padding(vertical = 4.dp)
+                ) {
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
+                        items(matchingRooms, key = { "${it.key.floorId}/${it.key.nodeId}" }) { room ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .pressable({
+                                        // Open « Find a room » with this room already in « Going to »
+                                        searchQuery = ""
+                                        navigator.indoor(room.key.floorId, room.key.nodeId)
+                                    }, scaleDown = 0.98f)
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(c.accentSoft),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.MeetingRoom,
+                                        contentDescription = null,
+                                        tint = c.accent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = room.label.ifBlank { room.name },
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = c.text
+                                    )
+                                    Text(
+                                        text = stringResource(
+                                            R.string.map_room_floor,
+                                            room.name.takeIf { it.isNotBlank() && it != room.label } ?: "John Molson (JMSB)",
+                                            floorNumber(room.key.floorId),
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = c.textMuted
+                                    )
+                                }
+                            }
                         }
                     }
                 }

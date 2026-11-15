@@ -52,10 +52,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -136,8 +138,16 @@ private enum class Picker { FROM, TO }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun IndoorScreen() {
+fun IndoorScreen(initialDestinationFloorId: String? = null, initialDestinationNodeId: String? = null) {
     val (backend, snap) = rememberIndoorBackend()
+    // Room picked from the map's search bar: pre-fill « Going to » once (survives rotation without re-applying)
+    var initialDestinationApplied by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(initialDestinationFloorId, initialDestinationNodeId) {
+        if (!initialDestinationApplied && initialDestinationFloorId != null && initialDestinationNodeId != null) {
+            backend.setDestination(com.hackdecouverte.map.NodeKey(initialDestinationFloorId, initialDestinationNodeId))
+            initialDestinationApplied = true
+        }
+    }
     val nav = LocalNavigator.current
     val c = Campus.colors
     val haptics = rememberHaptics()
