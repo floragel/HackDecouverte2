@@ -1,0 +1,480 @@
+{
+ "building": "Concordia University, John Molson Building (MB)",
+ "units": "metres",
+ "axes": "x = east, y = north (true north). In the aligned SVGs, svg_y = -north.",
+ "origin": "centre of the 6 central elevator cars, identical on every floor",
+ "scale": "lobby between the two elevator banks = 3.46 m (fitted so floors 1-4 match the 70.7 m length of the OSM footprint)",
+ "grid_bearing_deg": 40.5,
+ "grid_bearing_source": "OpenStreetMap way 22080581 (MB footprint), about +-2 degrees",
+ "how_to_use": "[east, north] = px_to_metres @ [x_px, y_px, 1] using the original MB-floor-XX.svg pixels",
+ "aligned_viewbox": [
+  -44.0,
+  -34.0,
+  94.0,
+  74.0
+ ],
+ "floors": {
+  "1": {
+   "svg": "MB-floor-01.svg",
+   "aligned_svg": "aligned/MB-floor-01.svg",
+   "pixels_per_metre": 39.884,
+   "lobby_width_px_measured": [
+    138,
+    105,
+    139
+   ],
+   "elevator_centre_px": [
+    1693.8,
+    1080.5
+   ],
+   "elevator_cars_px": [
+    [
+     1814.5,
+     959.0
+    ],
+    [
+     1572.0,
+     963.0
+    ],
+    [
+     1574.0,
+     1079.0
+    ],
+    [
+     1814.0,
+     1080.5
+    ],
+    [
+     1574.0,
+     1200.0
+    ],
+    [
+     1814.0,
+     1201.5
+    ]
+   ],
+   "car_spacing_m": 3.01,
+   "plan_rotation_deg": 139.38,
+   "px_to_metres": [
+    [
+     -0.0190314388,
+     0.0163227687,
+     14.5977478
+    ],
+    [
+     0.0163227687,
+     0.0190314388,
+     -48.2101591
+    ]
+   ],
+   "metres_to_px": [
+    [
+     -30.2745431,
+     25.9656861,
+     1693.75
+    ],
+    [
+     25.9656861,
+     30.2745431,
+     1080.5
+    ]
+   ]
+  },
+  "2": {
+   "svg": "MB-floor-02.svg",
+   "aligned_svg": "aligned/MB-floor-02.svg",
+   "pixels_per_metre": 39.884,
+   "lobby_width_px_measured": [
+    138,
+    139,
+    137
+   ],
+   "elevator_centre_px": [
+    1034.1,
+    1600.6
+   ],
+   "elevator_cars_px": [
+    [
+     1150.0,
+     1479.5
+    ],
+    [
+     915.5,
+     1482.5
+    ],
+    [
+     1035.5,
+     1482.5
+    ],
+    [
+     1154.0,
+     1719.0
+    ],
+    [
+     914.5,
+     1720.0
+    ],
+    [
+     1035.0,
+     1720.0
+    ]
+   ],
+   "car_spacing_m": 2.97,
+   "plan_rotation_deg": -130.81,
+   "px_to_metres": [
+    [
+     -0.0163873126,
+     -0.0189758906,
+     47.3183411
+    ],
+    [
+     -0.0189758906,
+     0.0163873126,
+     -6.60660727
+    ]
+   ],
+   "metres_to_px": [
+    [
+     -26.0683603,
+     -30.186179,
+     1034.08333
+    ],
+    [
+     -30.186179,
+     26.0683603,
+     1600.58333
+    ]
+   ]
+  },
+  "3": {
+   "svg": "MB-floor-03.svg",
+   "aligned_svg": "aligned/MB-floor-03.svg",
+   "pixels_per_metre": 49.422,
+   "lobby_width_px_measured": [
+    171,
+    171,
+    171
+   ],
+   "elevator_centre_px": [
+    1273.2,
+    2091.3
+   ],
+   "elevator_cars_px": [
+    [
+     1417.0,
+     1942.0
+    ],
+    [
+     1126.5,
+     1945.0
+    ],
+    [
+     1275.0,
+     1945.5
+    ],
+    [
+     1125.0,
+     2237.5
+    ],
+    [
+     1422.0,
+     2239.0
+    ],
+    [
+     1273.5,
+     2239.0
+    ]
+   ],
+   "car_spacing_m": 2.97,
+   "plan_rotation_deg": -130.64,
+   "px_to_metres": [
+    [
+     -0.0131773691,
+     -0.0153547512,
+     48.8888902
+    ],
+    [
+     -0.0153547512,
+     0.0131773691,
+     -8.00911384
+    ]
+   ],
+   "metres_to_px": [
+    [
+     -32.1861281,
+     -37.5044506,
+     1273.16667
+    ],
+    [
+     -37.5044506,
+     32.1861281,
+     2091.33333
+    ]
+   ]
+  },
+  "4": {
+   "svg": "MB-floor-04.svg",
+   "aligned_svg": "aligned/MB-floor-04.svg",
+   "pixels_per_metre": 44.509,
+   "lobby_width_px_measured": [
+    153,
+    154,
+    156
+   ],
+   "elevator_centre_px": [
+    1155.0,
+    1536.0
+   ],
+   "elevator_cars_px": [
+    [
+     1287.5,
+     1403.0
+    ],
+    [
+     1019.5,
+     1404.0
+    ],
+    [
+     1153.5,
+     1404.0
+    ],
+    [
+     1288.5,
+     1667.0
+    ],
+    [
+     1026.5,
+     1671.0
+    ],
+    [
+     1154.5,
+     1667.0
+    ]
+   ],
+   "car_spacing_m": 2.98,
+   "plan_rotation_deg": 48.89,
+   "px_to_metres": [
+    [
+     0.0147710837,
+     0.0169294153,
+     -43.0641835
+    ],
+    [
+     0.0169294153,
+     -0.0147710837,
+     3.13490997
+    ]
+   ],
+   "metres_to_px": [
+    [
+     29.2618381,
+     33.5375399,
+     1155.0
+    ],
+    [
+     33.5375399,
+     -29.2618381,
+     1536.0
+    ]
+   ]
+  },
+  "5": {
+   "svg": "MB-floor-05.svg",
+   "aligned_svg": "aligned/MB-floor-05.svg",
+   "pixels_per_metre": 40.462,
+   "lobby_width_px_measured": [
+    141,
+    140,
+    138
+   ],
+   "elevator_centre_px": [
+    692.8,
+    1291.8
+   ],
+   "elevator_cars_px": [
+    [
+     571.5,
+     1169.0
+    ],
+    [
+     693.5,
+     1171.0
+    ],
+    [
+     815.0,
+     1173.0
+    ],
+    [
+     573.5,
+     1413.5
+    ],
+    [
+     690.5,
+     1411.0
+    ],
+    [
+     812.5,
+     1413.0
+    ]
+   ],
+   "car_spacing_m": 2.98,
+   "plan_rotation_deg": 49.83,
+   "px_to_metres": [
+    [
+     0.0159411132,
+     0.0188858897,
+     -35.4390542
+    ],
+    [
+     0.0188858897,
+     -0.0159411132,
+     7.50873286
+    ]
+   ],
+   "metres_to_px": [
+    [
+     26.098919,
+     30.9201308,
+     692.75
+    ],
+    [
+     30.9201308,
+     -26.098919,
+     1291.75
+    ]
+   ]
+  },
+  "6": {
+   "svg": "MB-floor-06.svg",
+   "aligned_svg": "aligned/MB-floor-06.svg",
+   "pixels_per_metre": 38.728,
+   "lobby_width_px_measured": [
+    134,
+    134,
+    133
+   ],
+   "elevator_centre_px": [
+    663.3,
+    1316.4
+   ],
+   "elevator_cars_px": [
+    [
+     547.5,
+     1198.5
+    ],
+    [
+     665.0,
+     1200.5
+    ],
+    [
+     782.0,
+     1203.0
+    ],
+    [
+     548.5,
+     1432.0
+    ],
+    [
+     660.0,
+     1431.0
+    ],
+    [
+     777.0,
+     1433.5
+    ]
+   ],
+   "car_spacing_m": 2.99,
+   "plan_rotation_deg": 50.24,
+   "px_to_metres": [
+    [
+     0.016513281,
+     0.0198501938,
+     -37.0849358
+    ],
+    [
+     0.0198501938,
+     -0.016513281,
+     8.57106311
+    ]
+   ],
+   "metres_to_px": [
+    [
+     24.7679904,
+     29.7729694,
+     663.333333
+    ],
+    [
+     29.7729694,
+     -24.7679904,
+     1316.41667
+    ]
+   ]
+  },
+  "7": {
+   "svg": "MB-floor-07.svg",
+   "aligned_svg": "aligned/MB-floor-07.svg",
+   "pixels_per_metre": 39.595,
+   "lobby_width_px_measured": [
+    137,
+    137,
+    139
+   ],
+   "elevator_centre_px": [
+    647.7,
+    1325.3
+   ],
+   "elevator_cars_px": [
+    [
+     532.0,
+     1205.5
+    ],
+    [
+     650.0,
+     1208.5
+    ],
+    [
+     768.0,
+     1210.0
+    ],
+    [
+     530.0,
+     1443.0
+    ],
+    [
+     644.0,
+     1441.0
+    ],
+    [
+     762.0,
+     1444.0
+    ]
+   ],
+   "car_spacing_m": 2.96,
+   "plan_rotation_deg": 50.45,
+   "px_to_metres": [
+    [
+     0.0160801728,
+     0.0194747794,
+     -36.2251662
+    ],
+    [
+     0.0194747794,
+     -0.0160801728,
+     8.69842364
+    ]
+   ],
+   "metres_to_px": [
+    [
+     25.2103949,
+     30.5324379,
+     647.666667
+    ],
+    [
+     30.5324379,
+     -25.2103949,
+     1325.33333
+    ]
+   ]
+  }
+ }
+}

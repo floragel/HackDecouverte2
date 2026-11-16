@@ -138,6 +138,13 @@ fun MainScreen() {
                 composable(Routes.SETTINGS) { SettingsScreen() }
                 composable(Routes.SCAN) { ScannerScreen() }
                 composable(Routes.EVENT) { ProvideNavScope(this) { com.lync.app.ui.network.EventDetailScreen(it.arguments?.getString("id").orEmpty()) } }
+                composable(Routes.INDOOR) { com.lync.app.ui.indoor.IndoorScreen() }
+                composable(
+                    Routes.GO,
+                    enterTransition = { slideInVertically(tween(340)) { it / 4 } + fadeIn(tween(240)) },
+                    popExitTransition = { slideOutVertically(tween(280)) { it / 4 } + fadeOut(tween(200)) },
+                ) { com.lync.app.ui.go.GoScreen(it.arguments?.getString("place").orEmpty()) }
+                composable(Routes.INDOOR_DEV) { com.lync.app.ui.indoor.IndoorDevScreen() }
                 composable(Routes.GROUP) { ProvideNavScope(this) { com.lync.app.ui.network.GroupScreen(it.arguments?.getString("id").orEmpty()) } }
             }
             }

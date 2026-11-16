@@ -40,6 +40,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.MeetingRoom
+import com.lync.app.ui.LocalNavigator
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.MeetingRoom
 import androidx.compose.material.icons.rounded.MyLocation
@@ -87,7 +89,12 @@ import com.lync.app.data.model.PinKind
 import com.lync.app.data.model.StatusPreset
 import com.lync.app.data.model.BuildingPresence
 import com.lync.app.data.Buildings
-import com.lync.app.data.Rooms
+import com.lync.app.data.places.CampusDirectory
+import com.lync.app.data.places.PlaceSuggestion
+import androidx.compose.runtime.produceState
+import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
+import androidx.compose.material.icons.rounded.Apartment
+import androidx.compose.ui.text.style.TextOverflow
 import com.lync.app.ui.campusViewModel
 import com.lync.app.ui.components.Avatar
 import com.lync.app.ui.components.pressable
@@ -129,6 +136,7 @@ fun MapScreen() {
     val pins by vm.pins.collectAsStateWithLifecycle()
     val myPos by vm.tracker.position.collectAsStateWithLifecycle()
     val c = Campus.colors
+    val navigator = LocalNavigator.current
 
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     var cameraTick by remember { mutableIntStateOf(0) } // bumps on every camera move -> pins re-project
@@ -243,72 +251,39 @@ fun MapScreen() {
                 }
             }
 
-            // Room search results dropdown
-            val matchingRooms = remember(searchQuery) {
-                if (searchQuery.isBlank()) emptyList()
-                else Rooms.search(searchQuery)
-            }
-            if (matchingRooms.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .shadow(8.dp, RoundedCornerShape(Tokens.RadiusControl))
-                        .clip(RoundedCornerShape(Tokens.RadiusControl))
-                        .background(c.surface)
-                        .padding(vertical = 4.dp)
-                ) {
-                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
-                        items(matchingRooms, key = { it.name }) { room ->
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .pressable({
-                                        val bld = Buildings.concordia.firstOrNull { it.code == room.buildingCode }
-                                        val lat = bld?.lat ?: 45.49535
-                                        val lng = bld?.lng ?: -73.57905
-                                        flyTo(lat, lng, 18.0)
-                                        searchQuery = ""
-                                    }, scaleDown = 0.98f)
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(c.accentSoft),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.MeetingRoom,
-                                        contentDescription = null,
-                                        tint = c.accent,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        text = stringResource(R.string.map_room_title, room.name),
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = c.text
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.map_room_floor, room.buildingName, room.floor),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = c.textMuted
-                                    )
-                                }
-                            }
+            // Search results: Concordia buildings + every real JMSB room -> door-to-door directions
+            val context = LocalContext.current
+            val directory by produceState(emptyList<PlaceSuggestion>()) { value = CampusDirectory.load(context) }
+            val results = remember(searchQuery, directory) { CampusDirectory.search(searchQuery, directory) }
+            AnimatedVisibility(results.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
+                Column {
+                    Spacer(Modifier.height(6.dp))
+                    LazyColumn(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 300.dp)
+                            .shadow(8.dp, RoundedCornerShape(Tokens.RadiusControl))
+                            .clip(RoundedCornerShape(Tokens.RadiusControl))
+                            .background(c.bg)
+                            .padding(vertical = 4.dp),
+                    ) {
+                        items(results, key = { (if (it.isRoom) "r/" else "b/") + it.title }) { place ->
+                            SearchResultRow(
+                                place = place,
+                                onOpen = { flyTo(place.building.lat, place.building.lng, 18.0) },
+                                onGo = { searchQuery = ""; navigator.go(place.query) },
+                            )
                         }
                     }
                 }
             }
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(stringResource(R.string.map_friends), showFriends, c.accent) { showFriends = !showFriends }
                 FilterChip(stringResource(R.string.map_classmates), showClassmates, c.accent2) { showClassmates = !showClassmates }
+                Spacer(Modifier.weight(1f))
+                // Indoor navigation in MB (floor plans + step tracking, from the algorythme branch)
+                IndoorChip { navigator.indoor() }
             }
         }
 
@@ -321,6 +296,8 @@ fun MapScreen() {
                     }
                 }
                 if (hasPermission) Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
+                com.lync.app.ui.indoor.ThemeToggleButton()
                 Spacer(Modifier.width(8.dp))
                 Box(
                     Modifier.size(48.dp).shadow(8.dp, CircleShape).clip(CircleShape).background(c.bg)
@@ -442,6 +419,19 @@ private fun GhostToggle(ghost: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
+private fun IndoorChip(onClick: () -> Unit) {
+    val c = Campus.colors
+    Row(
+        Modifier.shadow(6.dp, CircleShape).clip(CircleShape).background(c.bg).pressable(onClick).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.MeetingRoom, null, tint = c.text, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(stringResource(R.string.indoor_open), style = MaterialTheme.typography.labelLarge, color = c.text)
+    }
+}
+
+@Composable
 private fun FilterChip(label: String, on: Boolean, dot: Color, onClick: () -> Unit) {
     val c = Campus.colors
     Row(
@@ -499,6 +489,37 @@ private fun PersonChip(pin: MapPin, selected: Boolean, onClick: () -> Unit) {
             Text(pin.profile.firstName, style = MaterialTheme.typography.titleSmall, color = c.text)
             if (isLive(pin)) Text(stringResource(R.string.map_live), style = MaterialTheme.typography.bodySmall, color = Color(0xFF1FA463))
             else Text(stringResource(R.string.map_updated, ago), style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+        }
+    }
+}
+
+@Composable
+private fun SearchResultRow(place: PlaceSuggestion, onOpen: () -> Unit, onGo: () -> Unit) {
+    val c = Campus.colors
+    Row(
+        Modifier.fillMaxWidth().pressable(onGo, scaleDown = 0.98f).padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(36.dp).clip(CircleShape).background(c.accentSoft).pressable(onOpen, 0.9f), contentAlignment = Alignment.Center) {
+            Icon(if (place.isRoom) Icons.Rounded.MeetingRoom else Icons.Rounded.Apartment, null, tint = c.accent, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(place.title, style = MaterialTheme.typography.titleSmall, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val sub = listOfNotNull(
+                place.subtitle.takeIf { it.isNotBlank() && it != place.title },
+                place.floor?.let { stringResource(R.string.indoor_floor, it.toString()) },
+            ).joinToString(" · ")
+            if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.bodySmall, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(8.dp))
+        Row(
+            Modifier.clip(CircleShape).background(c.accent).pressable(onGo, 0.92f).padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.AutoMirrored.Rounded.DirectionsWalk, null, tint = c.onAccent, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(stringResource(R.string.go_directions), style = MaterialTheme.typography.labelLarge, color = c.onAccent)
         }
     }
 }
