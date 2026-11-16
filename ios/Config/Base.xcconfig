@@ -1,6 +1,8 @@
-// Shared build settings. Supabase keys live in Secrets.xcconfig (not committed).
-// Without it, the app runs on built-in demo data.
+// Shared build settings.
+// Backend.xcconfig (committed) = shared Lync backend, so codes scan across iOS and Android.
+// Secrets.xcconfig (optional, not committed) overrides it. With no keys: built-in demo data.
 SUPABASE_URL =
 SUPABASE_KEY =
 LYNC_DEMO = NO
+#include? "Backend.xcconfig"
 #include? "Secrets.xcconfig"

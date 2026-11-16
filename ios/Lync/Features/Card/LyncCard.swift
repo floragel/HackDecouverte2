@@ -190,7 +190,7 @@ struct LyncCardBack: View {
                         Text(university?.shortName ?? "").font(.display(14 * k, "SemiBold")).foregroundStyle(Tokens.slate)
                         Spacer()
                         Text(L("card_scan_me")).font(.display(20 * k)).foregroundStyle(Tokens.night)
-                        Text(L("card_tap_nfc")).font(.text(12 * k)).foregroundStyle(Tokens.slate).padding(.top, 6 * k)
+                        Text(L("card_scan_hint_ios")).font(.text(12 * k)).foregroundStyle(Tokens.slate).padding(.top, 6 * k)
                         Spacer()
                         Text("@\(profile.username)").font(.text(11 * k)).foregroundStyle(Tokens.slate).lineLimit(1)
                     }

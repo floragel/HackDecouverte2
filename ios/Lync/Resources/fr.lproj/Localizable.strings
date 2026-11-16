@@ -281,3 +281,16 @@
 "calendar_msg_error_import" = "Erreur d'import : fichier invalide ou vide";
 "calendar_msg_error_url" = "Erreur de lien : vérifie l'adresse URL";
 "calendar_duration_minutes" = "%1$ld min";
+
+/* NFC (lecteur iOS) */
+"nfc_hold_near" = "Approche ton iPhone d'un téléphone Android qui affiche sa carte Lync, ou d'un autocollant Lync.";
+"nfc_one_at_a_time" = "Plusieurs puces détectées. Approche-en une seule.";
+"nfc_success" = "Connecté ✓";
+"nfc_read_failed" = "Lecture impossible. Réessaie, un peu plus près.";
+"nfc_not_lync" = "Ce n'est pas une carte ni un autocollant Lync.";
+"nfc_card_hidden" = "Demande-lui de tourner son téléphone à l'horizontale pour afficher sa carte Lync.";
+"card_scan_hint_ios" = "Ouvre le scanner de Lync et vise ce code.";
+
+"scan_self" = "C'est ton propre code 🙂";
+"scan_not_found" = "Code %@ lu, mais aucun compte Lync ne l'a. Son app est en mode démo ou dans une autre université ?";
+"scan_error" = "Impossible de joindre Lync. Vérifie ta connexion et réessaie.";

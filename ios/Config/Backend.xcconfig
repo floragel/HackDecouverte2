@@ -1,0 +1,5 @@
+// Shared Lync backend, used by every iOS build (same values as ../../backend.properties).
+// Put ONLY the publishable key here (sb_publishable_...), never a secret/service key.
+// Note: "//" starts an xcconfig comment, hence the $() trick in the URL.
+SUPABASE_URL = https:/$()/qclbrchrhmdambhllztb.supabase.co
+SUPABASE_KEY =sb_publishable_wE_eAII2y5u5y04Ajif8bA_4bXz7K9U

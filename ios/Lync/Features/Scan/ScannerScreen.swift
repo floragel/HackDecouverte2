@@ -10,7 +10,8 @@ struct ScannerScreen: View {
     @Environment(\.palette) private var c
     @State private var found: Person?
     @State private var lookingUp = false
-    @State private var notFound = false
+    @State private var problem: String?          // why the last scan didn't connect
+    @State private var lastFailed: (code: Int64, at: Date)?
     @State private var celebrating = false
     @State private var cameraAllowed = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
     @State private var pulse = false
@@ -44,7 +45,7 @@ struct ScannerScreen: View {
                 Spacer()
                 Text(L("scan_title")).font(.display(28)).foregroundStyle(.white)
                 Text(L(cameraAllowed ? "scan_hint" : "scan_need_camera")).font(.text(14)).foregroundStyle(.white.opacity(0.75)).multilineTextAlignment(.center)
-                if NFCTagReaderSession.readingAvailable {
+                if NFCCardReader.available {
                     Button { nfc.start { onCode($0, source: "nfc") } } label: {
                         Label(L("scan_nfc_ready"), systemImage: "wave.3.right").font(.text(14, "SemiBold")).foregroundStyle(.white)
                             .padding(.horizontal, 14).padding(.vertical, 9).background(Capsule().fill(.white.opacity(0.15)))
@@ -63,7 +64,10 @@ struct ScannerScreen: View {
                     }
                     .padding(.top, 10)
                 }
-                if notFound { Text(L("net_scan_invalid")).font(.text(14, "SemiBold")).foregroundStyle(.white).padding(.top, 10) }
+                if let problem {
+                    Text(problem).font(.text(14, "SemiBold")).foregroundStyle(.white).multilineTextAlignment(.center)
+                        .padding(.horizontal, 14).padding(.vertical, 9).background(Capsule().fill(.black.opacity(0.45))).padding(.top, 10)
+                }
             }
             .padding(16).padding(.bottom, 24)
 
@@ -76,7 +80,7 @@ struct ScannerScreen: View {
                         Text(programLine(p.profile)).lyncText(.bodyMedium, c.textMuted)
                         Text(L(p.connection == .connected ? "scan_connected" : "scan_requested", p.profile.firstName)).lyncText(.titleSmall, c.accent).padding(.top, 10)
                         HStack(spacing: 8) {
-                            Pill(text: L("scan_again"), style: .tonal, fullWidth: true, vertical: 12) { found = nil; notFound = false }
+                            Pill(text: L("scan_again"), style: .tonal, fullWidth: true, vertical: 12) { found = nil; problem = nil; lastFailed = nil }
                             Pill(text: L("scan_view_profile"), fullWidth: true, vertical: 12) { let id = p.id; router.back(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { router.user(id) } }
                         }
                         .padding(.top, 18)
@@ -92,20 +96,33 @@ struct ScannerScreen: View {
         .task {
             if !cameraAllowed { cameraAllowed = await AVCaptureDevice.requestAccess(for: .video) }
         }
+        .onDisappear { nfc.stop() }
     }
 
     private func onCode(_ code: Int64, source: String) {
         guard found == nil, !lookingUp else { return }
+        // the camera keeps seeing the same code: don't re-query it every frame after a failure
+        if let f = lastFailed, f.code == code, Date().timeIntervalSince(f.at) < 4 { return }
+        if code == env.me?.lyncCode { problem = L("scan_self"); lastFailed = (code, Date()); return }
         lookingUp = true
         Task {
-            if let person = try? await env.repository.profileByCode(code) {
+            defer { lookingUp = false }
+            do {
+                guard let person = try await env.repository.profileByCode(code) else {
+                    // a valid Lync code (its checksum passed) that isn't in this server's database:
+                    // the other phone is in demo mode, on another backend, or at another university
+                    problem = L("scan_not_found", String(code)); lastFailed = (code, Date()); return
+                }
+                problem = nil
                 if person.connection == .none { try? await env.repository.connect(person.id, source: source) }
                 let fresh = (try? await env.repository.profile(person.id)) ?? person
                 withAnimation { found = fresh; celebrating = true }
-            } else { notFound = true }
-            lookingUp = false
+            } catch {
+                problem = L("scan_error"); lastFailed = (code, Date())
+            }
         }
     }
+
 }
 
 /// Camera preview + live Lync code decoding on the luma plane.
@@ -178,51 +195,96 @@ struct CameraScanner: UIViewRepresentable {
 }
 
 /**
- * NFC reader: talks to an Android phone showing its card (Host Card Emulation, AID F04C594E4301)
- * or reads a Lync NFC sticker (NDEF "https://lync.app/c/<code>").
- * iPhones can read but not emulate a card — so an iPhone shows its Lync code instead.
- * Requires the "NFC Tag Reading" capability (paid Apple developer account).
+ * NFC reader (Core NFC, needs the "NFC Tag Reading" capability — paid developer account).
+ *  - Android phone showing its card: Host Card Emulation, AID F04C594E4301 → 4-byte code + 9000.
+ *  - Lync sticker: NDEF URI "https://lync.app/c/<code>" on NTAG/Ultralight (MIFARE), Type 4 (ISO 7816)
+ *    or ISO 15693 tags.
+ * iPhones can read but not emulate a card, so iPhone ↔ iPhone goes through the camera code.
  */
-@Observable
 final class NFCCardReader: NSObject, NFCTagReaderSessionDelegate {
     private var session: NFCTagReaderSession?
     private var onCode: ((Int64) -> Void)?
-    private static let aid: [UInt8] = [0xF0, 0x4C, 0x59, 0x4E, 0x43, 0x01]
+    static let aid = Data([0xF0, 0x4C, 0x59, 0x4E, 0x43, 0x01])
+    static var available: Bool { NFCTagReaderSession.readingAvailable }
 
     func start(_ onCode: @escaping (Int64) -> Void) {
-        guard NFCTagReaderSession.readingAvailable else { return }
+        guard Self.available, session == nil else { return }
         self.onCode = onCode
-        session = NFCTagReaderSession(pollingOption: [.iso14443], delegate: self)
-        session?.alertMessage = L("card_tap_nfc")
+        session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self, queue: nil)
+        session?.alertMessage = L("nfc_hold_near")
         session?.begin()
     }
 
+    func stop() { session?.invalidate(); session = nil }
+
     func tagReaderSessionDidBecomeActive(_ session: NFCTagReaderSession) {}
-    func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {}
+
+    func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
+        DispatchQueue.main.async { if self.session === session { self.session = nil } }
+    }
 
     func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
+        if tags.count > 1 {
+            session.alertMessage = L("nfc_one_at_a_time")
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.6) { session.restartPolling() }
+            return
+        }
         guard let tag = tags.first else { return }
         session.connect(to: tag) { [weak self] error in
-            guard let self, error == nil else { session.invalidate(); return }
+            guard let self else { return }
+            if error != nil { return self.fail(session, L("nfc_read_failed")) }
             switch tag {
             case .iso7816(let card):
-                let apdu = NFCISO7816APDU(instructionClass: 0x00, instructionCode: 0xA4, p1Parameter: 0x04, p2Parameter: 0x00, data: Data(Self.aid), expectedResponseLength: 256)
-                card.sendCommand(apdu: apdu) { data, sw1, sw2, _ in
-                    if sw1 == 0x90, sw2 == 0x00, data.count == 4 {
-                        let code = data.reduce(Int64(0)) { ($0 << 8) | Int64($1) }
-                        DispatchQueue.main.async { self.onCode?(code) }
-                        session.alertMessage = "✓"; session.invalidate()
-                    } else { session.invalidate() }
-                }
-            case .miFare(let tag):
-                tag.readNDEF { msg, _ in
-                    let code = msg?.records.compactMap { $0.wellKnownTypeURIPayload()?.absoluteString }.compactMap(Self.parseUri).first
-                    if let code { DispatchQueue.main.async { self.onCode?(code) } }
-                    session.invalidate()
-                }
-            default: session.invalidate()
+                if card.initialSelectedAID.uppercased() == "F04C594E4301" { self.askAndroidCard(card, session) }
+                else { self.readNDEF(card, session) } // Type 4 sticker
+            case .miFare(let t): self.readNDEF(t, session)
+            case .iso15693(let t): self.readNDEF(t, session)
+            default: self.fail(session, L("nfc_not_lync"))
             }
         }
+    }
+
+    /// The Android card answers SELECT with its code (the discovery SELECT's response isn't exposed, so ask again).
+    private func askAndroidCard(_ card: NFCISO7816Tag, _ session: NFCTagReaderSession) {
+        let apdu = NFCISO7816APDU(instructionClass: 0x00, instructionCode: 0xA4, p1Parameter: 0x04, p2Parameter: 0x00, data: Self.aid, expectedResponseLength: 256)
+        card.sendCommand(apdu: apdu) { data, sw1, sw2, error in
+            if let code = Self.parseResponse(data, sw1, sw2), error == nil { self.finish(code, session) }
+            else { self.fail(session, L("nfc_card_hidden")) }
+        }
+    }
+
+    private func readNDEF(_ tag: NFCNDEFTag, _ session: NFCTagReaderSession) {
+        tag.queryNDEFStatus { status, _, error in
+            guard error == nil, status != .notSupported else { return self.fail(session, L("nfc_not_lync")) }
+            tag.readNDEF { message, _ in
+                if let code = message.flatMap(Self.code(in:)) { self.finish(code, session) }
+                else { self.fail(session, L("nfc_not_lync")) }
+            }
+        }
+    }
+
+    private func finish(_ code: Int64, _ session: NFCTagReaderSession) {
+        session.alertMessage = L("nfc_success")
+        session.invalidate()
+        DispatchQueue.main.async { self.onCode?(code) }
+    }
+
+    private func fail(_ session: NFCTagReaderSession, _ message: String) { session.invalidate(errorMessage: message) }
+
+    // MARK: parsing (pure, unit-tested)
+
+    static func parseResponse(_ data: Data, _ sw1: UInt8, _ sw2: UInt8) -> Int64? {
+        guard sw1 == 0x90, sw2 == 0x00, data.count == 4 else { return nil }
+        let code = data.reduce(Int64(0)) { ($0 << 8) | Int64($1) }
+        return code > 0 ? code : nil
+    }
+
+    static func code(in message: NFCNDEFMessage) -> Int64? {
+        for record in message.records {
+            if let url = record.wellKnownTypeURIPayload(), let code = parseUri(url.absoluteString) { return code }
+            if let text = String(data: record.payload, encoding: .utf8), let code = parseUri(text) { return code }
+        }
+        return nil
     }
 
     static func parseUri(_ uri: String) -> Int64? {

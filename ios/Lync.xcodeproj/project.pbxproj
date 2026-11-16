@@ -62,6 +62,7 @@
 		27F5B97FC9FC42ABC66E6681 /* bricolage.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = bricolage.ttf; sourceTree = "<group>"; };
 		3B56CA9555DD985D7CED09B9 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		3CFFA49031239BBC750EC55F /* figtree.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = figtree.ttf; sourceTree = "<group>"; };
+		4426CF3D1D4C00528CD50FD3 /* Lync.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Lync.entitlements; sourceTree = "<group>"; };
 		44961972A89DA92B2F0A183D /* CalendarScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarScreen.swift; sourceTree = "<group>"; };
 		4CA9BE149A22C5F15A9F896C /* Events.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Events.swift; sourceTree = "<group>"; };
 		503E49C2A3BCE23F1D175D45 /* CampusRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampusRepository.swift; sourceTree = "<group>"; };
@@ -114,6 +115,7 @@
 			isa = PBXGroup;
 			children = (
 				8CFB80A19D5C9271FCDF4402 /* Info.plist */,
+				4426CF3D1D4C00528CD50FD3 /* Lync.entitlements */,
 				445E3C0F6B0C660E17579F94 /* App */,
 				D7A0FCB7B1F75EBC2E0DD2B4 /* Code */,
 				94F6834539B9DDE94B6BA50A /* Data */,
@@ -390,6 +392,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					6F227DE7F771EC2DB82BBB65 = {
+						DevelopmentTeam = 8SB6YUB3C6;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -562,9 +565,11 @@
 			baseConfigurationReference = 94AF0DC1DDAFF4E1C82ED29A /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Lync/Lync.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8SB6YUB3C6;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Lync/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -572,7 +577,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.lync.app;
+				PRODUCT_BUNDLE_IDENTIFIER = app.lync.campus.ios;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -584,9 +589,11 @@
 			baseConfigurationReference = 94AF0DC1DDAFF4E1C82ED29A /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Lync/Lync.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8SB6YUB3C6;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Lync/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -594,7 +601,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.lync.app;
+				PRODUCT_BUNDLE_IDENTIFIER = app.lync.campus.ios;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;

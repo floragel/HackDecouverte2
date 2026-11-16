@@ -281,3 +281,16 @@
 "calendar_msg_error_import" = "Import error: invalid or empty calendar file";
 "calendar_msg_error_url" = "Link error: check the calendar URL";
 "calendar_duration_minutes" = "%1$ld min";
+
+/* NFC (iOS reader) */
+"nfc_hold_near" = "Hold your iPhone near an Android phone showing its Lync card, or a Lync sticker.";
+"nfc_one_at_a_time" = "More than one tag found. Tap just one.";
+"nfc_success" = "Connected ✓";
+"nfc_read_failed" = "Couldn't read it. Try again, a bit closer.";
+"nfc_not_lync" = "This isn't a Lync card or sticker.";
+"nfc_card_hidden" = "Ask them to turn their phone sideways to show their Lync card.";
+"card_scan_hint_ios" = "Open the scanner in Lync and point it at this code.";
+
+"scan_self" = "That's your own code 🙂";
+"scan_not_found" = "Code %@ read, but no Lync account has it. Is their app in demo mode or at another university?";
+"scan_error" = "Couldn't reach Lync. Check your connection and try again.";

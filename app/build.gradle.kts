@@ -7,11 +7,16 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// Supabase keys live in local.properties (never committed):
-//   supabase.url=https://xxxx.supabase.co
-//   supabase.anonKey=eyJ...
-// Without them the app runs on built-in demo data.
-val localProps = Properties().apply {
+// Shared Lync backend: backend.properties (committed) gives every build — Android and iOS,
+// whoever builds it — the same database, so Lync codes scan across platforms.
+// Only the *publishable* key goes there (it is meant to ship in apps; data is protected by
+// row-level security). local.properties can override it with another project.
+// With no keys at all the app runs on built-in demo data.
+val backendProps = Properties().apply {
+    val f = rootProject.file("backend.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val localProps = Properties(backendProps).apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }

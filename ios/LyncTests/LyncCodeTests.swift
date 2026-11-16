@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import Lync
 
 /// Port of Android `LyncCodeTest.kt`: encode/decode round trips and decoding rendered camera frames.
@@ -71,6 +72,15 @@ final class LyncCodeTests: XCTestCase {
         XCTAssertEqual(NFCCardReader.parseUri("https://lync.app/c/123456"), 123_456)
         XCTAssertNil(NFCCardReader.parseUri("https://example.com/c/1"))
         XCTAssertNil(NFCCardReader.parseUri("https://lync.app/c/99999999999"))
+    }
+
+    /// Same bytes as Android `NfcCard.response()`: big-endian 32-bit code, then 90 00.
+    func testNfcCardResponseParsing() {
+        XCTAssertEqual(NFCCardReader.parseResponse(Data([0xDE, 0xAD, 0xBE, 0xEF]), 0x90, 0x00), 0xDEADBEEF)
+        XCTAssertEqual(NFCCardReader.parseResponse(Data([0x00, 0x00, 0x00, 0x2A]), 0x90, 0x00), 42)
+        XCTAssertNil(NFCCardReader.parseResponse(Data(), 0x6A, 0x82))                  // card not on screen
+        XCTAssertNil(NFCCardReader.parseResponse(Data([0x01, 0x02, 0x03]), 0x90, 0x00)) // wrong length
+        XCTAssertNil(NFCCardReader.parseResponse(Data([0, 0, 0, 0]), 0x90, 0x00))      // no code
     }
 }
 
@@ -148,5 +158,40 @@ final class IcsParserTests: XCTestCase {
         XCTAssertEqual(Calendar.current.component(.weekday, from: week[0]), 2)
         XCTAssertEqual(Calendar.current.component(.day, from: week[0]), 9)
         XCTAssertEqual(Calendar.current.component(.day, from: week[6]), 15)
+    }
+}
+
+/// Renders the real SwiftUI `LyncCodeView` (what the back of the iPhone card shows) and decodes it,
+/// so an Android or iPhone camera is guaranteed to read the code an iPhone draws.
+@MainActor
+final class LyncCodeRenderTests: XCTestCase {
+    private func luma(of view: some View, size: CGFloat) -> (w: Int, h: Int, px: [UInt8])? {
+        let renderer = ImageRenderer(content: view.frame(width: size, height: size).padding(size * 0.15).background(Color.white))
+        renderer.scale = 1
+        guard let cg = renderer.cgImage else { return nil }
+        let w = cg.width, h = cg.height
+        var px = [UInt8](repeating: 255, count: w * h)
+        let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)
+        ctx?.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        return (w, h, px)
+    }
+
+    func testRenderedCardCodeDecodes() throws {
+        let concordia = Color(hex: 0x912338)
+        for code: Int64 in [1, 42, 0x1A2B3C4D, 987_654_321, 0xCAFEBABE, 0xFFFFFFFF, 0x80000001, 0x0F0F0F0F] {
+            let img = try XCTUnwrap(luma(of: LyncCodeView(code: code, ink: Tokens.night, data: concordia), size: 360))
+            let decoded = LyncCode.decode(width: img.w, height: img.h) { x, y in Int(img.px[y * img.w + x]) }
+            XCTAssertEqual(decoded, code, "iPhone-drawn code \(code) must decode")
+        }
+    }
+
+    /// Same code seen upside down / sideways (phone held any way) still decodes.
+    func testRenderedCodeDecodesRotated() throws {
+        let code: Int64 = 0x5EED1234
+        for degrees in [90.0, 180.0, 33.0] {
+            let view = LyncCodeView(code: code, ink: Tokens.night, data: Color(hex: 0x912338)).rotationEffect(.degrees(degrees))
+            let img = try XCTUnwrap(luma(of: view, size: 360))
+            XCTAssertEqual(LyncCode.decode(width: img.w, height: img.h) { x, y in Int(img.px[y * img.w + x]) }, code, "rotated \(degrees)°")
+        }
     }
 }

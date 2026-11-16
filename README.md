@@ -13,11 +13,15 @@ Starting with Concordia. Bilingual EN (default) / FR. Android first (Kotlin + Je
 
 1. Create a project on supabase.com → SQL Editor → paste and run [`supabase/schema.sql`](supabase/schema.sql).
 2. Authentication → Providers → Email: for the hackathon, turn off "Confirm email".
-3. Add to `local.properties` (never committed):
-   ```
-   supabase.url=https://YOUR-PROJECT.supabase.co
-   supabase.anonKey=YOUR-ANON-KEY
-   ```
+3. Fill in the **shared** backend so every build (Android and iOS, whoever builds it) uses the same
+   database and Lync codes scan across platforms. Both files are committed:
+   - [`backend.properties`](backend.properties) (Android): `supabase.url=…` and `supabase.anonKey=sb_publishable_…`
+   - [`ios/Config/Backend.xcconfig`](ios/Config/Backend.xcconfig) (iOS): `SUPABASE_URL = https:/$()/YOUR-PROJECT.supabase.co` and `SUPABASE_KEY = sb_publishable_…`
+
+   Only ever put the **publishable** key there (never a secret / service-role key): it is meant to ship
+   in apps, and the data is protected by the row-level security in `schema.sql`.
+   To use another project on your machine only, override in `local.properties` (Android) or
+   `ios/Config/Secrets.xcconfig` (iOS), neither committed.
 4. Rebuild. The app switches to the real backend automatically.
 
 ## Features (network side)
