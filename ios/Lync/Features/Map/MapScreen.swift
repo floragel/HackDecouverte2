@@ -7,6 +7,8 @@ import MapKit
 struct MapScreen: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.palette) private var c
+    @Environment(Router.self) private var router
+    @State private var directory: [PlaceSuggestion] = []
     @State private var camera: MapCameraPosition = .region(MKCoordinateRegion(center: .init(latitude: 45.4965, longitude: -73.5785), latitudinalMeters: 900, longitudinalMeters: 900))
     @State private var pins: [MapPin] = []
     @State private var showFriends = true
@@ -34,6 +36,7 @@ struct MapScreen: View {
         }
         .ignoresSafeArea(.keyboard)
         .background(c.surface)
+        .task { if directory.isEmpty { directory = await Task.detached(priority: .utility) { CampusDirectory.rooms() }.value } }
         .task {
             for await list in env.repository.mapPins() { withAnimation(.easeInOut(duration: 1.2)) { pins = list } }
         }
@@ -84,37 +87,36 @@ struct MapScreen: View {
                 ghostToggle
             }
             searchBar
-            let rooms = query.trimmingCharacters(in: .whitespaces).isEmpty ? [] : Rooms.search(query)
-            if !rooms.isEmpty {
+            // Concordia buildings + every real JMSB room -> door-to-door directions
+            let results = CampusDirectory.search(query, rooms: directory)
+            if !results.isEmpty {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(rooms) { room in
-                            HStack(spacing: 12) {
-                                Image(systemName: "door.left.hand.open").font(.system(size: 15)).foregroundStyle(c.accent).frame(width: 34, height: 34).background(Circle().fill(c.accentSoft))
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(L("map_room_title", room.name)).lyncText(.bodyLarge)
-                                    Text(L("map_room_floor", room.buildingName, "\(room.floor)")).lyncText(.bodySmall, c.textMuted)
-                                }
-                                Spacer()
-                            }
-                            .padding(.horizontal, 14).padding(.vertical, 10)
-                            .pressable(scale: 0.98) {
-                                let b = Buildings.concordia.first { $0.code == room.buildingCode }
-                                fly(b?.lat ?? 45.49535, b?.lng ?? -73.57905, meters: 160)
-                                query = ""; searching = false
-                            }
+                        ForEach(results) { place in
+                            SearchResultRow(place: place,
+                                            onOpen: { fly(place.building.lat, place.building.lng, meters: 160); searching = false },
+                                            onGo: { query = ""; searching = false; router.go(place.query) })
                         }
                     }
                     .padding(.vertical, 4)
                 }
-                .frame(height: min(CGFloat(rooms.count) * 56 + 8, 232))
-                .background(RoundedRectangle(cornerRadius: Tokens.radiusControl, style: .continuous).fill(c.surface).shadow(color: .black.opacity(0.15), radius: 8, y: 3))
+                .frame(height: min(CGFloat(results.count) * 58 + 8, 300))
+                .background(RoundedRectangle(cornerRadius: Tokens.radiusControl, style: .continuous).fill(c.bg).shadow(color: .black.opacity(0.15), radius: 8, y: 3))
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
             HStack(spacing: 8) {
                 filterChip(L("map_friends"), on: showFriends, dot: c.accent) { showFriends.toggle() }
                 filterChip(L("map_classmates"), on: showClassmates, dot: c.accent2) { showClassmates.toggle() }
                 Spacer()
+                // Indoor navigation in MB (floor plans + step tracking)
+                HStack(spacing: 6) {
+                    Image(systemName: "door.left.hand.open").font(.system(size: 13, weight: .semibold))
+                    Text(L("indoor_open")).lyncText(.labelLarge)
+                }
+                .foregroundStyle(c.text)
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Capsule().fill(c.bg).shadow(color: .black.opacity(0.15), radius: 6, y: 2))
+                .pressable { Haptics.tick(); router.indoor() }
             }
         }
         .padding(16)
@@ -172,6 +174,7 @@ struct MapScreen: View {
                         .transition(.opacity)
                 }
                 Spacer()
+                ThemeToggleButton()
                 Image(systemName: "location.fill").font(.system(size: 18)).foregroundStyle(c.text)
                     .frame(width: 48, height: 48).background(Circle().fill(c.bg).shadow(color: .black.opacity(0.18), radius: 8, y: 3))
                     .pressable(scale: 0.9) {
@@ -298,5 +301,35 @@ private struct PersonChip: View {
         .padding(.leading, 6).padding(.trailing, 14).padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(c.bg).shadow(color: .black.opacity(0.18), radius: 8, y: 3))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(selected ? c.accent : .clear, lineWidth: 1.5))
+    }
+}
+
+/// One search hit: tap the badge to fly there, tap the row or "Directions" for door-to-door guidance.
+private struct SearchResultRow: View {
+    @Environment(\.palette) private var c
+    let place: PlaceSuggestion
+    let onOpen: () -> Void
+    let onGo: () -> Void
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: place.isRoom ? "door.left.hand.open" : "building.2").font(.system(size: 15)).foregroundStyle(c.accent)
+                .frame(width: 36, height: 36).background(Circle().fill(c.accentSoft))
+                .onTapGesture(perform: onOpen)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(place.title).lyncText(.titleSmall).lineLimit(1)
+                let sub = [place.subtitle == place.title || place.subtitle.isEmpty ? nil : place.subtitle, place.floor.map { L("indoor_floor", String($0)) }]
+                    .compactMap { $0 }.joined(separator: " · ")
+                if !sub.isEmpty { Text(sub).lyncText(.bodySmall, c.textMuted).lineLimit(1) }
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 4) {
+                Image(systemName: "figure.walk").font(.system(size: 13, weight: .semibold))
+                Text(L("go_directions")).lyncText(.labelLarge, c.onAccent)
+            }
+            .foregroundStyle(c.onAccent)
+            .padding(.horizontal, 12).padding(.vertical, 7).background(Capsule().fill(c.accent))
+        }
+        .padding(.leading, 14).padding(.trailing, 8).padding(.vertical, 8)
+        .pressable(scale: 0.98, onGo)
     }
 }

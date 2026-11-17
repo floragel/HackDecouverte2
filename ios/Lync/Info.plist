@@ -37,6 +37,8 @@
 	<string>Keep sharing your position with your connections while Lync is in the background. Turn on ghost mode to stop.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Lync shows you on the map to your connections only, when you choose to share. Go ghost anytime.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Lync reads the barometer to know which floor you're on, and counts your steps to guide you inside the building.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose a photo for your post, story or profile.</string>
 	<key>SUPABASE_KEY</key>

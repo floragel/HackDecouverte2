@@ -13,33 +13,54 @@
 		08A64DDF597C8AEE8C3E037E /* SupabaseRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4C7F48310D1ACB2305767CD /* SupabaseRepository.swift */; };
 		08CCB92947638C7CA92CC453 /* StoriesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1038338F0B0ECF7A03A19B7C /* StoriesScreen.swift */; };
 		092A82F2616A93AE29C0E377 /* ComposeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23985EEDA117741A18010028 /* ComposeScreen.swift */; };
+		0B445F3C69AC078E47943588 /* FloorPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD46CF42B95A3FE1278CAE51 /* FloorPlan.swift */; };
+		0C43D05BD33B7FDC59AAA5AA /* PdrTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C359693740631B820936CDE /* PdrTracker.swift */; };
+		1264E6D60CF71B02D381FA76 /* IndoorMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69A2601ECC29C7B1B71CCB60 /* IndoorMapTests.swift */; };
+		189C645EC1E41BE22954DE6C /* PdrCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D4661F73BB6B11250ABA40A /* PdrCore.swift */; };
+		1BD19A4F3D13D5F1D6B38039 /* NavCommon.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9A9B28F5EAE1071907F920 /* NavCommon.swift */; };
 		1DD11A965D44346A5EEE9BBB /* ScannerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E37D50C9769F66C1714C0EA /* ScannerScreen.swift */; };
 		221FABD770E736B79139DFA1 /* ProfileScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D7E26D8629930E7F28025EF /* ProfileScreens.swift */; };
+		2954A0125FD4ED986CACEE5B /* PdrEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9315A16DB79DBB628893D403 /* PdrEngineTests.swift */; };
 		2DC5CE9A1F62B98549B9C0C8 /* LyncCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAFA89EDAA88AFDA15928570 /* LyncCard.swift */; };
 		30EFE9D2D3D83F49BE0E3B87 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 373F7C027008B47142946A57 /* Supabase */; };
+		3494FDE9BE9BC46C581EF777 /* BuildingGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2ACF12B230573211FF3502C /* BuildingGraph.swift */; };
+		397A66EB0750FDB91A7E0B38 /* Barometer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3B1331004A17CC85EA8C572 /* Barometer.swift */; };
 		39889AE1A9403DFEBAACBF53 /* Motion.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBEB86CCD5BA333EE59FE39F /* Motion.swift */; };
 		3E81595FD813C30D5D9ED82D /* LyncCodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76C34413DCD23E902A5CEA4D /* LyncCodeTests.swift */; };
+		4713396AFCDD6308A89EB7D9 /* JunctionMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = E438F39B1AC55EF2D88834FE /* JunctionMatcher.swift */; };
+		48D74084B1A9D0DDBA3DF294 /* NavGuidance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51327A8E03AA2200343F66F8 /* NavGuidance.swift */; };
 		558A37D67A1A12299E6FFA1A /* NetworkScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFD83C69894C5D6D02113502 /* NetworkScreen.swift */; };
 		57105A7CC3632C7D3F7FC05C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B56CA9555DD985D7CED09B9 /* RootView.swift */; };
+		58C2D082DAFF4D434448C5F1 /* GoScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183DB2A1D78AB530EE328AB5 /* GoScreen.swift */; };
 		59EE7D58A182C92F5AEAE2CD /* LocationTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7730C69CA68BBDB228769FE /* LocationTracker.swift */; };
 		62DFB5BC2022CB7A5548B2D6 /* Campus.swift in Sources */ = {isa = PBXBuildFile; fileRef = E696DD1B1C54F637BC72B476 /* Campus.swift */; };
+		6D4F5D33D9D03DE56F0ECC73 /* IndoorCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47725703B1EBB4C916797392 /* IndoorCanvas.swift */; };
+		737A36901FE2CFD5C6960289 /* IndoorNavigationBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B3AC2ACDE71C3FC1AC9D00B /* IndoorNavigationBackend.swift */; };
 		78ABED00457FBF0533B30753 /* FeedScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C6FB9BC53B39A810B8AA5E /* FeedScreen.swift */; };
 		7D3AB4A19EC9A9F8D0BA6A54 /* LyncCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8243CBC4F4CC1B93FDFBA11 /* LyncCode.swift */; };
 		7DB89F686E67EE93138F1F46 /* CalendarRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE6A40D0FBDE3592D885F691 /* CalendarRepository.swift */; };
+		7FAFCF488CA44938DEE02F22 /* IndoorScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EBC924AE6D66BE5587782DE /* IndoorScreen.swift */; };
 		8C23BD99955DD0CD2008E491 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = E4B4D2B6AC260D0141946882 /* Localizable.strings */; };
 		8E1806E5CE4EB410A7C64365 /* figtree.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3CFFA49031239BBC750EC55F /* figtree.ttf */; };
+		900CBEA8CF5459C305C42F36 /* FloorVectorPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 296DB947B49D3CE1B4B06E02 /* FloorVectorPlan.swift */; };
 		916ACA0AC8404115906FFD5B /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC2033F34D1CA265D292A947 /* Components.swift */; };
 		917AF092195EBEEB2A1AE76B /* CampusRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 503E49C2A3BCE23F1D175D45 /* CampusRepository.swift */; };
+		9AADF4329A44B0FCDCEBE1C6 /* CampusPlaces.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34307738FDF1999AF31B2DE /* CampusPlaces.swift */; };
 		9ACE2916A91D2C90BE562030 /* Groups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CCB592CF800D616A68DE10E /* Groups.swift */; };
 		9D96599E3C2B3A0C944B5FF0 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6306FB8A7B8E959ADF7EE96 /* Models.swift */; };
+		9DAEB8C688D81164D7846623 /* IndoorAssets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B4102EDD69D07B1EAE0B4E9 /* IndoorAssets.swift */; };
 		A2857EE07AE5DE12810B8495 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2568BAF114B5D68DC946C5C4 /* Theme.swift */; };
 		ADA28A8DA44130B44204D86A /* CalendarScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44961972A89DA92B2F0A183D /* CalendarScreen.swift */; };
 		B0EB2C868B4CD3AE40D2A4CF /* LyncApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 887C5A212B08F4DE6F0E22EA /* LyncApp.swift */; };
 		B16D46A74F0DB62D86481955 /* IcsParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5AA1433311D39B3389C67A0 /* IcsParser.swift */; };
+		B4DF3A95FF9319DB220F5827 /* AccuracyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FF61EBC59476B3772867CC5 /* AccuracyTests.swift */; };
+		B4EE96DD5FFE80BB9A32FC8F /* Indoor in Resources */ = {isa = PBXBuildFile; fileRef = 1387584D1490CED4A2DE0410 /* Indoor */; };
 		B7D4B5DEC9538BC4CF572A20 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 74D4587140BA2A04B04F996B /* Assets.xcassets */; };
 		B9E42AA87032C31D16600D66 /* bricolage.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 27F5B97FC9FC42ABC66E6681 /* bricolage.ttf */; };
 		B9FE930164A23C47A102A7D3 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 516696C5AA38EE4D0490EB2E /* OnboardingFlow.swift */; };
+		C9C3F02476A5ECE3926EC428 /* NavSensors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 168EB56D440DDC9DC9C48C42 /* NavSensors.swift */; };
 		D07089C54A0B7EB351F7C977 /* CalendarModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9D8E336B7924239348C2491 /* CalendarModels.swift */; };
+		DB028944AB3227B50685C5FF /* IndoorDevScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 709198D6A5A84717025880CA /* IndoorDevScreen.swift */; };
 		DD2978B8C76B6ACE7E05AF26 /* DemoRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79F2095697864682AC33DFCB /* DemoRepository.swift */; };
 		DFF2FA741B0E8FC647D1A4B3 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60458579A7B8C2C38B50D156 /* SettingsScreen.swift */; };
 		E43E00F35A7E0E0E1856D9AC /* concordia_programs.json in Resources */ = {isa = PBXBuildFile; fileRef = 6DFB421DF5004ABF5E838201 /* concordia_programs.json */; };
@@ -56,20 +77,34 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0B4102EDD69D07B1EAE0B4E9 /* IndoorAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndoorAssets.swift; sourceTree = "<group>"; };
 		1038338F0B0ECF7A03A19B7C /* StoriesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoriesScreen.swift; sourceTree = "<group>"; };
+		1387584D1490CED4A2DE0410 /* Indoor */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Indoor; path = Lync/Resources/Indoor; sourceTree = SOURCE_ROOT; };
+		168EB56D440DDC9DC9C48C42 /* NavSensors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavSensors.swift; sourceTree = "<group>"; };
+		183DB2A1D78AB530EE328AB5 /* GoScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoScreen.swift; sourceTree = "<group>"; };
+		1B3AC2ACDE71C3FC1AC9D00B /* IndoorNavigationBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndoorNavigationBackend.swift; sourceTree = "<group>"; };
+		1FF61EBC59476B3772867CC5 /* AccuracyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccuracyTests.swift; sourceTree = "<group>"; };
 		23985EEDA117741A18010028 /* ComposeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeScreen.swift; sourceTree = "<group>"; };
 		2568BAF114B5D68DC946C5C4 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		27F5B97FC9FC42ABC66E6681 /* bricolage.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = bricolage.ttf; sourceTree = "<group>"; };
+		296DB947B49D3CE1B4B06E02 /* FloorVectorPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloorVectorPlan.swift; sourceTree = "<group>"; };
 		3B56CA9555DD985D7CED09B9 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		3CFFA49031239BBC750EC55F /* figtree.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = figtree.ttf; sourceTree = "<group>"; };
 		4426CF3D1D4C00528CD50FD3 /* Lync.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Lync.entitlements; sourceTree = "<group>"; };
 		44961972A89DA92B2F0A183D /* CalendarScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarScreen.swift; sourceTree = "<group>"; };
+		47725703B1EBB4C916797392 /* IndoorCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndoorCanvas.swift; sourceTree = "<group>"; };
 		4CA9BE149A22C5F15A9F896C /* Events.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Events.swift; sourceTree = "<group>"; };
+		4EBC924AE6D66BE5587782DE /* IndoorScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndoorScreen.swift; sourceTree = "<group>"; };
 		503E49C2A3BCE23F1D175D45 /* CampusRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampusRepository.swift; sourceTree = "<group>"; };
+		51327A8E03AA2200343F66F8 /* NavGuidance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavGuidance.swift; sourceTree = "<group>"; };
 		516696C5AA38EE4D0490EB2E /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
+		5D4661F73BB6B11250ABA40A /* PdrCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PdrCore.swift; sourceTree = "<group>"; };
 		60458579A7B8C2C38B50D156 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		67F16180B0BAAF7BB6CF1EBC /* LyncTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LyncTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		69A2601ECC29C7B1B71CCB60 /* IndoorMapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndoorMapTests.swift; sourceTree = "<group>"; };
+		6C359693740631B820936CDE /* PdrTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PdrTracker.swift; sourceTree = "<group>"; };
 		6DFB421DF5004ABF5E838201 /* concordia_programs.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = concordia_programs.json; sourceTree = "<group>"; };
+		709198D6A5A84717025880CA /* IndoorDevScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndoorDevScreen.swift; sourceTree = "<group>"; };
 		74D4587140BA2A04B04F996B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		76C34413DCD23E902A5CEA4D /* LyncCodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyncCodeTests.swift; sourceTree = "<group>"; };
 		79F2095697864682AC33DFCB /* DemoRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoRepository.swift; sourceTree = "<group>"; };
@@ -81,21 +116,28 @@
 		8CFB80A19D5C9271FCDF4402 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		8E37D50C9769F66C1714C0EA /* ScannerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerScreen.swift; sourceTree = "<group>"; };
 		8F240A9F2880423E2F597E8F /* Lync.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Lync.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9315A16DB79DBB628893D403 /* PdrEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PdrEngineTests.swift; sourceTree = "<group>"; };
 		94AF0DC1DDAFF4E1C82ED29A /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		A4C7F48310D1ACB2305767CD /* SupabaseRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseRepository.swift; sourceTree = "<group>"; };
 		A9D8E336B7924239348C2491 /* CalendarModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarModels.swift; sourceTree = "<group>"; };
 		AAFA89EDAA88AFDA15928570 /* LyncCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyncCard.swift; sourceTree = "<group>"; };
+		AC9A9B28F5EAE1071907F920 /* NavCommon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavCommon.swift; sourceTree = "<group>"; };
 		B1C768E6CB2693C1FF9ACCF5 /* ShareCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCard.swift; sourceTree = "<group>"; };
 		B6306FB8A7B8E959ADF7EE96 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		BE35B9F55CC8FF7D67C0996C /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/Localizable.strings; sourceTree = "<group>"; };
+		C2ACF12B230573211FF3502C /* BuildingGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildingGraph.swift; sourceTree = "<group>"; };
+		C3B1331004A17CC85EA8C572 /* Barometer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Barometer.swift; sourceTree = "<group>"; };
 		C7730C69CA68BBDB228769FE /* LocationTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationTracker.swift; sourceTree = "<group>"; };
 		CC2033F34D1CA265D292A947 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		CE6A40D0FBDE3592D885F691 /* CalendarRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarRepository.swift; sourceTree = "<group>"; };
 		D5AA1433311D39B3389C67A0 /* IcsParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IcsParser.swift; sourceTree = "<group>"; };
+		E438F39B1AC55EF2D88834FE /* JunctionMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JunctionMatcher.swift; sourceTree = "<group>"; };
 		E696DD1B1C54F637BC72B476 /* Campus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Campus.swift; sourceTree = "<group>"; };
 		E7C6FB9BC53B39A810B8AA5E /* FeedScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedScreen.swift; sourceTree = "<group>"; };
 		E8243CBC4F4CC1B93FDFBA11 /* LyncCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyncCode.swift; sourceTree = "<group>"; };
 		EBEB86CCD5BA333EE59FE39F /* Motion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Motion.swift; sourceTree = "<group>"; };
+		F34307738FDF1999AF31B2DE /* CampusPlaces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CampusPlaces.swift; sourceTree = "<group>"; };
+		FD46CF42B95A3FE1278CAE51 /* FloorPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloorPlan.swift; sourceTree = "<group>"; };
 		FFD83C69894C5D6D02113502 /* NetworkScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkScreen.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -121,6 +163,7 @@
 				94F6834539B9DDE94B6BA50A /* Data */,
 				4B51520121047D82F8D41653 /* Design */,
 				A5F9918FB4C5932AE608DDD4 /* Features */,
+				6702C864286392487406E56C /* Navigation */,
 				7D2C2285072647EE57A584E6 /* Resources */,
 			);
 			path = Lync;
@@ -134,6 +177,17 @@
 			path = Onboarding;
 			sourceTree = "<group>";
 		};
+		165271A0304001A55EB0B955 /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				C2ACF12B230573211FF3502C /* BuildingGraph.swift */,
+				FD46CF42B95A3FE1278CAE51 /* FloorPlan.swift */,
+				296DB947B49D3CE1B4B06E02 /* FloorVectorPlan.swift */,
+				E438F39B1AC55EF2D88834FE /* JunctionMatcher.swift */,
+			);
+			path = Map;
+			sourceTree = "<group>";
+		};
 		22F4DD26AD27EF916A32A981 /* Card */ = {
 			isa = PBXGroup;
 			children = (
@@ -141,6 +195,16 @@
 				B1C768E6CB2693C1FF9ACCF5 /* ShareCard.swift */,
 			);
 			path = Card;
+			sourceTree = "<group>";
+		};
+		361547A0BFAE26D05ACB4F7D /* Engine */ = {
+			isa = PBXGroup;
+			children = (
+				0B4102EDD69D07B1EAE0B4E9 /* IndoorAssets.swift */,
+				1B3AC2ACDE71C3FC1AC9D00B /* IndoorNavigationBackend.swift */,
+				168EB56D440DDC9DC9C48C42 /* NavSensors.swift */,
+			);
+			path = Engine;
 			sourceTree = "<group>";
 		};
 		445E3C0F6B0C660E17579F94 /* App */ = {
@@ -173,6 +237,7 @@
 		56CF868381912477F9B4FB70 = {
 			isa = PBXGroup;
 			children = (
+				1387584D1490CED4A2DE0410 /* Indoor */,
 				E40FD7B1242300973598CCF2 /* Config */,
 				054896667EEB899B31A1CB23 /* Lync */,
 				AA5527D64AAA69ACC1AAF2BE /* LyncTests */,
@@ -197,6 +262,28 @@
 				67F16180B0BAAF7BB6CF1EBC /* LyncTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		6568407BFF153AFCC4B267B6 /* PDR */ = {
+			isa = PBXGroup;
+			children = (
+				C3B1331004A17CC85EA8C572 /* Barometer.swift */,
+				5D4661F73BB6B11250ABA40A /* PdrCore.swift */,
+				6C359693740631B820936CDE /* PdrTracker.swift */,
+			);
+			path = PDR;
+			sourceTree = "<group>";
+		};
+		6702C864286392487406E56C /* Navigation */ = {
+			isa = PBXGroup;
+			children = (
+				361547A0BFAE26D05ACB4F7D /* Engine */,
+				165271A0304001A55EB0B955 /* Map */,
+				6568407BFF153AFCC4B267B6 /* PDR */,
+				EC3431D3814F29C49ECDA224 /* Places */,
+				8CBA5D607B1D10858064EC30 /* UI */,
+			);
+			path = Navigation;
 			sourceTree = "<group>";
 		};
 		6BAA545CD15E1A4FAAF94974 /* Calendar */ = {
@@ -227,6 +314,19 @@
 				E4B4D2B6AC260D0141946882 /* Localizable.strings */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		8CBA5D607B1D10858064EC30 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				183DB2A1D78AB530EE328AB5 /* GoScreen.swift */,
+				47725703B1EBB4C916797392 /* IndoorCanvas.swift */,
+				709198D6A5A84717025880CA /* IndoorDevScreen.swift */,
+				4EBC924AE6D66BE5587782DE /* IndoorScreen.swift */,
+				AC9A9B28F5EAE1071907F920 /* NavCommon.swift */,
+				51327A8E03AA2200343F66F8 /* NavGuidance.swift */,
+			);
+			path = UI;
 			sourceTree = "<group>";
 		};
 		92F190FD817475B52B64DEA1 /* Compose */ = {
@@ -288,7 +388,10 @@
 		AA5527D64AAA69ACC1AAF2BE /* LyncTests */ = {
 			isa = PBXGroup;
 			children = (
+				1FF61EBC59476B3772867CC5 /* AccuracyTests.swift */,
+				69A2601ECC29C7B1B71CCB60 /* IndoorMapTests.swift */,
 				76C34413DCD23E902A5CEA4D /* LyncCodeTests.swift */,
+				9315A16DB79DBB628893D403 /* PdrEngineTests.swift */,
 			);
 			path = LyncTests;
 			sourceTree = "<group>";
@@ -323,6 +426,14 @@
 				94AF0DC1DDAFF4E1C82ED29A /* Base.xcconfig */,
 			);
 			path = Config;
+			sourceTree = "<group>";
+		};
+		EC3431D3814F29C49ECDA224 /* Places */ = {
+			isa = PBXGroup;
+			children = (
+				F34307738FDF1999AF31B2DE /* CampusPlaces.swift */,
+			);
+			path = Places;
 			sourceTree = "<group>";
 		};
 		EC5807BF25B0DCD2E7178E0F /* Profile */ = {
@@ -427,6 +538,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B7D4B5DEC9538BC4CF572A20 /* Assets.xcassets in Resources */,
+				B4EE96DD5FFE80BB9A32FC8F /* Indoor in Resources */,
 				8C23BD99955DD0CD2008E491 /* Localizable.strings in Resources */,
 				B9E42AA87032C31D16600D66 /* bricolage.ttf in Resources */,
 				E43E00F35A7E0E0E1856D9AC /* concordia_programs.json in Resources */,
@@ -441,18 +553,30 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				397A66EB0750FDB91A7E0B38 /* Barometer.swift in Sources */,
+				3494FDE9BE9BC46C581EF777 /* BuildingGraph.swift in Sources */,
 				D07089C54A0B7EB351F7C977 /* CalendarModels.swift in Sources */,
 				7DB89F686E67EE93138F1F46 /* CalendarRepository.swift in Sources */,
 				ADA28A8DA44130B44204D86A /* CalendarScreen.swift in Sources */,
 				62DFB5BC2022CB7A5548B2D6 /* Campus.swift in Sources */,
+				9AADF4329A44B0FCDCEBE1C6 /* CampusPlaces.swift in Sources */,
 				917AF092195EBEEB2A1AE76B /* CampusRepository.swift in Sources */,
 				916ACA0AC8404115906FFD5B /* Components.swift in Sources */,
 				092A82F2616A93AE29C0E377 /* ComposeScreen.swift in Sources */,
 				DD2978B8C76B6ACE7E05AF26 /* DemoRepository.swift in Sources */,
 				02400C9F44F86A153A7F397F /* Events.swift in Sources */,
 				78ABED00457FBF0533B30753 /* FeedScreen.swift in Sources */,
+				0B445F3C69AC078E47943588 /* FloorPlan.swift in Sources */,
+				900CBEA8CF5459C305C42F36 /* FloorVectorPlan.swift in Sources */,
+				58C2D082DAFF4D434448C5F1 /* GoScreen.swift in Sources */,
 				9ACE2916A91D2C90BE562030 /* Groups.swift in Sources */,
 				B16D46A74F0DB62D86481955 /* IcsParser.swift in Sources */,
+				9DAEB8C688D81164D7846623 /* IndoorAssets.swift in Sources */,
+				6D4F5D33D9D03DE56F0ECC73 /* IndoorCanvas.swift in Sources */,
+				DB028944AB3227B50685C5FF /* IndoorDevScreen.swift in Sources */,
+				737A36901FE2CFD5C6960289 /* IndoorNavigationBackend.swift in Sources */,
+				7FAFCF488CA44938DEE02F22 /* IndoorScreen.swift in Sources */,
+				4713396AFCDD6308A89EB7D9 /* JunctionMatcher.swift in Sources */,
 				59EE7D58A182C92F5AEAE2CD /* LocationTracker.swift in Sources */,
 				B0EB2C868B4CD3AE40D2A4CF /* LyncApp.swift in Sources */,
 				2DC5CE9A1F62B98549B9C0C8 /* LyncCard.swift in Sources */,
@@ -460,8 +584,13 @@
 				049739C2AB62C617C8644B5C /* MapScreen.swift in Sources */,
 				9D96599E3C2B3A0C944B5FF0 /* Models.swift in Sources */,
 				39889AE1A9403DFEBAACBF53 /* Motion.swift in Sources */,
+				1BD19A4F3D13D5F1D6B38039 /* NavCommon.swift in Sources */,
+				48D74084B1A9D0DDBA3DF294 /* NavGuidance.swift in Sources */,
+				C9C3F02476A5ECE3926EC428 /* NavSensors.swift in Sources */,
 				558A37D67A1A12299E6FFA1A /* NetworkScreen.swift in Sources */,
 				B9FE930164A23C47A102A7D3 /* OnboardingFlow.swift in Sources */,
+				189C645EC1E41BE22954DE6C /* PdrCore.swift in Sources */,
+				0C43D05BD33B7FDC59AAA5AA /* PdrTracker.swift in Sources */,
 				221FABD770E736B79139DFA1 /* ProfileScreens.swift in Sources */,
 				57105A7CC3632C7D3F7FC05C /* RootView.swift in Sources */,
 				1DD11A965D44346A5EEE9BBB /* ScannerScreen.swift in Sources */,
@@ -477,7 +606,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B4DF3A95FF9319DB220F5827 /* AccuracyTests.swift in Sources */,
+				1264E6D60CF71B02D381FA76 /* IndoorMapTests.swift in Sources */,
 				3E81595FD813C30D5D9ED82D /* LyncCodeTests.swift in Sources */,
+				2954A0125FD4ED986CACEE5B /* PdrEngineTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

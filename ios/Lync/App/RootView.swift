@@ -6,7 +6,7 @@ enum Tab: String, CaseIterable { case home, network, calendar, map, profile
     var icon: String { switch self { case .home: "house"; case .network: "person.2"; case .calendar: "calendar"; case .map: "map"; case .profile: "person" } }
 }
 
-enum Route: Hashable { case user(String), event(String), group(String), editProfile, settings }
+enum Route: Hashable { case user(String), event(String), group(String), editProfile, settings, indoor, go(String), indoorDev }
 enum Cover: Identifiable, Hashable { case compose(story: Bool), stories(String), scan
     var id: String { switch self { case .compose(let s): "compose\(s)"; case .stories(let id): "stories\(id)"; case .scan: "scan" } }
 }
@@ -22,6 +22,11 @@ final class Router {
     func group(_ id: String) { path.append(.group(id)) }
     func editProfile() { path.append(.editProfile) }
     func settings() { path.append(.settings) }
+    /// MB floor plans with step tracking ("Find a room").
+    func indoor() { if path.last != .indoor { path.append(.indoor) } }
+    /// Door-to-door directions to a room or building ("MB-2.210", "H-920", "JMSB, MB-1.437").
+    func go(_ place: String) { if path.last != .go(place) { path.append(.go(place)) } }
+    func indoorDev() { path.append(.indoorDev) }
     func compose(story: Bool = false) { cover = .compose(story: story) }
     func stories(_ profileId: String) { cover = .stories(profileId) }
     func scan() { cover = .scan }
@@ -110,6 +115,9 @@ struct MainView: View {
                     case .group(let id): GroupScreen(id: id)
                     case .editProfile: EditProfileScreen()
                     case .settings: SettingsScreen()
+                    case .indoor: IndoorScreen()
+                    case .go(let place): GoScreen(query: place)
+                    case .indoorDev: IndoorDevScreen()
                     }
                 }
                 .toolbar(.hidden, for: .navigationBar)

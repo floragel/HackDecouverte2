@@ -199,7 +199,11 @@ private struct CalendarContent: View {
         }
         .sheet(item: $model.detail) { item in
             CalendarDetailSheet(item: item,
-                                onMap: { model.detail = nil; router.map() },
+                                onMap: {
+                                    model.detail = nil
+                                    // door-to-door directions when the location is a known campus room or building
+                                    if let loc = item.location, CampusPlaces.resolve(loc) != nil { router.go(loc) } else { router.map() }
+                                },
                                 onEvent: { id in model.detail = nil; router.event(id) },
                                 onPerson: { id in model.detail = nil; router.user(id) },
                                 onAddToCalendar: {

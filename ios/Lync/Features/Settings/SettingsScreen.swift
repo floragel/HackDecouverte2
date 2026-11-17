@@ -48,6 +48,8 @@ struct SettingsScreen: View {
                         .tint(c.text).padding(.horizontal, 16).padding(.vertical, 10)
                         .onChange(of: notifications) { _, v in Prefs.notifications = v }
                     }
+                    section("settings_developer")
+                    group { navRow(L("settings_indoor_test")) { router.indoorDev() } }
                     Button { Task { await env.repository.signOut() } } label: {
                         Text(L("profile_sign_out")).lyncText(.titleSmall, .red).frame(maxWidth: .infinity, alignment: .leading).padding(16)
                             .background(RoundedRectangle(cornerRadius: Tokens.radiusControl).fill(c.surface))

@@ -73,6 +73,34 @@ cd ios && ./setup.sh && open Lync.xcodeproj
 
 Pick your iPhone and press **Run**. NFC tag reading needs a paid Apple developer team (set `DEVELOPMENT_TEAM` in [`ios/project.yml`](ios/project.yml)). An iPhone reads Android cards and Lync stickers over NFC, but can't be read itself: iPhone to iPhone goes through the camera code.
 
+Indoor navigation and door-to-door trips are on iPhone too: the engine (`com.hackdecouverte.pdr` / `.map`) is ported one-to-one to Swift in [`ios/Lync/Navigation`](ios/Lync/Navigation) and passes the same unit tests (`ios/LyncTests`), on the same MB floor plans. Differences on iPhone: steps come from the accelerometer detector (iPhones have no per-step sensor event), true north from Core Location's heading, the barometer reports about once a second (the vertical-speed window is longer), and the street map is Apple Maps.
+
+On top of the shared engine, the iPhone version adds three accuracy improvements (unit-tested in `ios/LyncTests/AccuracyTests.swift`):
+
+- **Personal stride**: until you measure your step, the default step length comes from the iPhone's own pedometer (distance / steps over the last 7 days, which Core Motion refines with GPS) instead of a fixed 0.74 m.
+- **Adaptive step detector**: the accelerometer threshold follows your gait (half the peak of the last 2 s, 0.55 to 1.6 m/s²), so soft steps are no longer missed and heel-strike bounces are not counted twice; below a 0.8 m/s² peak (tremor, standing) nothing counts.
+- **Corridor-junction correction**: PDR drifts along corridors (10 % step error = 2 m after 20 m), and the corridor assist only corrects sideways within 2 m. When you turn at a real junction, the matching plan junction (edge back along the old heading, edge along the new one, within 7 m) pulls the dot onto the new corridor, at most 20 cm per step, never rewriting past points.
+
+Directions on iPhone also have a maneuver card with the next step and a big floor badge, a progress bar, the full step list, vibration on each new instruction and optional voice guidance (EN/FR).
+
+### iPhone screenshots
+
+| Home | Network | Calendar | Campus map |
+|---|---|---|---|
+| ![Home](docs/screenshots/ios/01-home.jpg) | ![Network](docs/screenshots/ios/02-network.jpg) | ![Calendar](docs/screenshots/ios/03-calendar.jpg) | ![Map](docs/screenshots/ios/04-map.jpg) |
+
+| Room search | Walking route | Turn by turn | Walking into MB |
+|---|---|---|---|
+| ![Search](docs/screenshots/ios/05-map-search.jpg) | ![Route](docs/screenshots/ios/07-trip-overview.jpg) | ![Turn by turn](docs/screenshots/ios/08-trip-turn-by-turn.jpg) | ![Entering MB](docs/screenshots/ios/09-entering-mb.jpg) |
+
+| Indoor guidance | Floor change | Arrived | All steps |
+|---|---|---|---|
+| ![Indoor](docs/screenshots/ios/10-indoor-guidance.jpg) | ![Floor change](docs/screenshots/ios/12-floor-change.jpg) | ![Arrived](docs/screenshots/ios/11-indoor-arrived.jpg) | ![Steps](docs/screenshots/ios/06-route-steps.jpg) |
+
+![Lync card](docs/screenshots/ios/13-student-card.jpg)
+
+Indoor screenshots come from the built-in **simulated walk** (Settings › Developer, or the MB plan in the simulator): it feeds the real engine synthetic sensors along the route, so the same app can be demoed without walking.
+
 ### Try door-to-door navigation
 
 1. **Calendar tab** › tap a class › **Get walking directions**, or **Map tab** › search a room (`2.210`, `MB-1.437`, `H-920`…) › **Directions**.
