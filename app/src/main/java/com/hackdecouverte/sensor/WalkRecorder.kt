@@ -329,13 +329,13 @@ class WalkRecorder(context: Context) {
         /** Logged for research only (not used by the PDR). */
         val EXTRA_TYPES = listOf(
             Sensor.TYPE_ACCELEROMETER, Sensor.TYPE_GYROSCOPE, Sensor.TYPE_MAGNETIC_FIELD,
-            Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED, Sensor.TYPE_LIGHT, Sensor.TYPE_STEP_COUNTER
+            Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED, Sensor.TYPE_LIGHT
         )
 
         /** What the PDR registers (described in the header). */
         val PIPELINE_TYPES = listOf(
             Sensor.TYPE_GAME_ROTATION_VECTOR, Sensor.TYPE_ROTATION_VECTOR, Sensor.TYPE_STEP_DETECTOR,
-            Sensor.TYPE_LINEAR_ACCELERATION, Sensor.TYPE_PRESSURE
+            Sensor.TYPE_STEP_COUNTER, Sensor.TYPE_LINEAR_ACCELERATION, Sensor.TYPE_PRESSURE
         )
     }
 }

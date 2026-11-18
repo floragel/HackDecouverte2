@@ -26,6 +26,8 @@ class PdrSensorAdapter(
     private val compassRotationSensor: Sensor? =
         sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
     val stepSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
+    /** Cross-checks the detector: steps it missed are given back (see StepReconciler). */
+    private val stepCounter: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
     val linearAcceleration: Sensor? =
         sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
     val accelerometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -78,6 +80,7 @@ class PdrSensorAdapter(
                 val step = stepSensor
                 if (step != null) {
                     failed = !sensorManager.registerListener(this, step, 0, 0) || failed
+                    stepCounter?.let { sensorManager.registerListener(this, it, 0, 0) }
                 }
                 linearAcceleration?.let {
                     sensorManager.registerListener(

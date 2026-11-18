@@ -3,6 +3,7 @@ package com.hackdecouverte.sensor
 import com.hackdecouverte.map.GeoOrigin
 import com.hackdecouverte.pdr.FallbackStepDetector
 import com.hackdecouverte.pdr.PdrTracker
+import com.hackdecouverte.pdr.StepReconciler
 import com.hackdecouverte.pdr.StepSource
 import com.hackdecouverte.pdr.rotationMatrixFromVector
 import com.hackdecouverte.pdr.worldVerticalFromRotationMatrix
@@ -30,6 +31,9 @@ class SensorRouter(
     @Volatile
     var magneticDeclinationDeg: Double = GeoOrigin.DEFAULT_MONTREAL_DECLINATION_DEG
 
+    /** Gives back the steps the detector missed but the step counter counted. */
+    val reconciler = StepReconciler()
+
     private var compassAccuracy: Int = ACCURACY_MEDIUM
     private var upX = 0.0
     private var upY = 0.0
@@ -43,6 +47,7 @@ class SensorRouter(
     /** New sensor registration: the phone's vertical must be seen again before the fallback uses it. */
     fun reset() {
         haveUp = false
+        reconciler.reset()
     }
 
     fun onAccuracyChanged(type: Int, accuracy: Int) {
@@ -61,6 +66,8 @@ class SensorRouter(
                     haveUp = true
                 }
                 tracker.onRotationVector(timestampNs, values, values.size)
+                val missed = reconciler.poll(timestampNs)
+                if (missed > 0) tracker.onRecoveredSteps(missed)
             }
 
             TYPE_ROTATION_VECTOR -> {
@@ -78,7 +85,14 @@ class SensorRouter(
                 }
             }
 
-            TYPE_STEP_DETECTOR -> tracker.onStep(timestampNs, StepSource.HARDWARE)
+            TYPE_STEP_DETECTOR -> {
+                reconciler.onDetector(timestampNs)
+                tracker.onStep(timestampNs, StepSource.HARDWARE)
+            }
+
+            TYPE_STEP_COUNTER -> if (values.isNotEmpty() && sourceProvider() == StepSource.HARDWARE) {
+                reconciler.onCounter(timestampNs, values[0].toLong())
+            }
 
             TYPE_PRESSURE -> if (values.isNotEmpty()) onPressureSample(timestampNs, values[0].toDouble())
 

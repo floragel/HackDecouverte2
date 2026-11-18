@@ -185,9 +185,9 @@ class LocalizationController(
     }
 
     /**
-     * One PDR state. Displacement since the previous TRACKING state → one filter step. Ignored: other
-     * phases, zero displacement; a displacement over [MAX_DISPLACEMENT_M] or a step count going back
-     * (trace reset, merged burst) only resets the reference position.
+     * One PDR state. Displacement since the previous TRACKING state → one filter step per PDR step.
+     * Ignored: other phases, zero displacement; more than [MAX_STEP_DISPLACEMENT_M] per step or a step
+     * count going back (trace reset) only resets the reference position.
      */
     fun onPdrState(s: PdrState) {
         val f = filter ?: return
@@ -211,10 +211,14 @@ class LocalizationController(
         val dx = s.position.x - prev.x
         val dy = s.position.y - prev.y
         val d = hypot(dx, dy)
-        if (d < 1e-6 || d > MAX_DISPLACEMENT_M) return
+        // Several steps can arrive in one state (recovered steps, a stair hold replayed, states merged
+        // on the way): split them evenly instead of dropping them.
+        val steps = (s.stepCount - prevSteps).coerceIn(1, MAX_STEPS_PER_STATE)
+        if (d < 1e-6 || d / steps > MAX_STEP_DISPLACEMENT_M) return
         val t0 = System.nanoTime()
-        f.onStep(d, atan2(dx, dy))
-        stepsSinceStart++
+        val heading = atan2(dx, dy)
+        repeat(steps) { f.onStep(d / steps, heading) }
+        stepsSinceStart += steps
         val ms = (System.nanoTime() - t0) / 1e6
         stepMs = if (stepMs == 0.0) ms else stepMs * 0.8 + ms * 0.2
         refresh(f)
@@ -276,7 +280,9 @@ class LocalizationController(
             s.canStart && (s.trueNorthAligned || waitedNs >= COMPASS_WAIT_NS)
 
         const val COMPASS_WAIT_NS = 3_000_000_000L
-        const val MAX_DISPLACEMENT_M = 3.0
+        /** Longer than any real step (trace reset, merged burst): only resets the reference position. */
+        const val MAX_STEP_DISPLACEMENT_M = 2.0
+        const val MAX_STEPS_PER_STATE = 40
         /** Search disk = max(2 × accuracy, 30 m) around the fix (spec §6.4 case 3). */
         const val DISK_ACCURACY_FACTOR = 2.0
         const val DISK_MIN_RADIUS_M = 30.0

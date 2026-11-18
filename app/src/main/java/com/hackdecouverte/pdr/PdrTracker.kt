@@ -120,6 +120,33 @@ class PdrTracker(
         publish()
     }
 
+    private var recoveredSteps = 0
+
+    /**
+     * Steps the detector missed but the step counter counted ([StepReconciler]): added one by one
+     * along the current walking heading with the current step length. Never during a stair hold.
+     */
+    fun onRecoveredSteps(count: Int) {
+        if (phase != PdrPhase.TRACKING || count <= 0 || verticalHoldActive) return
+        val theta = lastTheta ?: run {
+            val ref = referenceYaw ?: return
+            val mean = orientation.meanHeadingAt(clock(), if (swinging) strideWindowNs() else 150_000_000L) ?: return
+            wrapAnglePi(mean - ref - holdOffsetRad)
+        }
+        val length = (lengthPerStepM ?: return) * dynamicStepFactor()
+        repeat(count) {
+            val previous = position
+            val previousDistance = distanceM
+            position += PointM(length * sin(theta), length * cos(theta))
+            distanceM += length
+            stepCount++
+            points.add(position)
+            milestoneTracker.onSegment(previous, previousDistance, position, distanceM)
+        }
+        recoveredSteps += count
+        publish()
+    }
+
     /** A new hold has settled: keep the heading continuous (the body is assumed not to have turned meanwhile). */
     private fun onHoldChanged(@Suppress("UNUSED_PARAMETER") tNs: Long, deltaTwistRad: Double) {
         if (!anyHoldHeading) return
@@ -849,6 +876,7 @@ class PdrTracker(
             holdChanges = bridgedHoldChanges,
             headingAligned = headingAligned,
             readingPose = carry.readingPose,
+            recoveredStepCount = recoveredSteps,
             externalAccuracyM = externalAccuracyM,
             warnings = warnings.toSet()
         )

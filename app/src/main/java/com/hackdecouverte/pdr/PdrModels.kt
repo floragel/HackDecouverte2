@@ -90,6 +90,8 @@ data class PdrState(
     val headingAligned: Boolean = true,
     /** Steady, screen on, portrait: right now the phone points where the user walks. */
     val readingPose: Boolean = false,
+    /** Steps the detector missed that the step counter gave back. */
+    val recoveredStepCount: Int = 0,
     val externalAccuracyM: Double? = null,
     val warnings: Set<PdrWarning> = emptySet()
 ) {

@@ -320,7 +320,7 @@ private fun DebugStatus(snapshot: NavigationSnapshot) {
                 "${fmt(fix.eastNorthM.norm(), 0)} m du centre · utilisées ${d?.gpsFixesUsed ?: 0}" +
                 (snapshot.localizationSystemCircle?.let { " · disque ${it.second.roundToInt()} m" } ?: "")
         )
-        add("PDR : ${snapshot.pdr.phase} · ${snapshot.pdr.stepCount} pas · ${fmt(snapshot.pdr.distanceM, 1)} m · étage ${snapshot.userFloorId ?: "—"}")
+        add("PDR : ${snapshot.pdr.phase} · ${snapshot.pdr.stepCount} pas (récupérés ${snapshot.pdr.recoveredStepCount}) · ${fmt(snapshot.pdr.distanceM, 1)} m · étage ${snapshot.userFloorId ?: "—"}")
         val p = snapshot.pdr
         val carry = when {
             p.inHoldTransition -> "changement de tenue…"
