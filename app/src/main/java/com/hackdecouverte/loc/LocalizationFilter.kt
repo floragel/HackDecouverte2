@@ -4,6 +4,7 @@ import com.hackdecouverte.map.IndoorMap
 import com.hackdecouverte.map.axialDiff
 import com.hackdecouverte.pdr.PointM
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.ln
@@ -35,10 +36,24 @@ class LocalizationFilter(
     private var forcedSearching = false
     private val freeCells: IntArray by lazy { map.freeCellIndices() }
 
+    /** False while the phone→walking angle is unknown: steps are buffered until the first straight line. */
+    var offsetKnown: Boolean = true
+        private set
+    private val pendingSteps = ArrayList<Pair<Double, Double>>() // (length, relative heading)
+
     fun size(): Int = n
 
-    /** Positions drawn uniformly over the free cells, random phone angle, scale 1. */
+    /**
+     * Positions drawn uniformly over the free cells, scale 1, phone angle **unknown**: it is set by
+     * the first straight line (spec §6.2 bis, usage 2).
+     */
     fun initUniform(count: Int = params.maxParticles) {
+        spreadUniform(count)
+        offsetKnown = false
+        pendingSteps.clear()
+    }
+
+    private fun spreadUniform(count: Int) {
         allocate(count)
         for (i in 0 until count) {
             val p = randomFreePoint()
@@ -60,11 +75,51 @@ class LocalizationFilter(
             offset[i] = offsetsRad[i]; scale[i] = 1.0; weight[i] = 1.0 / points.size
         }
         forcedSearching = false
+        offsetKnown = true
+        pendingSteps.clear()
     }
 
     /** One accepted PDR displacement: [lengthM] metres at relative heading [headingRad]. */
     fun onStep(lengthM: Double, headingRad: Double) {
         if (n == 0 || !(lengthM > 1e-6) || !headingRad.isFinite()) return
+        if (offsetKnown) {
+            advance(lengthM, headingRad)
+            return
+        }
+        pendingSteps.add(lengthM to headingRad)
+        val line = straightLineHeading()
+        when {
+            line != null -> assignOffsetsFromCorridors(line)
+            pendingSteps.size >= MAX_STEPS_WITHOUT_LINE -> for (i in 0 until n) offset[i] = random.nextDouble(0.0, 2 * PI)
+            else -> return
+        }
+        offsetKnown = true
+        val replay = pendingSteps.toList()
+        pendingSteps.clear()
+        for ((len, heading) in replay) advance(len, heading)
+    }
+
+    /** Circular mean of the last [LINE_STEPS] buffered headings if they all lie within [LINE_SPREAD_RAD] of it. */
+    private fun straightLineHeading(): Double? {
+        if (pendingSteps.size < LINE_STEPS) return null
+        val last = pendingSteps.takeLast(LINE_STEPS).map { it.second }
+        val mean = atan2(last.sumOf { sin(it) }, last.sumOf { cos(it) })
+        return if (last.all { abs(wrapPi(it - mean)) <= LINE_SPREAD_RAD }) mean else null
+    }
+
+    /** The straight line is assumed to follow the local corridor: 2 candidate angles (4 where the axis is unclear). */
+    private fun assignOffsetsFromCorridors(lineHeading: Double) {
+        for (i in 0 until n) {
+            val p = PointM(east[i], north[i])
+            offset[i] = when {
+                random.nextDouble() < FREE_OFFSET_SHARE -> random.nextDouble(0.0, 2 * PI)
+                map.directions.coherenceAt(p) >= 0.5 -> map.directions.axisAt(p) + (if (random.nextBoolean()) 0.0 else PI) - lineHeading
+                else -> map.dominantAxisRad + random.nextInt(4) * PI / 2 - lineHeading
+            }
+        }
+    }
+
+    private fun advance(lengthM: Double, headingRad: Double) {
         lastHeadingRad = headingRad
         val g = map.grid
         val dirs = map.directions
@@ -87,7 +142,8 @@ class LocalizationFilter(
             weight[i] *= f
         }
         if (!(likelihood > 0) || !likelihood.isFinite()) {
-            initUniform(n)
+            spreadUniform(n) // keeps the learned phone angles of nobody: random ones
+            for (i in 0 until n) offset[i] = random.nextDouble(0.0, 2 * PI)
             return
         }
         for (i in 0 until n) weight[i] /= likelihood
@@ -219,5 +275,16 @@ class LocalizationFilter(
         const val GOOD_STEP_LIKELIHOOD = 0.5
         const val BAD_STEPS_BEFORE_RECOVERY = 3
         const val GOOD_STEPS_TO_TRUST = 10
+        const val LINE_STEPS = 5
+        val LINE_SPREAD_RAD = Math.toRadians(8.0)
+        const val MAX_STEPS_WITHOUT_LINE = 20
+        const val FREE_OFFSET_SHARE = 0.1
+
+        fun wrapPi(a: Double): Double {
+            var r = a % (2 * PI)
+            if (r <= -PI) r += 2 * PI
+            if (r > PI) r -= 2 * PI
+            return r
+        }
     }
 }
