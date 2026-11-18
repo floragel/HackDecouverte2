@@ -21,7 +21,8 @@ class PdrSensorAdapter(
     context: Context,
     private val tracker: PdrTracker,
     private val sourceProvider: () -> StepSource,
-    private val fallback: FallbackStepDetector = FallbackStepDetector(),
+    /** Gait-adaptive threshold on, as on iOS (only used when the accelerometer fallback is the step source). */
+    private val fallback: FallbackStepDetector = FallbackStepDetector(adaptive = true),
     private val onPressureSample: (timestampNs: Long, pressureHpa: Double) -> Unit = { _, _ -> },
     private val onRegistrationResult: (Boolean) -> Unit = {}
 ) : SensorEventListener {

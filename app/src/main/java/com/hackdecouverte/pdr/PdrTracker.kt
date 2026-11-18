@@ -79,6 +79,11 @@ class PdrTracker(
     private var currentCadenceHz: Double? = null
     private var externalOrigin: PointM? = null
     private var externalPull = PointM(0.0, 0.0)
+    private var landmarkPull = PointM(0.0, 0.0)
+
+    /** Remaining landmark (junction) correction still to be replayed, in metres. */
+    val pendingLandmarkPullM: Double
+        get() = landmarkPull.norm()
 
     fun onRotationVector(timestampNs: Long, values: FloatArray, size: Int = values.size) {
         orientation.onRotationVector(timestampNs, values, size)
@@ -106,6 +111,17 @@ class PdrTracker(
         } else if (!usable(stepSource)) {
             stepSource = StepSource.NONE
         }
+        publish()
+    }
+
+    /**
+     * A recognised landmark (e.g. the corridor junction where the user just turned) says the user
+     * is really at [localTarget]. The gap is replayed over the next steps (≤ 20 cm per step,
+     * ≤ 6 m in all), so the dot never jumps and past trace points are never rewritten.
+     */
+    fun onLandmark(localTarget: PointM) {
+        if (phase != PdrPhase.TRACKING || !localTarget.x.isFinite() || !localTarget.y.isFinite()) return
+        landmarkPull = clampNorm(localTarget - position, MAX_LANDMARK_PULL_M)
         publish()
     }
 
@@ -350,6 +366,11 @@ class PdrTracker(
             val apply = clampNorm(externalPull, MAX_EXTERNAL_STEP_M)
             nextPos += apply
             externalPull -= apply
+        }
+        if (landmarkPull.norm() > 1e-6) {
+            val apply = clampNorm(landmarkPull, MAX_LANDMARK_STEP_M)
+            nextPos += apply
+            landmarkPull -= apply
         }
 
         position = nextPos
@@ -598,6 +619,7 @@ class PdrTracker(
         straightRunThetas.clear()
         externalOrigin = null
         externalPull = PointM(0.0, 0.0)
+        landmarkPull = PointM(0.0, 0.0)
         publish()
         return true
     }
@@ -686,6 +708,7 @@ class PdrTracker(
         learnedAxisBase = null
         externalOrigin = null
         externalPull = PointM(0.0, 0.0)
+        landmarkPull = PointM(0.0, 0.0)
     }
 
     private fun usable(source: StepSource): Boolean = when (source) {
@@ -774,5 +797,9 @@ class PdrTracker(
         private const val MAX_EXTERNAL_PULL_M = 1.5
         private const val MAX_EXTERNAL_STEP_M = 0.08
         private const val MAX_HELD_STEPS = 32
+
+        /** Junction (landmark) correction: bounded like the other corrections. */
+        const val MAX_LANDMARK_STEP_M = 0.20
+        const val MAX_LANDMARK_PULL_M = 6.0
     }
 }

@@ -13,6 +13,7 @@ import com.hackdecouverte.map.FloorNode
 import com.hackdecouverte.map.FloorPlan
 import com.hackdecouverte.map.FloorVectorPlan
 import com.hackdecouverte.map.GeoOrigin
+import com.hackdecouverte.map.JunctionMatcher
 import com.hackdecouverte.map.MapAnchor
 import com.hackdecouverte.map.NavigationRoute
 import com.hackdecouverte.map.NodeKey
@@ -101,7 +102,9 @@ data class NavigationSnapshot(
     /** Absolute floor from barometric altitude above the street (see [AltitudeFloorEstimator]). */
     val altitudeFloor: AltitudeFloorEstimate? = null,
     /** True once a street-level pressure was captured outdoors near the building. */
-    val hasStreetPressureReference: Boolean = false
+    val hasStreetPressureReference: Boolean = false,
+    /** Last corridor junction that re-anchored the dot (see [JunctionMatcher]), for telemetry. */
+    val lastJunctionId: String? = null
 )
 
 class IndoorNavigationBackend(
@@ -122,6 +125,7 @@ class IndoorNavigationBackend(
     private val altitudeFloors = AltitudeFloorEstimator()
     private var latestPressureHpa: Double? = null
     private var latestPressureNs: Long = Long.MIN_VALUE
+    private val junctions = JunctionMatcher()
 
     private val adapter = PdrSensorAdapter(
         context = appContext,
@@ -240,6 +244,7 @@ class IndoorNavigationBackend(
                     )
                 }
                 persistGaitIfUpdated(pdrState)
+                matchJunction(pdrState)
                 _state.value = buildSnapshot(pdrState)
             }
         }
@@ -678,7 +683,24 @@ class IndoorNavigationBackend(
         }
     }
 
+    /**
+     * Corridor-junction landmark: when the user turns at a real junction of the plan, pull the
+     * dot onto the new corridor (bounded replay in [PdrTracker.onLandmark]). Fixes the along-track
+     * drift that the lateral-only corridor assist cannot see.
+     */
+    private fun matchJunction(s: PdrState) {
+        if (s.phase != PdrPhase.TRACKING || s.stepCount <= 0 || inVerticalTransit) return
+        val plan = userFloorId?.let(buildingGraph::floor) ?: return
+        val anc = anchor ?: return
+        val mapPos = anc.toMap(s.position)
+        val target = junctions.onStep(s.stepCount, mapPos, anc.mapHeading(s.headingRadians), plan) ?: return
+        Log.d(LOG_TAG, "junction ${junctions.lastJunctionId}: pull %.2f m".format(target.distanceTo(mapPos)))
+        tracker.onLandmark(anc.fromMap(target))
+    }
+
     private fun recomputeAnchor() {
+        // Floor / start / facing changed: past map samples no longer describe the current frame.
+        junctions.reset()
         val uPlan = userFloorId?.let(buildingGraph::floor)
         val sp = startPose
         val startNodeOnUserFloor = if (sp != null && sp.floorId == userFloorId) {
@@ -792,7 +814,8 @@ class IndoorNavigationBackend(
             destinations = buildingGraph.destinations,
             savedStepLengthM = savedStepLengthM,
             altitudeFloor = if (latestPressureHpa != null || altitudeFloors.hasStreetReference) estimateAltitudeFloor() else null,
-            hasStreetPressureReference = altitudeFloors.hasStreetReference
+            hasStreetPressureReference = altitudeFloors.hasStreetReference,
+            lastJunctionId = junctions.lastJunctionId
         )
     }
 
