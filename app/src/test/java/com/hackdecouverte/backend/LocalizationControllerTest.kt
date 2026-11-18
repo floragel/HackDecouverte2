@@ -55,6 +55,22 @@ class LocalizationControllerTest {
     }
 
     @Test
+    fun brokenOrEmptyMapNeverThrows() {
+        val throwing = LocalizationController({ throw IllegalArgumentException("No <path> found in floor SVG") }, Random(1))
+        assertFalse(throwing.prepare("MB-2"))
+        assertFalse(throwing.start("MB-2"))
+        val sealed = SyntheticMapsAccess.lCorridor().let { m ->
+            com.hackdecouverte.map.IndoorMap(m.floorId, com.hackdecouverte.map.OccupancyGrid(
+                m.grid.minEastM, m.grid.minNorthM, m.grid.resM, m.grid.width, m.grid.height,
+                ByteArray(m.grid.width * m.grid.height) { com.hackdecouverte.map.OccupancyGrid.OUTSIDE }
+            ), m.clearance, m.directions, m.doors, m.dominantAxisRad)
+        }
+        val empty = LocalizationController({ sealed }, Random(1))
+        assertFalse(empty.start("SYN"))
+        assertTrue(empty.estimate == null)
+    }
+
+    @Test
     fun unknownFloorDoesNotStart() {
         val c = controller()
         assertFalse(c.start("MB-99"))

@@ -34,10 +34,17 @@ class LocalizationController(
         private set
     @Volatile private var particles: List<PointM> = emptyList()
 
-    /** Builds (or fetches from cache) the map of [floorId]; heavy, safe to call off the main thread. */
-    fun prepare(floorId: String): Boolean = synchronized(maps) { maps.getOrPut(floorId) { mapProvider(floorId) } } != null
+    /**
+     * Builds (or fetches from cache) the map of [floorId]; heavy, safe to call off the main thread.
+     * A map that fails to build, or has nowhere to stand, counts as missing (never throws).
+     */
+    fun prepare(floorId: String): Boolean = synchronized(maps) {
+        maps.getOrPut(floorId) {
+            runCatching { mapProvider(floorId) }.getOrNull()?.takeIf { it.freeCellIndices().isNotEmpty() }
+        }
+    } != null
 
-    /** Starts a fresh search over the whole floor. False if the floor has no map. */
+    /** Starts a fresh search over the whole floor. False if the floor has no usable map. */
     fun start(floorId: String): Boolean {
         if (!prepare(floorId)) return false
         val map = synchronized(maps) { maps[floorId] }!!
