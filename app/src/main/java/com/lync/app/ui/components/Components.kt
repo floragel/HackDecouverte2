@@ -37,7 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.SubcomposeAsyncImage
 import com.lync.app.R
 import com.lync.app.ui.theme.Campus
 import com.lync.app.ui.theme.Tokens
@@ -51,35 +50,6 @@ fun Modifier.pressable(onClick: () -> Unit, scaleDown: Float = 0.96f): Modifier 
     return this
         .graphicsLayer { scaleX = scale; scaleY = scale }
         .clickable(interactionSource = source, indication = null, onClick = onClick)
-}
-
-@Composable
-fun Avatar(
-    url: String?,
-    initials: String,
-    size: Dp,
-    modifier: Modifier = Modifier,
-    ring: Color? = null,
-) {
-    val c = Campus.colors
-    val base = modifier
-        .size(size)
-        .then(if (ring != null) Modifier.border(2.dp, ring, CircleShape).padding(3.dp) else Modifier)
-        .clip(CircleShape)
-        .background(c.surfaceAlt)
-    val fallback: @Composable () -> Unit = {
-        Box(Modifier.size(size).background(c.accentSoft), contentAlignment = Alignment.Center) {
-            Text(initials, color = c.accent, fontWeight = FontWeight.SemiBold, fontSize = (size.value * 0.36f).sp)
-        }
-    }
-    if (url.isNullOrBlank()) {
-        Box(base, contentAlignment = Alignment.Center) { fallback() }
-    } else {
-        SubcomposeAsyncImage(
-            model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = base,
-            loading = { fallback() }, error = { fallback() },
-        )
-    }
 }
 
 enum class PillStyle { Filled, Tonal, Outline }

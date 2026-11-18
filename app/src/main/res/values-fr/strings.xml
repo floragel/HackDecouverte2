@@ -221,7 +221,6 @@
     <plurals name="events_going"><item quantity="one">%d participant·e</item><item quantity="other">%d participant·e·s</item></plurals>
     <plurals name="groups_members"><item quantity="one">%d membre</item><item quantity="other">%d membres</item></plurals>
     <plurals name="events_friends_going"><item quantity="one">%1$s et %2$d ami·e</item><item quantity="other">%1$s et %2$d ami·e·s</item></plurals>
-    <plurals name="likes_word"><item quantity="one">j\'aime</item><item quantity="other">j\'aime</item></plurals>
     <plurals name="celebrate_courses"><item quantity="one">%d cours en commun</item><item quantity="other">%d cours en commun</item></plurals>
     <string name="celebrate_title">Toi et %1$s êtes connecté·e·s</string>
     <string name="scan_simulate">Démo : simuler un scan</string>
@@ -392,4 +391,5 @@
     <string name="go_position_hint">Définir ma position</string>
     <string name="go_position_change">Changer</string>
     <string name="indoor_building">Bâtiment</string>
+    <string name="settings_user_view">Vue utilisateur (Trouver une salle)</string>
 </resources>

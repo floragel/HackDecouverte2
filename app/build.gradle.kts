@@ -1,19 +1,8 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
-}
-
-// Supabase keys live in local.properties (never committed):
-//   supabase.url=https://xxxx.supabase.co
-//   supabase.anonKey=eyJ...
-// Without them the app runs on built-in demo data.
-val localProps = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -26,12 +15,6 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
-
-        buildConfigField("String", "SUPABASE_URL", "\"${localProps.getProperty("supabase.url", "")}\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${localProps.getProperty("supabase.anonKey", "")}\"")
-        // Force the offline demo even with keys: `lync.demo=true` in local.properties or `-Plync.demo=true`
-        val forceDemo = (project.findProperty("lync.demo") ?: localProps.getProperty("lync.demo", "false")).toString().toBoolean()
-        buildConfigField("boolean", "FORCE_DEMO", forceDemo.toString())
     }
 
     androidResources {
@@ -79,22 +62,8 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     debugImplementation(libs.androidx.ui.tooling)
 
-    implementation(platform(libs.supabase.bom))
-    implementation(libs.supabase.postgrest)
-    implementation(libs.supabase.auth)
-    implementation(libs.supabase.storage)
-    implementation(libs.supabase.realtime)
-    implementation(libs.ktor.client.android)
     implementation(libs.kotlinx.serialization.json)
 
-    implementation(libs.coil.compose)
-    implementation(libs.coil.network)
-    implementation(libs.maplibre)
-    implementation(libs.play.location)
-    implementation(libs.camerax.core)
-    implementation(libs.camerax.camera2)
-    implementation(libs.camerax.lifecycle)
-    implementation(libs.camerax.view)
 
     implementation(libs.kotlinx.coroutines.android)
 

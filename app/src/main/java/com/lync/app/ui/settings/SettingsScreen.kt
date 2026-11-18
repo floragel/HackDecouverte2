@@ -76,7 +76,7 @@ fun SettingsScreen() {
 
             Section(stringResource(R.string.settings_developer))
             Group {
-                NavRow(stringResource(R.string.settings_indoor_test)) { nav.indoorDev() }
+                NavRow(stringResource(R.string.settings_user_view)) { nav.indoor() }
             }
 
             Spacer(Modifier.height(32.dp))

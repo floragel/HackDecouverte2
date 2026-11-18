@@ -5,19 +5,11 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.NFC" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.CAMERA" />
     <!-- Indoor navigation (step counting) -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.nfc.hce" android:required="false" />
-    <uses-feature android:name="android.hardware.nfc" android:required="false" />
 
     <application
         android:name=".LyncApp"
@@ -28,8 +20,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Lync">
 
-        <!-- configChanges: rotation is handled in Compose (portrait = app, landscape = student card)
-             so the activity is never recreated and state stays intact. -->
+        <!-- configChanges: rotation is handled in Compose so the activity (and the running
+             navigation engine) is never recreated. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -40,36 +32,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- Live location sharing with friends (visible notification, stops in ghost mode) -->
-        <service
-            android:name=".data.location.LocationSharingService"
-            android:exported="false"
-            android:foregroundServiceType="location" />
-
-        <!-- NFC tap-to-connect: this phone answers with its Lync code while the card is shown -->
-        <service
-            android:name=".code.LyncHceService"
-            android:exported="true"
-            android:permission="android.permission.BIND_NFC_SERVICE">
-            <intent-filter>
-                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.nfc.cardemulation.host_apdu_service"
-                android:resource="@xml/apduservice" />
-        </service>
-
-        <!-- Shares the card picture with other apps -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.files"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
 
         <!-- Lets AppCompat persist the in-app language choice on Android < 13 -->
         <service
