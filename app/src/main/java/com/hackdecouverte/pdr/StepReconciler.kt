@@ -24,10 +24,27 @@ class StepReconciler(
     var totalRecovered = 0
         private set
 
+    /** (counted, detected) at each settled reading, for [countRatio]. */
+    private val tallies = ArrayDeque<Pair<Long, Int>>()
+
+    /**
+     * Counter steps / detector steps over the last ~[RATIO_WINDOW_STEPS] counted steps, once at least
+     * [RATIO_MIN_STEPS] are counted; null before. Below 1: the detector counts steps that are not there.
+     */
+    fun countRatio(): Double? {
+        val last = tallies.lastOrNull() ?: return null
+        val first = tallies.firstOrNull { last.first - it.first <= RATIO_WINDOW_STEPS } ?: return null
+        val counted = last.first - first.first
+        val detected = last.second - first.second
+        if (counted < RATIO_MIN_STEPS || detected <= 0) return null
+        return counted.toDouble() / detected
+    }
+
     fun reset() {
         baseTotal = null
         detectorTimes.clear()
         pending.clear()
+        tallies.clear()
         recovered = 0
     }
 
@@ -61,10 +78,14 @@ class StepReconciler(
                 baseTotal = total
                 baseNs = t
                 detectorTimes.clear()
+                tallies.clear()
                 recovered = 0
                 continue
             }
-            val deficit = counted - detectedUpTo(t + toleranceNs) - recovered
+            val detected = detectedUpTo(t + toleranceNs)
+            tallies.addLast(counted to detected)
+            while (tallies.size > 400) tallies.removeFirst()
+            val deficit = counted - detected - recovered
             if (deficit >= minDeficit) {
                 val k = minOf(deficit, maxPerReading.toLong()).toInt()
                 recovered += k
@@ -87,5 +108,7 @@ class StepReconciler(
 
     private companion object {
         const val MAX_DETECTOR_TIMES = 50_000
+        const val RATIO_WINDOW_STEPS = 60
+        const val RATIO_MIN_STEPS = 20
     }
 }

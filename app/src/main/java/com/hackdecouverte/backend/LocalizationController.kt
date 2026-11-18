@@ -246,6 +246,8 @@ class LocalizationController(
         lastStepCount = s.stepCount
         // The compass says where the phone points; that is where the user walks only in a reading pose.
         if (!f.offsetKnown) f.compassAligned = s.trueNorthAligned && s.headingAligned
+        // Step headings from a pocket or a swinging hand are looser than from a phone held in front (real walk: ±10–20°).
+        f.headingNoiseScale = if (s.strideAveraged) BODY_CARRY_HEADING_NOISE_SCALE else 1.0
         if (s.holdChanges != lastHoldChanges) {
             if (s.holdChanges > lastHoldChanges) f.onHoldChanged()
             lastHoldChanges = s.holdChanges
@@ -325,6 +327,7 @@ class LocalizationController(
             s.canStart && (s.trueNorthAligned || waitedNs >= COMPASS_WAIT_NS)
 
         const val COMPASS_WAIT_NS = 3_000_000_000L
+        const val BODY_CARRY_HEADING_NOISE_SCALE = 2.0
         /** Hypotheses this close to a stairs / lift node may change floor with it. */
         const val TRANSFER_RADIUS_M = 7.0
         const val LANDING_RADIUS_M = 3.0

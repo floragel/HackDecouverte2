@@ -44,4 +44,22 @@ class StepReconcilerTest {
 
     @Test
     fun aSingleStepOfDisagreementIsTolerated() = assertEquals(0, run(30, setOf(12)))
+
+    @Test
+    fun aDetectorThatDoublesStepsGivesACountRatioBelowOne() {
+        // Real pocket walk: detector 119, counter 95 over the same time.
+        val r = StepReconciler()
+        r.onCounter(0L, 0L)
+        var counted = 0L
+        for (k in 1..120) {
+            val t = k * 600 * ms
+            r.onDetector(t)
+            if (k % 5 != 0) counted++ // the counter misses... no: the detector adds one extra every 5
+            r.onCounter(t, counted)
+            r.poll(t + 3000 * ms)
+        }
+        val ratio = r.countRatio()!!
+        assertEquals(0.8, ratio, 0.05)
+    }
 }
+

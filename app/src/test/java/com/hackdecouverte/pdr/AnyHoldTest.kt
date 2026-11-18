@@ -195,4 +195,19 @@ class AnyHoldTest {
         p.onRotationVector(2_000_000L, Quat.phone(0.0, Quat.POCKET).rv())
         assertFalse(p.lastTilted)
     }
+
+    @Test
+    fun slowFirstStepsDoNotInflateTheStepLength() {
+        // A real walk started with 1 s steps, then walked at 0.55 s: the base cadence must not be the slow start.
+        val (w, tracker) = anyHoldWalker()
+        w.run(1_500_000_000L, null, false) { Quat.phone(0.0, Quat.FLAT) }
+        assertTrue(tracker.startWithManualStepLength(0.7))
+        w.run(4_000_000_000L, 1_000_000_000L, false) { Quat.phone(0.0, Quat.FLAT) }
+        val before = tracker.state.value.distanceM
+        w.run(11_000_000_000L, 550_000_000L, false) { Quat.phone(0.0, Quat.FLAT) }
+        val s = tracker.state.value
+        val perStep = (s.distanceM - before) / 20
+        assertTrue("step $perStep m", perStep in 0.6..0.8) // 1.8 Hz typical → 0.7 m, not +30 %
+    }
 }
+

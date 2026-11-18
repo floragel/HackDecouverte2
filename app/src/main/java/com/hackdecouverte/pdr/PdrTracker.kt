@@ -156,8 +156,19 @@ class PdrTracker(
         recentStepYaws.clear() // the raw phone heading jumped: straightness starts over
     }
 
+    /**
+     * Any hold, and the phone is not held steady in front of the eyes (pocket, bag, swinging hand,
+     * screen off): stride-averaged heading, no shake filter. A real walk showed the swing measure
+     * hovering around its threshold in a pocket; the reading pose is the reliable dividing line.
+     */
     private val swinging: Boolean
-        get() = anyHoldHeading && carry.mode == CarryMode.SWINGING
+        get() = anyHoldHeading && (carry.mode == CarryMode.SWINGING || !carry.readingPose)
+
+    /**
+     * Step-length correction when the step detector counts more steps than the step counter
+     * (a real pocket walk: +25 %, doubled steps): counter / detector, from [StepReconciler].
+     */
+    var stepCountScale: Double = 1.0
 
     /** One stride (2 steps) from the recent cadence, for averaging a rocking phone's heading. */
     private fun strideWindowNs(): Long {
@@ -436,7 +447,7 @@ class PdrTracker(
         learnAxisBase(theta, straight)
         lastTheta = theta
 
-        val dynamicLength = length * dynamicStepFactor()
+        val dynamicLength = length * dynamicStepFactor() * stepCountScale
         currentStepLengthM = dynamicLength
         if (verticalHoldActive) {
             heldStepDeltas.add(PointM(dynamicLength * sin(theta), dynamicLength * cos(theta)))
@@ -627,7 +638,10 @@ class PdrTracker(
     }
 
     private fun startGaitModel(cadenceHz: Double?) {
-        baseCadenceHz = cadenceHz?.takeIf { it.isFinite() && it in 0.6..3.6 }
+        // Any-hold (map localization, no calibration walk): the first steps of a walk are slow and the
+        // detector doubles some in a pocket, so the base cadence must not be learned from them — a
+        // typical walking cadence is the reference instead (the map learns the stride on top).
+        baseCadenceHz = cadenceHz?.takeIf { it.isFinite() && it in 0.6..3.6 } ?: if (anyHoldHeading) TYPICAL_CADENCE_HZ else null
         currentCadenceHz = null
         currentStepLengthM = lengthPerStepM
         recentIntervalsNs.clear()
@@ -877,6 +891,7 @@ class PdrTracker(
             headingAligned = headingAligned,
             readingPose = carry.readingPose,
             recoveredStepCount = recoveredSteps,
+            strideAveraged = swinging,
             externalAccuracyM = externalAccuracyM,
             warnings = warnings.toSet()
         )
@@ -916,6 +931,8 @@ class PdrTracker(
         private const val MAX_EXTERNAL_STEP_M = 0.08
         private const val MAX_HELD_STEPS = 32
         private const val DEFAULT_STRIDE_NS = 1_100_000_000L
+        /** About 110 steps/min: an average adult walking cadence. */
+        const val TYPICAL_CADENCE_HZ = 1.8
         private const val MIN_STRIDE_NS = 800_000_000L
         private const val MAX_STRIDE_NS = 1_600_000_000L
 

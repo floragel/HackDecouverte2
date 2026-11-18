@@ -68,6 +68,8 @@ class SensorRouter(
                 tracker.onRotationVector(timestampNs, values, values.size)
                 val missed = reconciler.poll(timestampNs)
                 if (missed > 0) tracker.onRecoveredSteps(missed)
+                // The detector counting clearly more than the counter (doubled steps): shorten its steps.
+                tracker.stepCountScale = reconciler.countRatio()?.takeIf { it < COUNT_RATIO_TRUST_BELOW }?.coerceIn(0.6, 1.0) ?: 1.0
             }
 
             TYPE_ROTATION_VECTOR -> {
@@ -133,6 +135,8 @@ class SensorRouter(
         const val TYPE_STEP_COUNTER = 19
         /** `SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM`. */
         const val ACCURACY_MEDIUM = 2
+        /** Counter/detector disagreement below which the counter's count is trusted for distance. */
+        const val COUNT_RATIO_TRUST_BELOW = 0.92
         /** `SensorManager.GRAVITY_EARTH`. */
         const val GRAVITY_EARTH = 9.80665
     }
