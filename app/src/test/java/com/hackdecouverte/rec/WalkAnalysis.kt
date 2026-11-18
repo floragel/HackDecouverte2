@@ -170,6 +170,23 @@ internal object WalkAnalysis {
         "stride noise 10 %" to LocParams(lengthNoise = 0.10)
     )
 
+    /** Battery drain (% per hour, first → last `health` note) and the highest thermal status seen. */
+    data class Health(val batteryPerHour: Double?, val thermalMax: Int?, val minutes: Double)
+
+    fun health(rec: Recording): Health {
+        val notes = rec.events.filterIsInstance<RecEvent.Note>().filter { it.name == "health" }.mapNotNull { n ->
+            val kv = n.detail.split(' ').mapNotNull { p -> p.split('=').takeIf { it.size == 2 }?.let { it[0] to it[1].toIntOrNull() } }.toMap()
+            Triple(n.tNs, kv["battery"]?.takeIf { it >= 0 }, kv["thermal"]?.takeIf { it >= 0 })
+        }
+        val withBattery = notes.filter { it.second != null }
+        val hours = if (withBattery.size >= 2) (withBattery.last().first - withBattery.first().first) / 3.6e12 else 0.0
+        return Health(
+            batteryPerHour = if (hours > 0) (withBattery.first().second!! - withBattery.last().second!!) / hours else null,
+            thermalMax = notes.mapNotNull { it.third }.maxOrNull(),
+            minutes = hours * 60
+        )
+    }
+
     /** Writes analysis.txt, segments.csv and walk-full.svg into [out]; returns the text. */
     fun write(name: String, rec: Recording, out: File, sweep: Boolean): String {
         val site = IndoorSite.byId(rec.header.siteId)
@@ -185,6 +202,10 @@ internal object WalkAnalysis {
                 appendLine("pseudo truth vs markers: ${errs.size}/${full.markers.size} covered, median ${quantile(errs, 0.5)?.let { "%.1f m".format(Locale.ROOT, it) } ?: "—"}, max ${errs.maxOrNull()?.let { "%.1f m".format(Locale.ROOT, it) } ?: "—"}")
             }
             appendLine(stepReport(rec, full))
+            health(rec).let { h ->
+                val battery = h.batteryPerHour?.let { "%.1f %%/h".format(Locale.ROOT, it) } ?: "—"
+                appendLine("Health: battery $battery over ${"%.0f".format(Locale.ROOT, h.minutes)} min · thermal max ${h.thermalMax ?: "—"} (targets ≤ 5 %/h, ≤ 1)")
+            }
             appendLine()
             if (truth.isNotEmpty()) {
                 val segs = segments(rec, site, truth)

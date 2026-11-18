@@ -6,7 +6,9 @@ import com.hackdecouverte.map.MapTestSupport
 import com.hackdecouverte.rec.SyntheticWalk
 import com.hackdecouverte.rec.WalkAnalysis
 import com.hackdecouverte.rec.WalkReplay
+import com.hackdecouverte.rec.train.Knobs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TuningParamsTest {
@@ -17,6 +19,13 @@ class TuningParamsTest {
         assertEquals(LocParams(), t.locParams())
         assertEquals(8.0, t.pdr.compassPullTauS, 0.0)
         assertEquals(25.0, t.carry.startDeg, 0.0)
+    }
+
+    @Test
+    fun labelSaysVersionWalksAndProvisional() {
+        assertEquals("v1 (par défaut)", TuningParams().label())
+        assertEquals("v2 (1 marche, provisoire)", TuningParams(version = 2, provisional = true, trainedOn = listOf("a")).label())
+        assertEquals("v3 (4 marches)", TuningParams(version = 3, trainedOn = listOf("a", "b", "c", "d")).label())
     }
 
     @Test
@@ -32,9 +41,16 @@ class TuningParamsTest {
         assertEquals(PdrTuning().walkAxisTau, t.pdr.walkAxisTau, 0.0)
     }
 
+    /** The shipped file is the trained one (plan C3): it parses (not the fallback) and stays inside the training bounds. */
     @Test
     fun shippedParamsFileParses() {
-        assertEquals(TuningParams(), Tuning.load { MapTestSupport.open(it) })
+        val text = MapTestSupport.open(Tuning.ASSET)!!.bufferedReader().readText()
+        val shipped = Tuning.parse(text)
+        assertEquals(shipped, Tuning.load { MapTestSupport.open(it) })
+        for (k in Knobs.STAGE_A + Knobs.STAGE_B) {
+            val v = k.get(shipped)
+            assertTrue("${k.name} = $v outside [${k.min}, ${k.max}]", v >= k.min - 1e-9 && v <= k.max + 1e-9)
+        }
     }
 
     /**

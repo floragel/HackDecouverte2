@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -140,7 +141,7 @@ fun rememberIndoorBackend(): Pair<IndoorNavigationBackend, NavigationSnapshot> {
     return backend to snapshot
 }
 
-private enum class Picker { FROM, TO }
+private enum class Picker { FROM, TO, HINT }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,6 +168,19 @@ fun IndoorScreen(initialDestinationFloorId: String? = null, initialDestinationNo
     val activityPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         backend.onActivityPermissionResult(it)
     }
+    // Final user flow (plan E2): explanation once, the three permissions, then map localization.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences(INTRO_PREFS, android.content.Context.MODE_PRIVATE) }
+    var introDone by rememberSaveable { mutableStateOf(prefs.getBoolean(KEY_INTRO_DONE, false)) }
+    val introPermissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
+        r[Manifest.permission.ACTIVITY_RECOGNITION]?.let(backend::onActivityPermissionResult)
+        val loc = r.filterKeys { it == Manifest.permission.ACCESS_FINE_LOCATION || it == Manifest.permission.ACCESS_COARSE_LOCATION }
+        if (loc.isNotEmpty()) backend.onLocationPermissionResult(loc.values.any { it })
+        prefs.edit().putBoolean(KEY_INTRO_DONE, true).apply()
+        introDone = true
+    }
+    LaunchedEffect(introDone) { if (introDone) backend.setLocalizationEnabled(true) }
+    LaunchedEffect(snap.arrived) { if (snap.arrived) haptics.confirm() }
     val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         backend.onLocationPermissionResult(r.values.any { it })
         if (r.values.any { it }) backend.useGpsAsStartOrigin()
@@ -176,7 +190,7 @@ fun IndoorScreen(initialDestinationFloorId: String? = null, initialDestinationNo
     }
 
     Box(Modifier.fillMaxSize().background(c.surface)) {
-        IndoorCanvas(snap, camera, c, Modifier.fillMaxSize(), bottomInsetPx = sheetHeightPx)
+        IndoorCanvas(snap, camera, c, Modifier.fillMaxSize(), bottomInsetPx = sheetHeightPx, searchLabel = stringResource(R.string.loc_probably_here))
 
         // ----- Top: back + title, floor picker on the right -----
         Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(16.dp)) {
@@ -229,7 +243,9 @@ fun IndoorScreen(initialDestinationFloorId: String? = null, initialDestinationNo
                     .windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(horizontal = Tokens.Gutter, vertical = 18.dp),
             ) {
-                AnimatedContent(snap.pdr.phase, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "sheet") { phase ->
+                if (snap.localizationEnabled) {
+                    LocalizationSheet(snap, backend, onHintRoom = { picker = Picker.HINT }, onPickDestination = { picker = Picker.TO })
+                } else AnimatedContent(snap.pdr.phase, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "sheet") { phase ->
                     when (phase) {
                         PdrPhase.IDLE -> SetupSheet(snap, backend, onPick = { picker = it }, onAskSteps = ::askSteps,
                             onUseGps = {
@@ -243,6 +259,18 @@ fun IndoorScreen(initialDestinationFloorId: String? = null, initialDestinationNo
                 }
             }
         }
+    }
+
+    if (!introDone) {
+        PermissionsIntro(onContinue = {
+            val wanted = buildList {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add(Manifest.permission.ACTIVITY_RECOGNITION)
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
+                add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            introPermissions.launch(wanted.toTypedArray())
+        })
     }
 
     if (buildingPicker) {
@@ -261,7 +289,7 @@ fun IndoorScreen(initialDestinationFloorId: String? = null, initialDestinationNo
     picker?.let { which ->
         val preferredFloor = snap.activeFloorId ?: snap.userFloorId
         RoomPickerSheet(
-            title = stringResource(if (which == Picker.FROM) R.string.indoor_from else R.string.indoor_to),
+            title = stringResource(when (which) { Picker.FROM -> R.string.indoor_from; Picker.TO -> R.string.indoor_to; Picker.HINT -> R.string.loc_i_am_at }),
             items = remember(which, snap.destinations, preferredFloor) {
                 snap.destinations
                     .map { RoomItem(it.key.floorId, it.key.nodeId, it.label, it.name) }
@@ -270,8 +298,11 @@ fun IndoorScreen(initialDestinationFloorId: String? = null, initialDestinationNo
             onPick = { item ->
                 haptics.tick()
                 camera.recenter()
-                if (which == Picker.FROM) backend.setStartPose(item.floorId, item.nodeId)
-                else backend.setDestination(com.hackdecouverte.map.NodeKey(item.floorId, item.nodeId))
+                when (which) {
+                    Picker.FROM -> backend.setStartPose(item.floorId, item.nodeId)
+                    Picker.TO -> backend.setDestination(com.hackdecouverte.map.NodeKey(item.floorId, item.nodeId))
+                    Picker.HINT -> backend.hintRoom(com.hackdecouverte.map.NodeKey(item.floorId, item.nodeId))
+                }
                 picker = null
             },
             onDismiss = { picker = null },
@@ -280,6 +311,64 @@ fun IndoorScreen(initialDestinationFloorId: String? = null, initialDestinationNo
 }
 
 // ---------- Sheet contents ----------
+
+private const val INTRO_PREFS = "indoor_user"
+private const val KEY_INTRO_DONE = "intro_done"
+
+/** Shown once before the permissions (plan E2). */
+@Composable
+private fun PermissionsIntro(onContinue: () -> Unit) {
+    val c = Campus.colors
+    // Swallows taps: the map underneath must not react while the explanation is up.
+    val swallow = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(Modifier.fillMaxSize().background(c.bg).clickable(interactionSource = swallow, indication = null) {}.windowInsetsPadding(WindowInsets.statusBars).windowInsetsPadding(WindowInsets.navigationBars).padding(Tokens.Gutter)) {
+        Column(Modifier.align(Alignment.Center), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Icon(Icons.Rounded.MyLocation, null, tint = c.accent, modifier = Modifier.size(40.dp))
+            Text(stringResource(R.string.loc_intro_title), style = MaterialTheme.typography.headlineSmall, color = c.text)
+            Text(stringResource(R.string.loc_intro_body), style = MaterialTheme.typography.bodyLarge, color = c.textMuted)
+            Spacer(Modifier.height(8.dp))
+            PrimaryButton(stringResource(R.string.loc_intro_continue), onContinue)
+        }
+    }
+}
+
+/** Map localization: search → approximate → found, with the room hint and the destination (plan E2). */
+@Composable
+private fun LocalizationSheet(snap: NavigationSnapshot, backend: IndoorNavigationBackend, onHintRoom: () -> Unit, onPickDestination: () -> Unit) {
+    val c = Campus.colors
+    val pose = snap.localizedPose
+    val route = snap.activeRoute
+    val dest = snap.destination?.let { key -> snap.destinations.firstOrNull { it.key == key } }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        when {
+            snap.arrived -> Text(stringResource(R.string.loc_arrived), style = MaterialTheme.typography.titleLarge, color = c.accent)
+            pose == null || pose.state == com.hackdecouverte.loc.LocState.SEARCHING -> {
+                Text(stringResource(R.string.loc_searching_title), style = MaterialTheme.typography.titleLarge, color = c.text)
+                Text(stringResource(R.string.loc_searching_body), style = MaterialTheme.typography.bodyMedium, color = c.textMuted)
+                if (dest != null) Text(stringResource(R.string.loc_route_after_search), style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+            }
+            route != null -> Text(instructionText(route), style = MaterialTheme.typography.titleLarge, color = c.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            pose.state == com.hackdecouverte.loc.LocState.APPROXIMATE ->
+                Text(stringResource(R.string.loc_approximate_title, pose.radiusM.toInt().coerceAtLeast(1)), style = MaterialTheme.typography.titleLarge, color = c.text)
+            else -> Text(stringResource(R.string.loc_found_title), style = MaterialTheme.typography.titleLarge, color = c.text)
+        }
+        RoomField(
+            label = stringResource(R.string.loc_go_to),
+            value = dest?.let { roomLine(it.label, it.name) + if (snap.floors.size > 1) " · " + stringResource(R.string.indoor_floor, floorNumber(it.key.floorId)) else "" },
+            hint = stringResource(R.string.indoor_to_hint),
+            onClick = onPickDestination,
+            onClear = if (dest != null) ({ backend.setDestination(null) }) else null,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Pill(stringResource(R.string.loc_i_am_at), onHintRoom, style = PillStyle.Tonal)
+            // The barometer leans towards another floor: one tap confirms it (it can be wrong, so it never moves the user alone)
+            snap.barometerFloorSuggestionId?.let { baroFloor ->
+                Pill(stringResource(R.string.indoor_floor_question, floorNumber(baroFloor)), { backend.confirmUserFloor(baroFloor) })
+            }
+        }
+        if (snap.floors.size > 1) AccessibleRow(snap.accessibleOnly) { backend.setAccessibleOnly(it) }
+    }
+}
 
 @Composable
 private fun SetupSheet(

@@ -1,33 +1,49 @@
 {
-    "version": 1,
-    "provisional": false,
-    "trainedOn": [],
+    "version": 2,
+    "provisional": true,
+    "trainedOn": [
+        "STAN-1_20261118-150346"
+    ],
     "pdr": {
-        "compassPullTauS": 8.0,
-        "compassPullMaxErrDeg": 60.0,
+        "compassPullTauS": 6.0192407107271,
+        "compassPullMaxErrDeg": 55.246676797752876,
         "walkAxisCorrection": true,
-        "walkAxisTau": 4.0,
-        "walkAxisMinRatio": 2.0,
-        "strideWindowFactor": 1.0,
-        "typicalCadenceHz": 1.8
+        "walkAxisTau": 7.525224672593612,
+        "walkAxisMinRatio": 1.2450785333601213,
+        "strideWindowFactor": 0.808415932648205,
+        "typicalCadenceHz": 1.8,
+        "pivotTurnRateRadS": 0.7938305845550705,
+        "pivotFullRateSpanRadS": 1.0,
+        "pivotMinQuality": 0.2,
+        "magGateTolerance": 0.12060413404987971
     },
     "carry": {
         "startDeg": 25.0,
         "commitDeg": 35.0,
         "settledDeg": 12.0,
-        "swingOnDeg": 9.0,
-        "swingOffDeg": 6.0
+        "swingOnDeg": 11.143883378982306,
+        "swingOffDeg": 7.466401863918145
     },
     "filter": {
         "maxParticles": 2000,
         "minParticles": 300,
-        "headingNoiseDeg": 3.0,
-        "bodyCarryNoiseScale": 2.0,
-        "lengthNoise": 0.05,
-        "offsetDriftDeg": 0.5,
-        "scaleDrift": 0.005,
-        "wallFactor": 0.02,
-        "beta": 0.2,
-        "recoveryFraction": 0.02
+        "headingNoiseDeg": 4.834981785679896,
+        "bodyCarryNoiseScale": 1.1014988092744535,
+        "lengthNoise": 0.09099287494883157,
+        "offsetDriftDeg": 2.133903237444926,
+        "scaleDrift": 0.023098253076679995,
+        "wallFactor": 0.02701369729049832,
+        "beta": 0.19851037572606584,
+        "recoveryFraction": 0.04123604135837425,
+        "foundWeight": 0.9,
+        "foundRadiusM": 3.631007319453572,
+        "approxWeight": 0.6,
+        "approxRadiusM": 8.0,
+        "goodStepsToTrust": 10,
+        "badStepLikelihood": 0.05,
+        "lostRecoveryShare": 0.3213856696963673,
+        "doorWallFactor": 0.07181012229509104,
+        "doorSoftRadiusM": 0.564429298962495,
+        "graphDoorWidthM": 1.0
     }
 }

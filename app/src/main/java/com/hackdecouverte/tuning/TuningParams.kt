@@ -72,6 +72,13 @@ data class FilterTuning(
     val graphDoorWidthM: Double = 1.0
 )
 
+/** « v<version> (<n> marches)<, provisoire> », or « par défaut » for the hand-set values. */
+fun TuningParams.label(): String {
+    if (trainedOn.isEmpty() && !provisional) return "v$version (par défaut)"
+    val walks = trainedOn.size
+    return "v$version ($walks marche${if (walks > 1) "s" else ""}${if (provisional) ", provisoire" else ""})"
+}
+
 /** Filter settings from the tuning; [base] keeps what the tuning does not own (stride prior, history). */
 fun TuningParams.locParams(base: LocParams = LocParams()): LocParams = base.copy(
     maxParticles = filter.maxParticles,

@@ -400,5 +400,18 @@
     <string name="go_position_hint">Set my position</string>
     <string name="go_position_change">Change</string>
     <string name="indoor_building">Building</string>
-    <string name="settings_user_view">User view (Find a room)</string>
+    <!-- Final user screen (map localization) -->
+    <string name="loc_intro_title">Find your way indoors</string>
+    <string name="loc_intro_body">The app counts your steps to know where you are. It needs physical activity, location and notifications to keep going with the phone in your pocket.</string>
+    <string name="loc_intro_continue">Continue</string>
+    <string name="loc_probably_here">You are probably here</string>
+    <string name="loc_searching_title">Finding your position</string>
+    <string name="loc_searching_body">Walk normally, the phone can stay in your pocket. 20 to 40 m is usually enough.</string>
+    <string name="loc_i_am_at">I\'m at…</string>
+    <string name="loc_go_to">Go to…</string>
+    <string name="loc_approximate_title">Approximate position (± %1$d m)</string>
+    <string name="loc_found_title">Position found</string>
+    <string name="loc_arrived">You have arrived</string>
+    <string name="loc_route_after_search">The route appears once your position is found.</string>
+    <string name="settings_developer_mode">Developer mode (debug map)</string>
 </resources>

@@ -507,6 +507,16 @@ class LocalizationFilter(
         return LocEstimate(zones, state)
     }
 
+    /** Dense groups only (background spread left out): the « probablement ici » circles while searching. */
+    fun searchZones(): List<LocZone> {
+        if (n == 0) return emptyList()
+        val headings = DoubleArray(n) { lastHeadingRad + offset[it] }
+        val dense = ZoneClustering.zones(east, north, headings, weight, n, cellM = SEARCH_ZONE_CELL_M, minCellFactor = SEARCH_ZONE_CELL_FACTOR)
+        // A uniform search has a few denser cells by chance: those are not places, show the whole cloud.
+        val total = (0 until n).sumOf { weight[it] }
+        return if (total > 0 && dense.sumOf { it.weight } >= SEARCH_ZONE_MIN_SHARE * total) dense else zones()
+    }
+
     private fun zones(): List<LocZone> {
         if (n == 0) return emptyList()
         val headings = DoubleArray(n) { lastHeadingRad + offset[it] }
@@ -613,6 +623,10 @@ class LocalizationFilter(
     }
 
     companion object {
+        /** Cells under 2 × the mean cell weight are background for the search circles. */
+        const val SEARCH_ZONE_CELL_FACTOR = 2.0
+        const val SEARCH_ZONE_CELL_M = 1.5
+        const val SEARCH_ZONE_MIN_SHARE = 0.5
         const val MAX_HISTORY_STEPS = 300
         const val BAD_STEP_LIKELIHOOD = 0.05
         const val GOOD_STEP_LIKELIHOOD = 0.5

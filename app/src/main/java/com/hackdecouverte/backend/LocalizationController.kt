@@ -3,6 +3,7 @@ package com.hackdecouverte.backend
 import com.hackdecouverte.loc.LocEstimate
 import com.hackdecouverte.loc.LocParams
 import com.hackdecouverte.loc.LocParticle
+import com.hackdecouverte.loc.LocState
 import com.hackdecouverte.loc.LocZone
 import com.hackdecouverte.loc.LocalizationFilter
 import com.hackdecouverte.map.IndoorMap
@@ -26,8 +27,20 @@ data class LocDebug(
     /** False until the phone→walking angle is learned from the first straight line. */
     val offsetKnown: Boolean = true,
     /** The search started from the last zones instead of from scratch. */
-    val warmStarted: Boolean = false
+    val warmStarted: Boolean = false,
+    /** Filter time per step over the last 200 steps: median and 95th percentile (plan E3, target p95 ≤ 15 ms). */
+    val stepMsP50: Double = 0.0,
+    val stepMsP95: Double = 0.0,
+    /** How long the current floor's map took to build (plan D2: pre-bake only above 2 s). */
+    val mapBuildMs: Long = 0L
 )
+
+/** Median and 95th percentile of a window of step times (ms); zeros when empty. */
+fun stepTimePercentiles(window: List<Double>): Pair<Double, Double> {
+    if (window.isEmpty()) return 0.0 to 0.0
+    val s = window.sorted()
+    return s[(s.size - 1) / 2] to s[((s.size - 1) * 0.95).toInt()]
+}
 
 /** A system position (GPS / Wi-Fi / cell) in the plan frame, with its announced accuracy and clock (elapsedRealtimeNanos). */
 data class SystemFix(val centerM: PointM, val accuracyM: Double, val timeNs: Long)
@@ -67,7 +80,9 @@ class LocalizationController(
     fun prepare(floorId: String): Boolean {
         synchronized(maps) { if (maps.containsKey(floorId)) return maps[floorId] != null }
         // Built outside the lock: a background build of the next floor never blocks the main thread.
+        val t0 = System.nanoTime()
         val built = runCatching { mapProvider(floorId) }
+        synchronized(mapBuildMs) { mapBuildMs[floorId] = (System.nanoTime() - t0) / 1_000_000L }
         built.exceptionOrNull()?.let { lastError = "$floorId: ${it::class.simpleName}: ${it.message}" }
         val map = built.getOrNull()
         if (built.isSuccess && map == null) lastError = "$floorId: no map files"
@@ -269,13 +284,27 @@ class LocalizationController(
         stepsSinceStart += steps
         val ms = (System.nanoTime() - t0) / 1e6
         stepMs = if (stepMs == 0.0) ms else stepMs * 0.8 + ms * 0.2
+        synchronized(stepWindow) {
+            stepWindow.addLast(ms)
+            while (stepWindow.size > STEP_WINDOW) stepWindow.removeFirst()
+        }
         refresh(f)
     }
 
+    /** Zones to draw: dense groups only while SEARCHING, the estimate's zones otherwise. */
+    @Volatile var searchZones: List<LocZone> = emptyList()
+        private set
+
     @Volatile private var stepMs = 0.0
+    private val stepWindow = ArrayDeque<Double>()
+    private val mapBuildMs = HashMap<String, Long>()
 
     val debug: LocDebug?
-        get() = filter?.let { LocDebug(it.size(), stepMs, it.alarms, it.strideScaleEstimate(), it.strideScaleSpread(), gpsFixesUsed, it.effectiveSampleSize(), it.offsetKnown, warmStarted) }
+        get() = filter?.let {
+            val (p50, p95) = stepTimePercentiles(synchronized(stepWindow) { stepWindow.toList() })
+            val build = synchronized(mapBuildMs) { floorId?.let(mapBuildMs::get) } ?: 0L
+            LocDebug(it.size(), stepMs, it.alarms, it.strideScaleEstimate(), it.strideScaleSpread(), gpsFixesUsed, it.effectiveSampleSize(), it.offsetKnown, warmStarted, p50, p95, build)
+        }
 
     fun samplePositions(max: Int): List<PointM> = sampleParticles(max).map { it.positionM }
 
@@ -290,11 +319,13 @@ class LocalizationController(
 
     private fun refresh(f: LocalizationFilter) {
         estimate = f.estimate()
+        searchZones = if (estimate?.state == LocState.SEARCHING) f.searchZones() else estimate?.zones.orEmpty()
         particles = f.sampleParticles(MAX_PARTICLES_SHOWN_SOURCE)
         trace = f.tracePath().orEmpty()
     }
 
     companion object {
+        private const val STEP_WINDOW = 200
         /**
          * Hypotheses for a warm start: the last zones, widened by [WARM_BASE_RADIUS_M] plus
          * [WARM_GROWTH_M_PER_MIN] per minute away (capped at 15 min), sharing [warmShare] of the

@@ -320,7 +320,8 @@ private fun DebugStatus(snapshot: NavigationSnapshot) {
             add(snapshot.localizationError?.let { "Carte indisponible : $it" } ?: "Préparation de la carte de ${snapshot.userFloorId ?: "—"}…")
         } else {
             val state = when (loc.state) { LocState.SEARCHING -> "RECHERCHE"; LocState.APPROXIMATE -> "APPROXIMATIF"; LocState.FOUND -> "TROUVÉ" }
-            add("$state · ${d.particleCount} pts · ESS ${d.ess.roundToInt()} · ${fmt(d.stepMs, 1)} ms/pas · alertes ${d.alarms}")
+            add("$state · ${d.particleCount} pts · ESS ${d.ess.roundToInt()} · ${fmt(d.stepMs, 1)} ms/pas (p50 ${fmt(d.stepMsP50, 1)} · p95 ${fmt(d.stepMsP95, 1)}) · alertes ${d.alarms}")
+            add("carte prête en ${d.mapBuildMs} ms")
             add("pas ×${fmt(d.strideScale, 2)} ±${fmt(d.strideSpread, 2)} · angle tél. ${if (d.offsetKnown) "appris" else "attend une ligne droite"} · retracé ${snapshot.localizationTrace.size} pts" +
                 if (d.warmStarted) " · départ : dernière zone" else "")
             add(loc.zones.take(3).mapIndexed { i, z -> "#${i + 1} ${(z.weight * 100).roundToInt()} % r ${fmt(z.radiusM, 1)} m" }.joinToString("  ·  ").ifEmpty { "aucune zone" })
@@ -341,6 +342,7 @@ private fun DebugStatus(snapshot: NavigationSnapshot) {
             else -> "stable (main, poche de veste, sac)"
         }
         add(if (snapshot.backgroundTracking) "Suivi écran éteint : actif (notification)" else "Suivi écran éteint : non (permission de localisation ?)")
+        add("Réglages : ${snapshot.tuningLabel}")
         add("Tenue : $carry · changements ${p.holdChanges} · cap = marche ${if (p.headingAligned) "oui" else "non (angle appris par la carte)"}")
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {

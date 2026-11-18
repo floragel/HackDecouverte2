@@ -50,6 +50,7 @@ import com.hackdecouverte.ui.drawRoutePill
 import com.hackdecouverte.ui.drawStairsIcon
 import com.hackdecouverte.ui.drawStartMarker
 import com.hackdecouverte.ui.drawUserLocation
+import com.hackdecouverte.loc.LocState
 import com.hackdecouverte.ui.drawWalkedTrail
 import com.hackdecouverte.ui.rememberSmoothHeadingRad
 import com.hackdecouverte.ui.screenHeading
@@ -94,14 +95,18 @@ fun IndoorCanvas(
     colors: CampusColors,
     modifier: Modifier = Modifier,
     bottomInsetPx: Float = 0f,
+    /** Label over the main search circle (« probablement ici »); null = none. */
+    searchLabel: String? = null,
 ) {
     val state = snapshot.pdr
     val vectorPlan = snapshot.activeFloorVector
     val floorPlan = snapshot.activeFloor
     val anchor = snapshot.anchor
     val route = snapshot.activeRoute
-    val targetPosition = snapshot.mapPositionM
-    val smoothHeading = rememberSmoothHeadingRad(snapshot.mapHeadingRad)
+    // Map localization on: the dot follows the filter's main zone, not the raw PDR trace.
+    val localized = snapshot.localizedPose
+    val targetPosition = localized?.positionM ?: snapshot.mapPositionM
+    val smoothHeading = rememberSmoothHeadingRad(localized?.headingRad ?: snapshot.mapHeadingRad)
     val headingReady = state.headingValid && !state.tilted
 
     var renderedFloorPair by remember { mutableStateOf<Pair<String, Bitmap>?>(null) }
@@ -398,8 +403,30 @@ fun IndoorCanvas(
                 }
             }
 
+            // 7b. Map localization: « probablement ici » circles while searching, one following circle when approximate
+            if (snapshot.localizationEnabled && snapshot.isViewingUserFloor) {
+                when (localized?.state) {
+                    LocState.APPROXIMATE -> {
+                        val r = (localized.radiusM.toFloat() * pxPerM).coerceAtLeast(10f * density)
+                        drawCircle(SEARCH_PURPLE.copy(alpha = 0.12f), r, toScreen(displayPosition))
+                        drawCircle(SEARCH_PURPLE, r, toScreen(displayPosition), style = Stroke(2f * density))
+                    }
+                    LocState.FOUND -> Unit
+                    else -> {
+                        for (z in snapshot.searchZones) {
+                            val r = (z.radiusM.toFloat() * pxPerM).coerceAtLeast(10f * density)
+                            drawCircle(SEARCH_PURPLE.copy(alpha = 0.12f), r, toScreen(z.centerM))
+                            drawCircle(SEARCH_PURPLE, r, toScreen(z.centerM), style = Stroke(2f * density))
+                        }
+                        val main = snapshot.searchZones.firstOrNull()
+                        if (main != null && searchLabel != null) drawRoutePill(toScreen(main.centerM), searchLabel, density)
+                    }
+                }
+            }
+
             // 8. Gliding Blue Location Dot + Heading Beam (points straight UP when Head-Up is active)
-            if (snapshot.isViewingUserFloor) {
+            val dotShown = !snapshot.localizationEnabled || localized?.state == LocState.FOUND
+            if (snapshot.isViewingUserFloor && dotShown) {
                 val here = toScreen(displayPosition)
                 val ahead = toScreen(
                     PointM(
@@ -420,6 +447,9 @@ fun IndoorCanvas(
         }
     }
 }
+
+/** Search circles (plan E2): violet outline, 12 % fill. */
+private val SEARCH_PURPLE = androidx.compose.ui.graphics.Color(0xFF7C4DFF)
 
 private fun DrawScope.drawNorthAndScale(rotation: Double, pxPerM: Float, colors: CampusColors, bottomInsetPx: Float) {
     // North badge and scale bar sit bottom-left, just above the sheet

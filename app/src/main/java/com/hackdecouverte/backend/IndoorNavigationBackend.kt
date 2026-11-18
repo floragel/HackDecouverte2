@@ -17,6 +17,7 @@ import com.hackdecouverte.tuning.Tuning
 import com.hackdecouverte.tuning.TuningParams
 import com.hackdecouverte.tuning.applyTuning
 import com.hackdecouverte.tuning.from
+import com.hackdecouverte.tuning.label
 import com.hackdecouverte.tuning.locParams
 import com.hackdecouverte.loc.LocZone
 import com.hackdecouverte.loc.LocState
@@ -148,11 +149,19 @@ data class NavigationSnapshot(
     val localizationError: String? = null,
     /** Walk traced back once the zone is found (backward belief propagation), oldest first. */
     val localizationTrace: List<PointM> = emptyList(),
+    /** Settings shipped in `tuning/params.json` (debug line « Réglages : … »). */
+    val tuningLabel: String = TuningParams().label(),
     /** GPS disk of the search: centre and radius (max(2 × accuracy, 30 m)), null without a usable fix. */
     val localizationSystemCircle: Pair<PointM, Double>? = null,
     val localizationDebug: LocDebug? = null,
     /** Tracking survives the screen turning off (tracking service running). */
-    val backgroundTracking: Boolean = false
+    val backgroundTracking: Boolean = false,
+    /** Map localization: where it puts the user (main zone), null without a zone or when off. */
+    val localizedPose: LocalizedPose? = null,
+    /** The first zones of the search, for the « probablement ici » circles. */
+    val searchZones: List<LocZone> = emptyList(),
+    /** FOUND within 2.5 m of a door of the destination. */
+    val arrived: Boolean = false
 )
 
 class IndoorNavigationBackend(
@@ -277,6 +286,11 @@ class IndoorNavigationBackend(
 
     private var cachedRouteKey: RouteCacheKey? = null
     private var cachedRoute: NavigationRoute? = null
+
+    /** Localized routing: pose and step count at the last route, the destination door kept (hysteresis). */
+    private var lastRoutePose: LocalizedPose? = null
+    private var lastRouteSteps = 0
+    private var stickyDoor: PointM? = null
 
     init {
         altitudeFloors = buildAltitudeEstimator()
@@ -1277,10 +1291,11 @@ class IndoorNavigationBackend(
     private fun beginSearch(floorId: String, allowWarm: Boolean) {
         val (lo, hi) = strideMemory.prior(tracker.state.value.lengthPerStepM ?: strideMemory.learnedStepM)
         localization.params = tuning.locParams().copy(strideScaleMin = lo, strideScaleMax = hi)
-        localization.start(floorId, freshSystemFix(), if (allowWarm) loadWarmStart(floorId) else null)
+        localization.start(floorId, freshSystemFix(), streetEntryStart(floorId) ?: if (allowWarm) loadWarmStart(floorId) else null)
         foundSteps = 0
         learnedInRun = false
         lastLearnFoundSteps = 0
+        pendingHint?.takeIf { it.floorId == floorId }?.let(::hintRoom)
     }
 
     /** One more PDR step under map localization: stride learning and the last zones for the next warm start. */
@@ -1288,6 +1303,10 @@ class IndoorNavigationBackend(
         val est = localization.estimate ?: return
         val d = localization.debug ?: return
         foundSteps = if (est.state == LocState.FOUND) foundSteps + 1 else 0
+        // Device measurements for the acceptance (plan E3/F2), in the walk recording.
+        if (s.stepCount % PERF_NOTE_EVERY_STEPS == 0) {
+            recorder.note("perf", "stepMsP50=%.2f stepMsP95=%.2f mapBuildMs=%d".format(Locale.ROOT, d.stepMsP50, d.stepMsP95, d.mapBuildMs))
+        }
         if (est.state != LocState.SEARCHING && s.stepCount % 10 == 0) saveLastZones()
         val l0 = s.lengthPerStepM ?: return
         val due = if (!learnedInRun) foundSteps >= StrideMemory.FOUND_STEPS_TO_LEARN
@@ -1316,6 +1335,45 @@ class IndoorNavigationBackend(
             .putLong(KEY_LAST_WALL_MS, System.currentTimeMillis())
             .putFloat(KEY_LAST_HPA, latestPressureHpa?.toFloat() ?: Float.NaN)
             .apply()
+    }
+
+    /**
+     * Coming in from the street (spec §6.4 case 1): a good outdoor fix (≤ 10 m, more than 15 m from the
+     * site origin) less than 60 s old starts the search at the nearest entrances.
+     */
+    private fun streetEntryStart(floorId: String): WarmStart? {
+        val fix = latestGpsFix ?: return null
+        if (!site.gpsPositionTrusted || fix.accuracyM > STREET_FIX_MAX_ACCURACY_M || fix.eastNorthM.norm() <= STREET_FIX_MIN_DISTANCE_M) return null
+        if (SystemClock.elapsedRealtimeNanos() - fix.elapsedRealtimeNs > STREET_FIX_MAX_AGE_NS) return null
+        val plan = buildingGraph.floor(floorId) ?: return null
+        val zones = LocalizedNavigation.entranceHintZones(plan, fix.eastNorthM)
+        return if (zones.isEmpty()) null else WarmStart(zones, 0.0)
+    }
+
+    /**
+     * « Je suis à … » (spec §6.4 case 4): restarts the search around the doors of that room, a hint and not
+     * a certainty (the filter keeps its recovery share elsewhere).
+     */
+    private var pendingHint: NodeKey? = null
+
+    fun hintRoom(key: NodeKey) {
+        Log.d(LOG_TAG, "hint room $key (localization ${if (localizationEnabled) "on" else "off"}, search on ${localization.floorId})")
+        if (!localizationEnabled) return
+        val plan = buildingGraph.floor(key.floorId) ?: return
+        val label = plan.nodes.firstOrNull { it.id == key.nodeId }?.label?.takeIf { it.isNotBlank() } ?: return
+        val zones = LocalizedNavigation.roomHintZones(plan, label)
+        if (zones.isEmpty()) return
+        // Map still building (or another floor's search): kept, applied when the search on that floor starts.
+        if (localization.floorId != key.floorId) {
+            pendingHint = key
+            return
+        }
+        pendingHint = null
+        val (lo, hi) = strideMemory.prior(tracker.state.value.lengthPerStepM ?: strideMemory.learnedStepM)
+        localization.params = tuning.locParams().copy(strideScaleMin = lo, strideScaleMax = hi)
+        localization.start(key.floorId, null, WarmStart(zones, 0.0))
+        recorder.note("hint_room", label)
+        invalidateRouteAndPublish()
     }
 
     /** The last zones if they are on this building and floor, recent, and the pressure says the floor did not change. */
@@ -1414,6 +1472,8 @@ class IndoorNavigationBackend(
     private fun invalidateRouteAndPublish() {
         cachedRouteKey = null
         cachedRoute = null
+        lastRoutePose = null
+        stickyDoor = null
         _state.value = buildSnapshot(tracker.state.value)
     }
 
@@ -1428,6 +1488,7 @@ class IndoorNavigationBackend(
         val mapPos = anc?.toMap(pdr.position) ?: pdr.position
         val mapHeading = anc?.mapHeading(pdr.headingRadians) ?: pdr.headingRadians
         val route = resolveRoute(pdr, mapPos, mapHeading)
+        val pose = localizedPose()
 
         val nearbyConn = uFloorId?.let {
             buildingGraph.findNearestVerticalConnector(it, mapPos, maxRadiusM = 8.5, accessibleOnly = accessibleOnly)
@@ -1497,7 +1558,11 @@ class IndoorNavigationBackend(
             localizationTrace = if (localizationEnabled) localization.tracedPath() else emptyList(),
             localizationSystemCircle = if (localizationEnabled) localization.systemCircle else null,
             localizationDebug = if (localizationEnabled) localization.debug else null,
-            backgroundTracking = backgroundTracking
+            backgroundTracking = backgroundTracking,
+            tuningLabel = tuning.label(),
+            localizedPose = pose,
+            searchZones = if (localizationEnabled) localization.searchZones.take(SEARCH_ZONES_SHOWN) else emptyList(),
+            arrived = pose != null && destination?.let { d -> LocalizedNavigation.arrived(pose, destinationDoors(d).filter { d.floorId == pose.floorId }.map { it.second }) } == true
         )
     }
 
@@ -1531,8 +1596,55 @@ class IndoorNavigationBackend(
         )
     }
 
+    private fun localizedPose(): LocalizedPose? {
+        if (!localizationEnabled) return null
+        val floor = localization.floorId ?: return null
+        return localization.estimate?.let { LocalizedNavigation.pose(floor, it) }
+    }
+
+    /** Door positions of the destination room (every door of a multi-door room), on the destination floor. */
+    private fun destinationDoors(dest: NodeKey): List<Pair<String, PointM>> {
+        val plan = buildingGraph.floor(dest.floorId) ?: return emptyList()
+        val node = plan.nodes.firstOrNull { it.id == dest.nodeId } ?: return emptyList()
+        if (node.type != "room" || node.label.isBlank()) return listOf(node.id to node.posM)
+        return plan.nodes.filter { it.type == "room" && it.label == node.label }.map { it.id to it.posM }
+    }
+
+    /** Map localization: no route while SEARCHING; recomputed on state, floor or ≥ 1 m moves; the door is sticky. */
+    private fun resolveLocalizedRoute(pdr: PdrState, dest: NodeKey): NavigationRoute? {
+        val pose = localizedPose() ?: return null
+        if (pose.state == LocState.SEARCHING) {
+            lastRoutePose = null
+            return null
+        }
+        val stepsSince = pdr.stepCount - lastRouteSteps
+        if (cachedRoute != null && !LocalizedNavigation.shouldReroute(lastRoutePose, pose, stepsSince)) return cachedRoute
+        val doors = destinationDoors(dest)
+        if (doors.isEmpty()) return null
+        val target = if (dest.floorId == pose.floorId) {
+            val door = LocalizedNavigation.stickyDestinationDoor(stickyDoor, doors.map { it.second }, pose.positionM)
+            stickyDoor = door
+            NodeKey(dest.floorId, doors.first { it.second == door }.first)
+        } else {
+            dest
+        }
+        lastRoutePose = pose
+        lastRouteSteps = pdr.stepCount
+        cachedRouteKey = null
+        cachedRoute = buildingGraph.findRouteFromPosition(
+            floorId = pose.floorId,
+            positionM = pose.positionM,
+            destination = target,
+            accessibleOnly = accessibleOnly,
+            userMapHeadingRad = pose.headingRad,
+            anyDoorOfRoom = dest.floorId != pose.floorId
+        )
+        return cachedRoute
+    }
+
     private fun resolveRoute(pdr: PdrState, mapPos: PointM, mapHeading: Double): NavigationRoute? {
         val dest = destination ?: return null
+        if (localizationEnabled) return resolveLocalizedRoute(pdr, dest)
         val floorId = userFloorId ?: return null
         if (startPose == null && !usingGpsStart && pdr.stepCount == 0) {
             return null
@@ -1591,6 +1703,11 @@ class IndoorNavigationBackend(
 
     companion object {
         private const val LOG_TAG = "IndoorNav"
+        private const val STREET_FIX_MAX_ACCURACY_M = 10.0
+        private const val STREET_FIX_MIN_DISTANCE_M = 15.0
+        private const val STREET_FIX_MAX_AGE_NS = 60_000_000_000L
+        private const val SEARCH_ZONES_SHOWN = 2
+        private const val PERF_NOTE_EVERY_STEPS = 50
         private const val PREFS_NAME = "pdr_prefs"
         private const val KEY_LAST_STEP_LENGTH = "last_step_length"
         private const val KEY_LAST_CADENCE = "last_cadence_hz"

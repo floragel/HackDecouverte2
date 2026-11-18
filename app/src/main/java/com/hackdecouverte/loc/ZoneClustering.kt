@@ -10,14 +10,22 @@ import kotlin.math.sqrt
 /** Groups particles into zones: connected [cellM] cells (8-neighbourhood) that hold weight. */
 object ZoneClustering {
 
-    fun zones(east: DoubleArray, north: DoubleArray, headings: DoubleArray, weights: DoubleArray, n: Int, cellM: Double = 3.0): List<LocZone> {
+    /**
+     * [minCellFactor] > 0: cells holding less than that × the mean cell weight are left out, so a thin
+     * background spread over the floor does not join the dense groups into one zone (display while searching).
+     */
+    fun zones(east: DoubleArray, north: DoubleArray, headings: DoubleArray, weights: DoubleArray, n: Int, cellM: Double = 3.0, minCellFactor: Double = 0.0): List<LocZone> {
         if (n == 0) return emptyList()
-        val cellOf = LongArray(n)
         val members = HashMap<Long, MutableList<Int>>()
         for (i in 0 until n) {
             val key = key(floor(east[i] / cellM).toInt(), floor(north[i] / cellM).toInt())
-            cellOf[i] = key
             members.getOrPut(key) { ArrayList() }.add(i)
+        }
+        if (minCellFactor > 0) {
+            val cellWeight = members.mapValues { (_, idx) -> idx.sumOf { weights[it] } }
+            val threshold = minCellFactor * cellWeight.values.sum() / cellWeight.size
+            members.keys.retainAll { cellWeight.getValue(it) >= threshold }
+            if (members.isEmpty()) return emptyList()
         }
         val seen = HashSet<Long>()
         val out = ArrayList<LocZone>()

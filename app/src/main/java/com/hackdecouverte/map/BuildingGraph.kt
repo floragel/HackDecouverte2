@@ -384,13 +384,15 @@ class BuildingGraph(
         positionM: PointM,
         destination: NodeKey,
         accessibleOnly: Boolean = false,
-        userMapHeadingRad: Double? = null
+        userMapHeadingRad: Double? = null,
+        /** False: exactly [destination], not the closest door of its room (the caller keeps a door, hysteresis). */
+        anyDoorOfRoom: Boolean = true
     ): NavigationRoute? {
         val startPlan = floorsById[floorId] ?: return null
         val destPlan = floorsById[destination.floorId] ?: return null
         val primaryDestNode = node(destination) ?: return null
         // Multi-door rooms share the same room label on a floor: route to whichever doorway is closest!
-        val destCandidates: Set<NodeKey> = if (primaryDestNode.type == "room" && primaryDestNode.label.isNotBlank()) {
+        val destCandidates: Set<NodeKey> = if (anyDoorOfRoom && primaryDestNode.type == "room" && primaryDestNode.label.isNotBlank()) {
             destPlan.nodes
                 .filter { it.type == "room" && it.label == primaryDestNode.label }
                 .map { NodeKey(destination.floorId, it.id) }

@@ -392,5 +392,18 @@
     <string name="go_position_hint">Définir ma position</string>
     <string name="go_position_change">Changer</string>
     <string name="indoor_building">Bâtiment</string>
-    <string name="settings_user_view">Vue utilisateur (Trouver une salle)</string>
+    <!-- Écran utilisateur final (localisation par la carte) -->
+    <string name="loc_intro_title">Trouve ton chemin à l\'intérieur</string>
+    <string name="loc_intro_body">L\'app compte tes pas pour savoir où tu es. Elle a besoin de l\'activité physique, de la position et des notifications pour continuer téléphone en poche.</string>
+    <string name="loc_intro_continue">Continuer</string>
+    <string name="loc_probably_here">Tu es probablement ici</string>
+    <string name="loc_searching_title">Recherche de ta position</string>
+    <string name="loc_searching_body">Marche normalement, le téléphone peut rester dans la poche. 20 à 40 m suffisent en général.</string>
+    <string name="loc_i_am_at">Je suis à…</string>
+    <string name="loc_go_to">Aller à…</string>
+    <string name="loc_approximate_title">Position approximative (± %1$d m)</string>
+    <string name="loc_found_title">Position trouvée</string>
+    <string name="loc_arrived">Tu es arrivé·e</string>
+    <string name="loc_route_after_search">L\'itinéraire s\'affiche dès que ta position est trouvée.</string>
+    <string name="settings_developer_mode">Mode développeur (carte de debug)</string>
 </resources>

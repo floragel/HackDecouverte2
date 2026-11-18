@@ -22,8 +22,8 @@ import com.lync.app.ui.settings.SettingsScreen
 import com.lync.app.ui.theme.Campus
 
 /**
- * Debug app: the localization debug map is the home screen; settings and the user view
- * (« Find a room ») open on top of it. No bottom bar.
+ * The user screen (map localization) is the home screen; settings, and from there the debug map
+ * (developer mode), open on top of it. No bottom bar.
  */
 @Composable
 fun MainScreen() {
@@ -33,7 +33,7 @@ fun MainScreen() {
     CompositionLocalProvider(LocalNavigator provides navigator) {
         NavHost(
             navController = nav,
-            startDestination = Routes.INDOOR_DEV,
+            startDestination = Routes.INDOOR,
             modifier = Modifier.fillMaxSize().background(Campus.colors.bg),
             enterTransition = { slideInHorizontally(tween(280)) { it / 3 } + fadeIn(tween(200)) },
             exitTransition = { fadeOut(tween(160)) },
