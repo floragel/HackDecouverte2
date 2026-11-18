@@ -120,20 +120,32 @@ class LocalizationFilter(
     }
 
     private fun advance(lengthM: Double, headingRad: Double) {
+        if (suppressFoundSteps > 0) suppressFoundSteps--
+        val main = zones().firstOrNull()
+        val mainRadius = maxOf(main?.radiusM ?: 0.0, 1.0)
+        var mainW = 0.0; var mainAlign = 0.0; var mainBlocked = 0.0
         lastHeadingRad = headingRad
         val g = map.grid
         val dirs = map.directions
         var likelihood = 0.0
         for (i in 0 until n) {
+            val inMain = main != null && (east[i] - main.centerM.x).let { it * it } + (north[i] - main.centerM.y).let { it * it } <= mainRadius * mainRadius
             val h = headingRad + offset[i] + gaussian() * params.headingNoiseRad
             val len = lengthM * scale[i] * (1 + gaussian() * params.lengthNoise)
             val from = PointM(east[i], north[i])
             val to = PointM(east[i] + len * sin(h), north[i] + len * cos(h))
-            var f = if (g.segmentBlocked(from, to)) params.wallFactor else 1.0
+            val blocked = g.segmentBlocked(from, to)
+            var f = if (blocked) params.wallFactor else 1.0
             val c = dirs.coherenceAt(to)
+            var align = 1.0
             if (c > 0) {
                 val s = sin(axialDiff(h, dirs.axisAt(to)))
-                f *= 1 - params.beta * c * s * s
+                align = 1 - params.beta * c * s * s
+                f *= align
+            }
+            if (inMain) {
+                mainW += weight[i]; mainAlign += weight[i] * align
+                if (blocked) mainBlocked += weight[i]
             }
             east[i] = to.x; north[i] = to.y
             offset[i] += gaussian() * params.offsetDriftRad
@@ -147,6 +159,7 @@ class LocalizationFilter(
             return
         }
         for (i in 0 until n) weight[i] /= likelihood
+        if (mainW > 0) checkAlarm(mainAlign / mainW, mainBlocked / mainW)
         // Most of the mass walked through walls: the map or the estimate is wrong — re-seed around it.
         badSteps = if (likelihood < BAD_STEP_LIKELIHOOD) badSteps + 1 else 0
         goodSteps = if (likelihood >= GOOD_STEP_LIKELIHOOD) goodSteps + 1 else 0
@@ -175,26 +188,50 @@ class LocalizationFilter(
         return (0 until n step stride).take(max).map { PointM(east[it], north[it]) }
     }
 
-    /** Single weighted zone (refined by clustering later). */
+    /** Number of times the main zone was caught walking across corridors or into walls (diagnostic). */
+    var alarms: Int = 0
+        private set
+    private var suppressFoundSteps = 0
+    private val recentAlign = ArrayDeque<Double>()
+    private val recentBlocked = ArrayDeque<Double>()
+
+    /**
+     * Zones (main first) and state (spec §5, §6.3): FOUND when the main zone holds > 90 % of the
+     * weight within 3 m, APPROXIMATE when > 60 % within 8 m, otherwise SEARCHING.
+     */
     fun estimate(): LocEstimate {
-        if (n == 0) return LocEstimate(emptyList(), LocState.SEARCHING)
-        var me = 0.0; var mn = 0.0; var ws = 0.0; var sinH = 0.0; var cosH = 0.0
-        for (i in 0 until n) {
-            me += weight[i] * east[i]; mn += weight[i] * north[i]; ws += weight[i]
-            sinH += weight[i] * sin(lastHeadingRad + offset[i]); cosH += weight[i] * cos(lastHeadingRad + offset[i])
-        }
-        me /= ws; mn /= ws
-        var v = 0.0
-        for (i in 0 until n) v += weight[i] * ((east[i] - me) * (east[i] - me) + (north[i] - mn) * (north[i] - mn))
-        val radius = 2.45 * sqrt(v / ws / 2)
-        val zone = LocZone(PointM(me, mn), radius, 1.0, atan2(sinH, cosH))
+        val zones = zones()
+        val main = zones.firstOrNull() ?: return LocEstimate(emptyList(), LocState.SEARCHING)
         val state = when {
             forcedSearching -> LocState.SEARCHING
-            radius < 3.0 -> LocState.FOUND
-            radius <= 8.0 -> LocState.APPROXIMATE
+            main.weight > 0.9 && main.radiusM < 3.0 && suppressFoundSteps == 0 -> LocState.FOUND
+            main.weight > 0.6 && main.radiusM <= 8.0 -> LocState.APPROXIMATE
             else -> LocState.SEARCHING
         }
-        return LocEstimate(listOf(zone), state)
+        return LocEstimate(zones, state)
+    }
+
+    private fun zones(): List<LocZone> {
+        if (n == 0) return emptyList()
+        val headings = DoubleArray(n) { lastHeadingRad + offset[it] }
+        return ZoneClustering.zones(east, north, headings, weight, n)
+    }
+
+    /**
+     * Alarm signal (spec §6.3, user's confidence idea): over the last [ALARM_STEPS] steps the main
+     * zone kept walking across a marked corridor or into walls → re-seed 10 % around it and do not
+     * claim FOUND on the next step.
+     */
+    private fun checkAlarm(meanAlign: Double, blockedShare: Double) {
+        recentAlign.addLast(meanAlign); recentBlocked.addLast(blockedShare)
+        while (recentAlign.size > ALARM_STEPS) { recentAlign.removeFirst(); recentBlocked.removeFirst() }
+        if (recentAlign.size < ALARM_STEPS) return
+        if (recentAlign.average() < 1 - params.beta / 2 || recentBlocked.average() > 0.5) {
+            alarms++
+            recentAlign.clear(); recentBlocked.clear()
+            reseedAround(0.1)
+            suppressFoundSteps = 2 // still active right after this step; cleared at the start of the next-but-one
+        }
     }
 
     // ---- internals
@@ -279,6 +316,7 @@ class LocalizationFilter(
         val LINE_SPREAD_RAD = Math.toRadians(8.0)
         const val MAX_STEPS_WITHOUT_LINE = 20
         const val FREE_OFFSET_SHARE = 0.1
+        const val ALARM_STEPS = 5
 
         fun wrapPi(a: Double): Double {
             var r = a % (2 * PI)
