@@ -34,15 +34,16 @@ data class IndoorSite(
 
         /**
          * Collège Stanislas (Outremont), McEachran wing. Drawn from the level 100 evacuation plan;
-         * (0, 0) = middle of the main corridor. The coordinates are approximate, so GPS only helps the heading.
+         * (0, 0) = middle of the main corridor, placed on the middle of the wing as picked on a map
+         * (a few metres off at most, well inside the ≥ 30 m GPS search disk).
          */
         val STANISLAS = IndoorSite(
             id = "STAN",
             name = "Collège Stanislas",
             floorsDir = "buildings/STAN",
             defaultFloorId = "STAN-1",
-            origin = GeoOrigin(latitude = 45.5185, longitude = -73.6105),
-            gpsPositionTrusted = false,
+            origin = GeoOrigin(latitude = 45.51805395604281, longitude = -73.61554355694975),
+            gpsPositionTrusted = true,
             osmSurroundings = false
         )
 

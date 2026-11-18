@@ -211,49 +211,6 @@ internal fun DrawScope.drawUserLocation(
 }
 
 /** Small "start" marker: white disc with a grey ring. */
-/**
- * Map localization (developer view): particles as small dots, each zone as a translucent circle,
- * the main zone (first) more opaque, and the walk traced back from it as a dashed line.
- */
-internal fun DrawScope.drawLocalization(
-    particles: List<Offset>,
-    zones: List<Pair<Offset, Float>>,
-    density: Float,
-    trace: List<Offset> = emptyList(),
-    gpsDisk: Pair<Offset, Float>? = null
-) {
-    val dot = Color(0xFF7C3AED)
-    // GPS disk: where the search started / is weighted (blue, behind everything)
-    gpsDisk?.let { (center, radiusPx) ->
-        val blue = Color(0xFF1A73E8)
-        drawCircle(blue.copy(alpha = 0.08f), radius = radiusPx, center = center)
-        drawCircle(blue.copy(alpha = 0.6f), radius = radiusPx, center = center, style = Stroke(width = 1.5f * density))
-        drawCircle(blue, radius = 4f * density, center = center)
-    }
-    if (trace.size >= 2) {
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(trace[0].x, trace[0].y)
-            for (k in 1 until trace.size) lineTo(trace[k].x, trace[k].y)
-        }
-        drawPath(
-            path, color = dot.copy(alpha = 0.8f),
-            style = Stroke(width = 3f * density, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f * density, 6f * density)))
-        )
-        drawStartMarker(trace.first(), density)
-    }
-    for (p in particles) drawCircle(color = dot.copy(alpha = 0.55f), radius = 2f * density, center = p)
-    zones.forEachIndexed { i, (center, radiusPx) ->
-        val alpha = if (i == 0) 0.22f else 0.10f
-        drawCircle(color = dot.copy(alpha = alpha), radius = radiusPx.coerceAtLeast(6f * density), center = center)
-        drawCircle(
-            color = dot.copy(alpha = if (i == 0) 0.9f else 0.45f),
-            radius = radiusPx.coerceAtLeast(6f * density),
-            center = center,
-            style = Stroke(width = (if (i == 0) 2f else 1.2f) * density)
-        )
-    }
-}
-
 internal fun DrawScope.drawStartMarker(center: Offset, density: Float) {
     drawCircle(Color.White, radius = 5.5f * density, center = center)
     drawCircle(Color(0xFF5F6368), radius = 5.5f * density, center = center, style = Stroke(width = 2f * density))

@@ -27,3 +27,10 @@ data class LocZone(val centerM: PointM, val radiusM: Double, val weight: Double,
 
 /** Zones sorted by weight (main zone first) and the overall state. */
 data class LocEstimate(val zones: List<LocZone>, val state: LocState)
+
+/**
+ * One hypothesis for the debug map: [weight] (normalised over all), [score] = recent average of how
+ * plausible its steps were (1 = followed the corridor, low = walked into walls or across corridors),
+ * [headingRad] = walking direction it currently assumes.
+ */
+data class LocParticle(val positionM: PointM, val weight: Double, val score: Double, val headingRad: Double)

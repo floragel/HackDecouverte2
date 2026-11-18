@@ -76,7 +76,9 @@ fun TelemetryScreen(
     onReturnToUserFloor: () -> Unit,
     onResetPosition: () -> Unit,
     onOpenSetup: () -> Unit,
-    onResumeNewTrace: () -> Unit
+    onResumeNewTrace: () -> Unit,
+    layers: Set<DebugLayer> = DebugLayer.defaults,
+    initialZoom: Float = 0.85f
 ) {
     val state = snapshot.pdr
     val floorPlan = snapshot.activeFloor
@@ -85,7 +87,7 @@ fun TelemetryScreen(
     val anchor = snapshot.anchor
     val route = snapshot.activeRoute
 
-    var zoom by remember { mutableStateOf(0.85f) }
+    var zoom by remember { mutableStateOf(initialZoom) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var follow by remember { mutableStateOf(true) }
     var frozenFocus by remember { mutableStateOf(PointM(0.0, 0.0)) }
@@ -131,6 +133,12 @@ fun TelemetryScreen(
         label = "pulse"
     )
     val headingReady = state.headingValid && !state.tilted
+
+    // Occupancy grid exactly as the localization filter sees it (one pixel per 10 cm cell)
+    val locMap = snapshot.localizationMap
+    val occupancyBmp = remember(locMap) { locMap?.let(::renderOccupancy) }
+    val gridMatrix = remember { Matrix() }
+    val gridPaint = remember { Paint() } // no filtering: crisp cells
 
     val bmpMatrix = remember { Matrix() }
     val bmpPaint = remember {
@@ -669,6 +677,20 @@ fun TelemetryScreen(
                 }
 
                 val density = 1.dp.toPx()
+                val pxPerMf = transform.pxPerMeter.toFloat()
+                val onUserFloor = snapshot.localizationEnabled && snapshot.isViewingUserFloor && locMap?.floorId == viewedFloorId
+
+                // 7b. Debug: the filter's own map (occupancy grid, direction map, door openings)
+                if (onUserFloor && locMap != null) {
+                    if (DebugLayer.GRID in layers && occupancyBmp != null) {
+                        val src = floatArrayOf(0f, 0f, occupancyBmp.width.toFloat(), 0f, 0f, occupancyBmp.height.toFloat())
+                        if (gridMatrix.setPolyToPoly(src, 0, occupancyCorners(locMap) { toScreen(it) }, 0, 3)) {
+                            drawContext.canvas.nativeCanvas.drawBitmap(occupancyBmp, gridMatrix, gridPaint)
+                        }
+                    }
+                    if (DebugLayer.DIRECTIONS in layers) drawDirectionField(locMap, viewBounds, { toScreen(it) }, density)
+                    if (DebugLayer.DOORS in layers) drawDoors(locMap, { toScreen(it) }, pxPerMf, density)
+                }
 
                 // 8. Stairs, elevators and room numbers on the displayed floor
                 if (floorPlan != null && pxPerM >= 3.0f) {
@@ -697,7 +719,7 @@ fun TelemetryScreen(
                 }
 
                 // 9. Walked trail (under the route), on the user's floor only
-                if (snapshot.isViewingUserFloor && state.rawPath.size >= 2) {
+                if (DebugLayer.PDR in layers && snapshot.isViewingUserFloor && state.rawPath.size >= 2) {
                     val trail = ArrayList<Offset>(state.rawPath.size)
                     for (i in 0 until state.rawPath.size - 1) trail.add(toScreen(disp(state.rawPath[i])))
                     trail.add(toScreen(displayPosition))
@@ -705,16 +727,17 @@ fun TelemetryScreen(
                     drawStartMarker(trail.first(), density)
                 }
 
-                // 9b. Map localization (developer switch): particles and zones, in the plan frame
+                // 9b. Map localization: hypotheses (colour = confidence), zones, walk traced back
                 val loc = snapshot.localization
                 if (snapshot.localizationEnabled && snapshot.isViewingUserFloor && loc != null) {
-                    drawLocalization(
-                        particles = snapshot.localizationParticles.map { toScreen(it) },
-                        zones = loc.zones.take(3).map { toScreen(it.centerM) to (it.radiusM * transform.pxPerMeter).toFloat() },
-                        density = density,
-                        trace = snapshot.localizationTrace.map { toScreen(it) },
-                        gpsDisk = snapshot.localizationSystemCircle?.let { (c, r) -> toScreen(c) to (r * transform.pxPerMeter).toFloat() }
-                    )
+                    if (DebugLayer.PARTICLES in layers) drawParticles(snapshot.localizationParticles, { toScreen(it) }, pxPerMf, density)
+                    if (DebugLayer.TRACE in layers && snapshot.localizationTrace.size >= 2) {
+                        val tr = snapshot.localizationTrace.map { toScreen(it) }
+                        val path = Path().apply { moveToOffset(tr[0]); for (k in 1 until tr.size) lineToOffset(tr[k]) }
+                        drawPath(path, Color(0xFF7C3AED).copy(alpha = 0.85f), style = Stroke(3f * density, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f * density, 6f * density))))
+                        drawStartMarker(tr.first(), density)
+                    }
+                    if (DebugLayer.ZONES in layers) drawZones(loc.zones, { toScreen(it) }, pxPerMf, density)
                 }
 
                 // 10. Navigation route, floor-transfer callouts and destination pin
@@ -742,8 +765,14 @@ fun TelemetryScreen(
                     }
                 }
 
-                // 11. Precise outdoor GNSS only (indoor fixes are too coarse to be useful)
-                snapshot.latestGpsFix?.let { fix ->
+                // 11. GPS: debug layer shows every fix and the search disk; otherwise precise outdoor GNSS only
+                if (DebugLayer.GPS in layers) {
+                    drawGps(
+                        snapshot.latestGpsFix?.takeIf { it.eastNorthM.norm() <= 350.0 },
+                        if (snapshot.isViewingUserFloor) snapshot.localizationSystemCircle else null,
+                        { toScreen(it) }, pxPerMf, density
+                    )
+                } else snapshot.latestGpsFix?.let { fix ->
                     if (fix.accuracyM <= 12.0 && fix.eastNorthM.norm() <= 350.0) {
                         val rPx = (fix.accuracyM.toFloat() * pxPerM).coerceIn(8f * density, 70f * density)
                         drawCircle(MapPalette.userBlue.copy(alpha = 0.08f), radius = rPx, center = toScreen(fix.eastNorthM))
@@ -751,7 +780,7 @@ fun TelemetryScreen(
                 }
 
                 // 12. Blue location dot with heading beam
-                if (snapshot.isViewingUserFloor) {
+                if (DebugLayer.PDR in layers && snapshot.isViewingUserFloor) {
                     val here = toScreen(displayPosition)
                     val ahead = toScreen(
                         PointM(

@@ -588,7 +588,7 @@ internal data class RoomItem(val floorId: String, val nodeId: String, val label:
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BuildingPickerSheet(current: IndoorSite, onPick: (IndoorSite) -> Unit, onDismiss: () -> Unit) {
+internal fun BuildingPickerSheet(current: IndoorSite, onPick: (IndoorSite) -> Unit, onDismiss: () -> Unit) {
     val c = Campus.colors
     ModalBottomSheet(
         onDismissRequest = onDismiss,

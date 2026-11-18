@@ -152,6 +152,19 @@ class LocalizationControllerTest {
     }
 
     @Test
+    fun debugViewGetsTheMapAndScoredParticles() {
+        val c = controller()
+        assertTrue(c.currentMap() == null)
+        c.start("SYN")
+        assertTrue(c.currentMap() === lMap)
+        val ps = c.sampleParticles(50)
+        assertEquals(50, ps.size)
+        assertTrue(ps.all { it.score in 0.0..1.0 })
+        assertEquals(false, c.debug!!.offsetKnown)
+        assertTrue(c.debug!!.ess > 1000)
+    }
+
+    @Test
     fun unknownFloorDoesNotStart() {
         val c = controller()
         assertFalse(c.start("MB-99"))

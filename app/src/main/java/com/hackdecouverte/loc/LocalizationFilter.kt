@@ -29,6 +29,8 @@ class LocalizationFilter(
     private var offset = DoubleArray(0)
     private var scale = DoubleArray(0)
     private var weight = DoubleArray(0)
+    /** Debug confidence per hypothesis: exponential average of its step factors (wall × alignment). */
+    private var score = DoubleArray(0)
     /** Index, in the latest [history] snapshot, of the hypothesis each particle comes from (−1: injected, no past). */
     private var origin = IntArray(0)
     private var n = 0
@@ -105,6 +107,7 @@ class LocalizationFilter(
             east[i] = p.x; north[i] = p.y
             offset[i] = random.nextDouble(0.0, 2 * PI)
             scale[i] = randomStrideScale()
+            score[i] = 1.0
             weight[i] = 1.0 / count
         }
         forcedSearching = true
@@ -121,7 +124,7 @@ class LocalizationFilter(
         allocate(points.size)
         for (i in points.indices) {
             east[i] = points[i].x; north[i] = points[i].y
-            offset[i] = offsetsRad[i]; scale[i] = if (spreadStride) randomStrideScale() else 1.0; weight[i] = 1.0 / points.size
+            offset[i] = offsetsRad[i]; scale[i] = if (spreadStride) randomStrideScale() else 1.0; score[i] = 1.0; weight[i] = 1.0 / points.size
         }
         forcedSearching = false
         offsetKnown = true
@@ -200,6 +203,7 @@ class LocalizationFilter(
             east[i] = to.x; north[i] = to.y
             offset[i] += gaussian() * params.offsetDriftRad
             scale[i] = (scale[i] + gaussian() * params.scaleDrift).coerceIn(params.strideScaleMin, params.strideScaleMax)
+            score[i] = SCORE_KEEP * score[i] + (1 - SCORE_KEEP) * f
             likelihood += weight[i] * f
             weight[i] *= f
         }
@@ -301,6 +305,15 @@ class LocalizationFilter(
         return if (s > 0) 1.0 / s else 0.0
     }
 
+    /** Up to [max] hypotheses with weight, confidence score and assumed heading, evenly picked (debug map). */
+    fun sampleParticles(max: Int): List<LocParticle> {
+        if (n == 0 || max <= 0) return emptyList()
+        val stride = maxOf(1, n / max)
+        return (0 until n step stride).take(max).map {
+            LocParticle(PointM(east[it], north[it]), weight[it], score[it], wrapPi(lastHeadingRad + offset[it]))
+        }
+    }
+
     /** Up to [max] particle positions, evenly picked (for display). */
     fun samplePositions(max: Int): List<PointM> {
         if (n == 0 || max <= 0) return emptyList()
@@ -359,7 +372,7 @@ class LocalizationFilter(
     private fun allocate(count: Int) {
         if (east.size < count) {
             east = DoubleArray(count); north = DoubleArray(count); offset = DoubleArray(count)
-            scale = DoubleArray(count); weight = DoubleArray(count); origin = IntArray(count)
+            scale = DoubleArray(count); weight = DoubleArray(count); origin = IntArray(count); score = DoubleArray(count)
         }
         n = count
     }
@@ -397,6 +410,7 @@ class LocalizationFilter(
             val p = randomFreePointNear(center, params.recoveryRadiusM)
             east[i] = p.x; north[i] = p.y
             offset[i] = offset[donor]; scale[i] = scale[donor]
+            score[i] = INJECTED_SCORE
             weight[i] = 1.0 / n
             origin[i] = -1
         }
@@ -412,17 +426,17 @@ class LocalizationFilter(
     /** Systematic resampling to the target size, then a small recovery injection. */
     private fun resample() {
         val target = if (estimate().state == LocState.FOUND) params.minParticles else params.maxParticles
-        val ne = DoubleArray(target); val nn = DoubleArray(target); val no = DoubleArray(target); val ns = DoubleArray(target); val nor = IntArray(target)
+        val ne = DoubleArray(target); val nn = DoubleArray(target); val no = DoubleArray(target); val ns = DoubleArray(target); val nor = IntArray(target); val nsc = DoubleArray(target)
         val step = 1.0 / target
         var u = random.nextDouble() * step
         var cum = weight[0]
         var j = 0
         for (k in 0 until target) {
             while (u > cum && j < n - 1) { j++; cum += weight[j] }
-            ne[k] = east[j]; nn[k] = north[j]; no[k] = offset[j]; ns[k] = scale[j]; nor[k] = origin[j]
+            ne[k] = east[j]; nn[k] = north[j]; no[k] = offset[j]; ns[k] = scale[j]; nor[k] = origin[j]; nsc[k] = score[j]
             u += step
         }
-        east = ne; north = nn; offset = no; scale = ns; origin = nor
+        east = ne; north = nn; offset = no; scale = ns; origin = nor; score = nsc
         weight = DoubleArray(target) { 1.0 / target }
         n = target
         if (params.recoveryFraction > 0) reseedAround(params.recoveryFraction)
@@ -445,6 +459,10 @@ class LocalizationFilter(
         const val MAX_STEPS_WITHOUT_LINE = 20
         const val FREE_OFFSET_SHARE = 0.1
         const val OUTSIDE_DISK_SHARE = 0.1
+        /** Score memory: ~5 steps. */
+        const val SCORE_KEEP = 0.8
+        /** Score of a hypothesis injected without a past (yellow on the debug map). */
+        const val INJECTED_SCORE = 0.5
         const val SYSTEM_SIGMA_FACTOR = 1.5
         const val SYSTEM_MIN_SIGMA_M = 10.0
         const val SYSTEM_OUTLIER_SHARE = 0.2

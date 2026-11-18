@@ -17,6 +17,7 @@ import os
 
 SCALE = 35.0                 # px per metre: corridor ≈ 3.4 m, classrooms ≈ 10 × 7.7 m
 ORIGIN_PX = (870.0, 575.0)   # (0, 0) = middle of the main corridor
+# On Earth (0, 0) = 45.51805395604281, -73.61554355694975 (IndoorSite.STANISLAS, picked on a map)
 # North arrow on the plan points to the lower right: the photo's "right" faces 315° (north-west).
 RIGHT_BEARING_DEG = 315.0
 

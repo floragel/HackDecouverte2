@@ -1,6 +1,7 @@
 package com.hackdecouverte.backend
 
 import com.hackdecouverte.loc.LocEstimate
+import com.hackdecouverte.loc.LocParticle
 import com.hackdecouverte.loc.LocalizationFilter
 import com.hackdecouverte.map.IndoorMap
 import com.hackdecouverte.pdr.PdrPhase
@@ -17,7 +18,11 @@ data class LocDebug(
     val alarms: Int,
     val strideScale: Double = 1.0,
     val strideSpread: Double = 0.0,
-    val gpsFixesUsed: Int = 0
+    val gpsFixesUsed: Int = 0,
+    /** Effective sample size: how many hypotheses really count (low = weight concentrated). */
+    val ess: Double = 0.0,
+    /** False until the phone→walking angle is learned from the first straight line. */
+    val offsetKnown: Boolean = true
 )
 
 /** A system position (GPS / Wi-Fi / cell) in the plan frame, with its announced accuracy and clock (elapsedRealtimeNanos). */
@@ -42,7 +47,7 @@ class LocalizationController(
     /** Latest estimate, refreshed after every accepted displacement (null when not running). */
     @Volatile var estimate: LocEstimate? = null
         private set
-    @Volatile private var particles: List<PointM> = emptyList()
+    @Volatile private var particles: List<LocParticle> = emptyList()
     @Volatile private var trace: List<PointM> = emptyList()
 
     /**
@@ -51,9 +56,18 @@ class LocalizationController(
      */
     fun prepare(floorId: String): Boolean = synchronized(maps) {
         maps.getOrPut(floorId) {
-            runCatching { mapProvider(floorId) }.getOrNull()?.takeIf { it.freeCellIndices().isNotEmpty() }
+            val built = runCatching { mapProvider(floorId) }
+            built.exceptionOrNull()?.let { lastError = "$floorId: ${it::class.simpleName}: ${it.message}" }
+            val map = built.getOrNull()
+            if (built.isSuccess && map == null) lastError = "$floorId: no map files"
+            if (map != null && map.freeCellIndices().isEmpty()) lastError = "$floorId: map has no free space"
+            map?.takeIf { it.freeCellIndices().isNotEmpty() }
         }
     } != null
+
+    /** Why the last map could not be built (shown on the debug screen), null if none failed. */
+    @Volatile var lastError: String? = null
+        private set
 
     /**
      * Starts a fresh search: in the GPS disk around [fix] when it is usable (spec §6.4 case 3),
@@ -168,16 +182,22 @@ class LocalizationController(
     @Volatile private var stepMs = 0.0
 
     val debug: LocDebug?
-        get() = filter?.let { LocDebug(it.size(), stepMs, it.alarms, it.strideScaleEstimate(), it.strideScaleSpread(), gpsFixesUsed) }
+        get() = filter?.let { LocDebug(it.size(), stepMs, it.alarms, it.strideScaleEstimate(), it.strideScaleSpread(), gpsFixesUsed, it.effectiveSampleSize(), it.offsetKnown) }
 
-    fun samplePositions(max: Int): List<PointM> = if (max >= particles.size) particles else particles.take(max)
+    fun samplePositions(max: Int): List<PointM> = sampleParticles(max).map { it.positionM }
+
+    /** Hypotheses with weight, confidence score and heading, for the debug map. */
+    fun sampleParticles(max: Int): List<LocParticle> = if (max >= particles.size) particles else particles.take(max)
+
+    /** The precise map the filter runs on (walls, doors, direction map), null when stopped. */
+    fun currentMap(): IndoorMap? = filter?.map
 
     /** The walk traced back from the found zone (Zee's backward belief propagation), oldest first; empty while searching. */
     fun tracedPath(): List<PointM> = trace
 
     private fun refresh(f: LocalizationFilter) {
         estimate = f.estimate()
-        particles = f.samplePositions(MAX_PARTICLES_SHOWN_SOURCE)
+        particles = f.sampleParticles(MAX_PARTICLES_SHOWN_SOURCE)
         trace = f.tracePath().orEmpty()
     }
 

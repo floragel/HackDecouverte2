@@ -9,6 +9,8 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.hackdecouverte.map.BuildingGraph
 import com.hackdecouverte.map.IndoorSite
+import com.hackdecouverte.map.IndoorMap
+import com.hackdecouverte.loc.LocParticle
 import com.hackdecouverte.map.DestinationItem
 import com.hackdecouverte.map.FloorNode
 import com.hackdecouverte.map.FloorPlan
@@ -113,7 +115,11 @@ data class NavigationSnapshot(
     /** Map localization (developer switch for now): zones, state, a sample of particles. */
     val localizationEnabled: Boolean = false,
     val localization: LocEstimate? = null,
-    val localizationParticles: List<PointM> = emptyList(),
+    val localizationParticles: List<LocParticle> = emptyList(),
+    /** The precise map the filter runs on (occupancy grid, doors, direction map), for the debug layers. */
+    val localizationMap: IndoorMap? = null,
+    /** Why the floor's localization map could not be built, if it failed. */
+    val localizationError: String? = null,
     /** Walk traced back once the zone is found (backward belief propagation), oldest first. */
     val localizationTrace: List<PointM> = emptyList(),
     /** GPS disk of the search: centre and radius (max(2 × accuracy, 30 m)), null without a usable fix. */
@@ -786,8 +792,13 @@ class IndoorNavigationBackend(
         val floorId = userFloorId ?: return
         if (localizationStartingFor == floorId) return
         localizationStartingFor = floorId
+        Log.d(LOG_TAG, "map localization: building the map of $floorId")
         scope.launch {
+            val t0 = SystemClock.elapsedRealtime()
             val ok = withContext(Dispatchers.Default) { localization.prepare(floorId) }
+            Log.d(LOG_TAG, "map localization: map of $floorId built in ${SystemClock.elapsedRealtime() - t0} ms")
+            if (!ok) Log.w(LOG_TAG, "map localization unavailable: ${localization.lastError}")
+            Log.d(LOG_TAG, "map localization prepare($floorId) ok=$ok enabled=$localizationEnabled user=$userFloorId")
             if (ok && localizationEnabled && userFloorId == floorId) localization.start(floorId, freshSystemFix())
             if (localizationStartingFor == floorId) localizationStartingFor = null
             _state.value = buildSnapshot(tracker.state.value)
@@ -894,7 +905,9 @@ class IndoorNavigationBackend(
             lastJunctionId = junctions.lastJunctionId,
             localizationEnabled = localizationEnabled,
             localization = if (localizationEnabled) localization.estimate else null,
-            localizationParticles = if (localizationEnabled) localization.samplePositions(MAX_PARTICLES_SHOWN) else emptyList(),
+            localizationParticles = if (localizationEnabled) localization.sampleParticles(MAX_PARTICLES_SHOWN) else emptyList(),
+            localizationMap = if (localizationEnabled) localization.currentMap() else null,
+            localizationError = localization.lastError,
             localizationTrace = if (localizationEnabled) localization.tracedPath() else emptyList(),
             localizationSystemCircle = if (localizationEnabled) localization.systemCircle else null,
             localizationDebug = if (localizationEnabled) localization.debug else null
@@ -997,7 +1010,7 @@ class IndoorNavigationBackend(
         private const val SETTLING_DELAY_MS = 2_000L
         private const val MAX_CAMPUS_RADIUS_M = 350.0
         private const val SYSTEM_FIX_MAX_AGE_NS = 120_000_000_000L
-        private const val MAX_PARTICLES_SHOWN = 400
+        private const val MAX_PARTICLES_SHOWN = 1000
         private const val NEAR_CONNECTOR_BARO_RADIUS_M = 7.0
         private const val HIGH_PRECISION_OUTDOOR_GPS_M = 4.5
         private const val STREET_REFERENCE_MAX_ACCURACY_M = 15.0
