@@ -174,3 +174,16 @@ internal fun DrawScope.drawGps(fix: GpsFix?, disk: Pair<PointM, Double>?, toScre
     val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = GpsBlue.toArgb(); textSize = 11f * density; isFakeBoldText = true }
     drawContext.canvas.nativeCanvas.drawText("GPS ±${fix.accuracyM.roundToInt()} m (${fix.provider})", c.x + 8f * density, c.y - 8f * density, text)
 }
+
+/** Walk recorder ground truth: a black numbered cross where the walker tapped "I am here". */
+internal fun DrawScope.drawRecordingMarkers(markers: List<PointM>, toScreen: (PointM) -> Offset, density: Float) {
+    val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.BLACK; textSize = 12f * density; isFakeBoldText = true }
+    val a = 6f * density
+    markers.forEachIndexed { i, m ->
+        val c = toScreen(m)
+        drawCircle(Color.White.copy(alpha = 0.8f), radius = a + 2f * density, center = c)
+        drawLine(Color.Black, Offset(c.x - a, c.y - a), Offset(c.x + a, c.y + a), strokeWidth = 2.5f * density)
+        drawLine(Color.Black, Offset(c.x - a, c.y + a), Offset(c.x + a, c.y - a), strokeWidth = 2.5f * density)
+        drawContext.canvas.nativeCanvas.drawText("M${i + 1}", c.x + a + 3f * density, c.y - a, text)
+    }
+}

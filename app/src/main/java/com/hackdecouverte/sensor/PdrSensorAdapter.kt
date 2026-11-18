@@ -6,16 +6,9 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.SystemClock
-import com.hackdecouverte.map.GeoOrigin
 import com.hackdecouverte.pdr.FallbackStepDetector
 import com.hackdecouverte.pdr.PdrTracker
 import com.hackdecouverte.pdr.StepSource
-import com.hackdecouverte.pdr.rotationMatrixFromVector
-import com.hackdecouverte.pdr.worldVerticalFromRotationMatrix
-import com.hackdecouverte.pdr.wrapAnglePi
-import kotlin.math.atan2
-import kotlin.math.hypot
-import kotlin.math.sqrt
 
 class PdrSensorAdapter(
     context: Context,
@@ -41,28 +34,31 @@ class PdrSensorAdapter(
     val fallbackCapable: Boolean
         get() = linearAcceleration != null || accelerometer != null
 
+    /** Same routing as the walk replay: see [SensorRouter]. */
+    private val router = SensorRouter(tracker, sourceProvider, fallback, onPressureSample)
+
+    val latestWorldAzimuthRad: Double?
+        get() = router.latestWorldAzimuthRad
+
+    var magneticDeclinationDeg: Double
+        get() = router.magneticDeclinationDeg
+        set(value) {
+            router.magneticDeclinationDeg = value
+        }
+
+    /** Every sample the PDR receives, before it is used (the walk recorder taps here). Called on the main thread. */
     @Volatile
-    var latestWorldAzimuthRad: Double? = null
-        private set
+    var onRawSample: ((type: Int, timestampNs: Long, values: FloatArray, accuracy: Int) -> Unit)? = null
 
     @Volatile
-    var magneticDeclinationDeg: Double = GeoOrigin.DEFAULT_MONTREAL_DECLINATION_DEG
+    var onRawAccuracy: ((type: Int, accuracy: Int) -> Unit)? = null
 
-    private var compassAccuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM
     private var registered = false
-    private var upX = 0.0
-    private var upY = 0.0
-    private var upZ = 1.0
-    private var haveUp = false
-
-    init {
-        fallback.onStep = { t -> tracker.onStep(t, StepSource.FALLBACK) }
-    }
 
     fun start() {
         if (registered) return
         registered = true
-        haveUp = false
+        router.reset()
         var failed = false
         val rot = rotationSensor
         if (rot != null) {
@@ -117,7 +113,7 @@ class PdrSensorAdapter(
         registered = false
         sensorManager.unregisterListener(this)
         fallback.stop()
-        haveUp = false
+        router.reset()
     }
 
     fun refreshRegistrations() {
@@ -128,80 +124,13 @@ class PdrSensorAdapter(
 
     override fun onSensorChanged(event: SensorEvent) {
         if (!registered) return
-        when (event.sensor.type) {
-            Sensor.TYPE_GAME_ROTATION_VECTOR -> {
-                val r = rotationMatrixFromVector(event.values, event.values.size)
-                if (r != null) {
-                    val up = worldVerticalFromRotationMatrix(r)
-                    upX = up.first
-                    upY = up.second
-                    upZ = up.third
-                    haveUp = true
-                }
-                tracker.onRotationVector(event.timestamp, event.values, event.values.size)
-            }
-
-            Sensor.TYPE_ROTATION_VECTOR -> {
-                val r = rotationMatrixFromVector(event.values, event.values.size)
-                val sinYaw = if (r != null) r[1] - r[3] else 0.0
-                val cosYaw = if (r != null) r[0] + r[4] else 0.0
-                if (r != null && hypot(r[1], r[4]) >= 0.12 && hypot(sinYaw, cosYaw) >= 0.2) {
-                    val magAzimuthRad = atan2(sinYaw, cosYaw)
-                    val trueAzimuthRad = wrapAnglePi(
-                        magAzimuthRad + Math.toRadians(magneticDeclinationDeg)
-                    )
-                    latestWorldAzimuthRad = trueAzimuthRad
-                    val acc = if (event.accuracy > 0) event.accuracy else compassAccuracy
-                    val highConfidence = acc >= SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM
-                    tracker.onTrueNorthAzimuth(event.timestamp, trueAzimuthRad, highConfidence)
-                }
-            }
-
-            Sensor.TYPE_STEP_DETECTOR -> {
-                tracker.onStep(event.timestamp, StepSource.HARDWARE)
-            }
-
-            Sensor.TYPE_PRESSURE -> {
-                if (event.values.isNotEmpty()) {
-                    onPressureSample(event.timestamp, event.values[0].toDouble())
-                }
-            }
-
-            Sensor.TYPE_LINEAR_ACCELERATION -> {
-                if (event.values.size >= 3) {
-                    val ax = event.values[0].toDouble()
-                    val ay = event.values[1].toDouble()
-                    val az = event.values[2].toDouble()
-                    val mag = sqrt(ax * ax + ay * ay + az * az)
-                    tracker.onLinearAccelerationMagnitude(event.timestamp, mag)
-                    if (haveUp && sourceProvider() == StepSource.FALLBACK) {
-                        fallback.onLinearAcceleration(event.timestamp, ax, ay, az, upX, upY, upZ)
-                    }
-                }
-            }
-
-            Sensor.TYPE_ACCELEROMETER -> {
-                if (event.values.size >= 3) {
-                    val ax = event.values[0].toDouble()
-                    val ay = event.values[1].toDouble()
-                    val az = event.values[2].toDouble()
-                    val total = sqrt(ax * ax + ay * ay + az * az)
-                    tracker.onLinearAccelerationMagnitude(
-                        event.timestamp,
-                        kotlin.math.abs(total - SensorManager.GRAVITY_EARTH)
-                    )
-                    if (sourceProvider() == StepSource.FALLBACK) {
-                        fallback.onAccelerometer(event.timestamp, ax, ay, az)
-                    }
-                }
-            }
-        }
+        onRawSample?.invoke(event.sensor.type, event.timestamp, event.values, event.accuracy)
+        router.onSample(event.sensor.type, event.timestamp, event.values, event.accuracy)
     }
 
     override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {
-        if (sensor.type == Sensor.TYPE_ROTATION_VECTOR) {
-            compassAccuracy = accuracy
-        }
+        onRawAccuracy?.invoke(sensor.type, accuracy)
+        router.onAccuracyChanged(sensor.type, accuracy)
     }
 
     companion object {

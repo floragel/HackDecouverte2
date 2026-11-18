@@ -50,6 +50,13 @@ class LocalizationFilter(
         private set
     private val pendingSteps = ArrayList<Pair<Double, Double>>() // (length, relative heading)
 
+    /**
+     * True when the PDR headings are already True North (compass, spec §6.3 "Angle de départ"): the
+     * phone angle is then drawn around 0 (±[COMPASS_PRIOR_RAD]) instead of every corridor direction,
+     * except a [COMPASS_DISTRUST_SHARE] that ignores the compass (steel, magnets).
+     */
+    var compassAligned: Boolean = false
+
     fun size(): Int = n
 
     /**
@@ -143,7 +150,7 @@ class LocalizationFilter(
         val line = straightLineHeading()
         when {
             line != null -> assignOffsetsFromCorridors(line)
-            pendingSteps.size >= MAX_STEPS_WITHOUT_LINE -> for (i in 0 until n) offset[i] = random.nextDouble(0.0, 2 * PI)
+            pendingSteps.size >= MAX_STEPS_WITHOUT_LINE -> for (i in 0 until n) offset[i] = freeOffset()
             else -> return
         }
         offsetKnown = true
@@ -164,13 +171,30 @@ class LocalizationFilter(
     private fun assignOffsetsFromCorridors(lineHeading: Double) {
         for (i in 0 until n) {
             val p = PointM(east[i], north[i])
-            offset[i] = when {
-                random.nextDouble() < FREE_OFFSET_SHARE -> random.nextDouble(0.0, 2 * PI)
-                map.directions.coherenceAt(p) >= 0.5 -> map.directions.axisAt(p) + (if (random.nextBoolean()) 0.0 else PI) - lineHeading
-                else -> map.dominantAxisRad + random.nextInt(4) * PI / 2 - lineHeading
+            if (random.nextDouble() < FREE_OFFSET_SHARE) {
+                offset[i] = freeOffset()
+                continue
+            }
+            val candidates = if (map.directions.coherenceAt(p) >= 0.5) {
+                val a = map.directions.axisAt(p)
+                doubleArrayOf(a - lineHeading, a + PI - lineHeading)
+            } else {
+                DoubleArray(4) { k -> map.dominantAxisRad + k * PI / 2 - lineHeading }
+            }
+            offset[i] = if (compassAligned && random.nextDouble() >= COMPASS_DISTRUST_SHARE) {
+                // The corridor direction the compass agrees with; none → this spot's corridor is not where the walker is.
+                val near = candidates.filter { abs(wrapPi(it)) <= COMPASS_PRIOR_RAD }
+                if (near.isNotEmpty()) near[random.nextInt(near.size)] else gaussian() * COMPASS_SIGMA_RAD
+            } else {
+                candidates[random.nextInt(candidates.size)]
             }
         }
     }
+
+    /** Phone angle with no corridor to go by: around 0 when the compass is trusted, else anything. */
+    private fun freeOffset(): Double =
+        if (compassAligned && random.nextDouble() >= COMPASS_DISTRUST_SHARE) gaussian() * COMPASS_SIGMA_RAD
+        else random.nextDouble(0.0, 2 * PI)
 
     private fun advance(lengthM: Double, headingRad: Double) {
         if (suppressFoundSteps > 0) suppressFoundSteps--
@@ -458,6 +482,11 @@ class LocalizationFilter(
         val LINE_SPREAD_RAD = Math.toRadians(8.0)
         const val MAX_STEPS_WITHOUT_LINE = 20
         const val FREE_OFFSET_SHARE = 0.1
+        /** The compass is 15° off in 90 % of indoor places, up to 30° (spec §6.3); a corridor axis within this is "the compass's". */
+        val COMPASS_PRIOR_RAD = Math.toRadians(40.0)
+        val COMPASS_SIGMA_RAD = Math.toRadians(15.0)
+        /** Hypotheses that ignore the compass anyway (a steel door or a magnet can turn it by 90°). */
+        const val COMPASS_DISTRUST_SHARE = 0.1
         const val OUTSIDE_DISK_SHARE = 0.1
         /** Score memory: ~5 steps. */
         const val SCORE_KEEP = 0.8

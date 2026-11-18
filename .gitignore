@@ -16,3 +16,6 @@
 
 # never commit keys
 local.properties
+
+# walks recorded on the phone (tools/pull-walks.sh): Wi-Fi BSSIDs, routes
+/recordings/

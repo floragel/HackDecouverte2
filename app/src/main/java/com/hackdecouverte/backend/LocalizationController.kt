@@ -1,6 +1,7 @@
 package com.hackdecouverte.backend
 
 import com.hackdecouverte.loc.LocEstimate
+import com.hackdecouverte.loc.LocParams
 import com.hackdecouverte.loc.LocParticle
 import com.hackdecouverte.loc.LocalizationFilter
 import com.hackdecouverte.map.IndoorMap
@@ -34,7 +35,9 @@ data class SystemFix(val centerM: PointM, val accuracyM: Double, val timeNs: Lon
  */
 class LocalizationController(
     private val mapProvider: (floorId: String) -> IndoorMap?,
-    private val random: Random = Random.Default
+    private val random: Random = Random.Default,
+    /** Filter settings (the walk replay sweeps them to tune on real recordings). */
+    private val params: LocParams = LocParams()
 ) {
     private val maps = HashMap<String, IndoorMap?>()
     @Volatile private var filter: LocalizationFilter? = null
@@ -76,7 +79,7 @@ class LocalizationController(
     fun start(floorId: String, fix: SystemFix? = null): Boolean {
         if (!prepare(floorId)) return false
         val map = synchronized(maps) { maps[floorId] }!!
-        val f = LocalizationFilter(map, random = random)
+        val f = LocalizationFilter(map, params, random)
         filter = f
         this.floorId = floorId
         lastPosition = null
@@ -98,7 +101,10 @@ class LocalizationController(
         private set
     @Volatile private var gpsFixesUsed = 0
     private var startedInDisk = false
-    private var stepsSinceStart = 0
+
+    /** Filter steps since the search (re)started; the traced path's last point is this step. */
+    var stepsSinceStart = 0
+        private set
     private var lastFixUsedNs: Long? = null
     private var stepsAtLastFix = 0
 
@@ -166,6 +172,7 @@ class LocalizationController(
         val prevSteps = lastStepCount
         lastPosition = s.position
         lastStepCount = s.stepCount
+        if (!f.offsetKnown) f.compassAligned = s.trueNorthAligned
         if (prev == null || s.stepCount < prevSteps) return
         val dx = s.position.x - prev.x
         val dy = s.position.y - prev.y
@@ -202,6 +209,14 @@ class LocalizationController(
     }
 
     companion object {
+        /**
+         * Localization mode starts the PDR by itself, but not before the compass has given True North
+         * (else the trace stays in the phone's arbitrary frame), unless it never comes within [COMPASS_WAIT_NS].
+         */
+        fun shouldAutoStartPdr(s: PdrState, waitedNs: Long): Boolean =
+            s.canStart && (s.trueNorthAligned || waitedNs >= COMPASS_WAIT_NS)
+
+        const val COMPASS_WAIT_NS = 3_000_000_000L
         const val MAX_DISPLACEMENT_M = 3.0
         /** Search disk = max(2 × accuracy, 30 m) around the fix (spec §6.4 case 3). */
         const val DISK_ACCURACY_FACTOR = 2.0

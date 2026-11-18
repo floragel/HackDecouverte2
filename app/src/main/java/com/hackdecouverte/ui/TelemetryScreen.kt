@@ -13,6 +13,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -78,7 +79,11 @@ fun TelemetryScreen(
     onOpenSetup: () -> Unit,
     onResumeNewTrace: () -> Unit,
     layers: Set<DebugLayer> = DebugLayer.defaults,
-    initialZoom: Float = 0.85f
+    initialZoom: Float = 0.85f,
+    /** Walk recorder: a tap on the map = "I am here" (plan metres). Null = taps do nothing. */
+    onMapTap: ((PointM) -> Unit)? = null,
+    /** Ground-truth markers already placed (drawn as numbered crosses). */
+    markers: List<PointM> = emptyList()
 ) {
     val state = snapshot.pdr
     val floorPlan = snapshot.activeFloor
@@ -95,6 +100,9 @@ fun TelemetryScreen(
     var showStartDialog by remember { mutableStateOf(false) }
     var showDestDialog by remember { mutableStateOf(false) }
     var renderedFloorPair by remember { mutableStateOf<Pair<String, Bitmap>?>(null) }
+    // Last drawn transform, to turn a tap back into plan metres.
+    val lastTransform = remember { arrayOfNulls<MapTransform>(1) }
+    val currentOnMapTap by rememberUpdatedState(onMapTap)
 
     // Render active floor immediately + pre-warm all other loaded MB floors in background
     LaunchedEffect(vectorPlan?.floorId) {
@@ -422,6 +430,12 @@ fun TelemetryScreen(
                 .fillMaxWidth()
                 .clipToBounds()
                 .pointerInput(Unit) {
+                    detectTapGestures { tap ->
+                        val t = lastTransform[0] ?: return@detectTapGestures
+                        currentOnMapTap?.invoke(t.screenToWorld(PointM(tap.x.toDouble(), tap.y.toDouble())))
+                    }
+                }
+                .pointerInput(Unit) {
                     detectTransformGestures { _, panChange, zoomChange, _ ->
                         zoom = (zoom * zoomChange).coerceIn(0.04f, 8f)
                         if (panChange != Offset.Zero) {
@@ -454,6 +468,8 @@ fun TelemetryScreen(
                     centerXPx = size.width / 2.0,
                     centerYPx = size.height / 2.0
                 )
+
+                lastTransform[0] = transform
 
                 fun toScreen(p: PointM): Offset {
                     val s = transform.worldToScreen(p)
@@ -778,6 +794,9 @@ fun TelemetryScreen(
                         drawCircle(MapPalette.userBlue.copy(alpha = 0.08f), radius = rPx, center = toScreen(fix.eastNorthM))
                     }
                 }
+
+                // 11b. Walk recorder: where the walker said they were
+                if (markers.isNotEmpty()) drawRecordingMarkers(markers, ::toScreen, density)
 
                 // 12. Blue location dot with heading beam
                 if (DebugLayer.PDR in layers && snapshot.isViewingUserFloor) {

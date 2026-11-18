@@ -1,6 +1,20 @@
 package com.lync.app.ui.indoor
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import com.hackdecouverte.backend.IndoorNavigationBackend
+import java.io.File
+import kotlinx.coroutines.delay
 import android.os.Build
 import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -77,6 +91,7 @@ fun IndoorDevScreen() {
     var buildingPicker by remember { mutableStateOf(false) }
     var layerNames by rememberSaveable { mutableStateOf(DebugLayer.defaults.map { it.name }) }
     val layers = layerNames.mapNotNull { n -> DebugLayer.entries.firstOrNull { it.name == n } }.toSet()
+    val recorder by backend.recorderStatus.collectAsState()
 
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         r[Manifest.permission.ACTIVITY_RECOGNITION]?.let(backend::onActivityPermissionResult)
@@ -125,6 +140,7 @@ fun IndoorDevScreen() {
             }
         }
         ConfidenceLegend()
+        RecordBar(backend)
         DebugStatus(snapshot)
 
         Box(Modifier.weight(1f)) {
@@ -144,6 +160,8 @@ fun IndoorDevScreen() {
                     onResumeNewTrace = backend::resumeFromPause,
                     layers = layers,
                     initialZoom = 0.3f, // whole wing / a good part of an MB floor at once
+                    onMapTap = if (recorder.recording) { p -> backend.addRecordingMarker(p) } else null,
+                    markers = recorder.markerPoints,
                 )
                 else -> CalibrationScreen(
                     snapshot = snapshot,
@@ -174,6 +192,81 @@ fun IndoorDevScreen() {
             onDismiss = { buildingPicker = false },
         )
     }
+}
+
+/**
+ * Walk recorder: record / stop, time, markers, Wi-Fi and RTT counts, and sharing the last walk. While
+ * recording the screen stays on and a tap on the map drops a ground-truth marker ("I am here").
+ */
+@Composable
+private fun RecordBar(backend: IndoorNavigationBackend) {
+    val c = Campus.colors
+    val context = LocalContext.current
+    val status by backend.recorderStatus.collectAsState()
+    var now by remember { mutableStateOf(SystemClock.elapsedRealtimeNanos()) }
+    LaunchedEffect(status.recording) {
+        while (status.recording) {
+            now = SystemClock.elapsedRealtimeNanos()
+            delay(1000)
+        }
+    }
+    val view = LocalView.current
+    DisposableEffect(status.recording) {
+        view.keepScreenOn = status.recording
+        onDispose { view.keepScreenOn = false }
+    }
+    // Wi-Fi RTT needs NEARBY_WIFI_DEVICES on Android 13+: asked once, the recording starts either way.
+    val nearby = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { backend.startRecording() }
+    val start = {
+        val needNearby = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && backend.wifiRttSupported &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES) != PackageManager.PERMISSION_GRANTED
+        if (needNearby) nearby.launch(Manifest.permission.NEARBY_WIFI_DEVICES) else backend.startRecording()
+    }
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(c.surface).padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val red = Color(0xFFE53935)
+            Row(
+                Modifier.clip(CircleShape).background(if (status.recording) red else c.bg).pressable({ if (status.recording) backend.stopRecording() else start() }, 0.96f)
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.width(10.dp).height(10.dp).clip(if (status.recording) RoundedCornerShape(2.dp) else CircleShape).background(if (status.recording) Color.White else red))
+                Spacer(Modifier.width(8.dp))
+                Text(if (status.recording) "Arrêter" else "Enregistrer la marche", color = if (status.recording) Color.White else c.text, style = MaterialTheme.typography.labelLarge)
+            }
+            Spacer(Modifier.width(10.dp))
+            if (status.recording) {
+                val s = ((now - status.startedNs) / 1_000_000_000L).coerceAtLeast(0)
+                Text(
+                    "%d:%02d · %d repère%s · Wi-Fi %d%s".format(Locale.ROOT, s / 60, s % 60, status.markers, if (status.markers > 1) "s" else "", status.wifiScans, if (status.rttOk > 0) " · RTT ${status.rttOk}" else ""),
+                    style = MaterialTheme.typography.bodySmall, color = c.text, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f),
+                )
+            } else {
+                val last = status.lastFile
+                Text(last?.name ?: "Aucune marche enregistrée", style = MaterialTheme.typography.bodySmall, color = c.textMuted, maxLines = 1, modifier = Modifier.weight(1f))
+                if (last != null) {
+                    Icon(
+                        Icons.Rounded.Share, "Partager", tint = c.text,
+                        modifier = Modifier.clip(CircleShape).pressable({ shareWalk(context, last) }, 0.9f).padding(6.dp),
+                    )
+                }
+            }
+        }
+        val hint = when {
+            status.error != null -> "Erreur : ${status.error}"
+            status.recording -> "Touchez la carte là où vous êtes vraiment (départ, virages, portes) : chaque repère sert de vérité."
+            else -> "Posez un repère au départ, à chaque virage et à l'arrivée. Récupération : partager, ou tools/pull-walks.sh."
+        }
+        Text(hint, style = MaterialTheme.typography.labelSmall, color = if (status.error != null) Color(0xFFE53935) else c.textMuted, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+private fun shareWalk(context: Context, file: File) {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.walks", file)
+    val send = Intent(Intent.ACTION_SEND).setType("application/gzip").putExtra(Intent.EXTRA_STREAM, uri)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    context.startActivity(Intent.createChooser(send, file.name))
 }
 
 /** Red → yellow → green bar explaining the colour of the points. */

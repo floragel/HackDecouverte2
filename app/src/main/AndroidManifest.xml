@@ -10,6 +10,11 @@
     <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <!-- Walk recorder (debug): Wi-Fi scans and Wi-Fi RTT ranging, logged for research -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+    <uses-feature android:name="android.hardware.wifi.rtt" android:required="false" />
 
     <application
         android:name=".LyncApp"
@@ -32,6 +37,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Shares recorded walks (Android/data/<app>/files/recordings) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.walks"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/walk_paths" />
+        </provider>
 
         <!-- Lets AppCompat persist the in-app language choice on Android < 13 -->
         <service

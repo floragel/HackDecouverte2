@@ -35,6 +35,10 @@ import com.hackdecouverte.pdr.PointM
 import com.hackdecouverte.pdr.SensorStatus
 import com.hackdecouverte.pdr.StepSource
 import com.hackdecouverte.pdr.wrapAnglePi
+import com.hackdecouverte.rec.RecEvent
+import com.hackdecouverte.rec.RecordingHeader
+import com.hackdecouverte.sensor.RecorderStatus
+import com.hackdecouverte.sensor.WalkRecorder
 import com.hackdecouverte.sensor.GpsFix
 import com.hackdecouverte.sensor.GpsLocationSource
 import com.hackdecouverte.sensor.PdrSensorAdapter
@@ -155,6 +159,7 @@ class IndoorNavigationBackend(
         }
     })
     private var localizationEnabled = false
+    private var localizationEnabledAtNs = 0L
     private var localizationStartingFor: String? = null
 
     private val adapter = PdrSensorAdapter(
@@ -175,6 +180,10 @@ class IndoorNavigationBackend(
     )
 
     private val osmLoader = OsmNetworkLoader(appContext)
+
+    /** Walk recorder for replay on a computer (debug app). */
+    private val recorder = WalkRecorder(appContext)
+    val recorderStatus: StateFlow<RecorderStatus> get() = recorder.status
 
     private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private var savedStepLengthM: Double? =
@@ -235,6 +244,8 @@ class IndoorNavigationBackend(
     )
 
     init {
+        adapter.onRawSample = recorder::onPipelineSample
+        adapter.onRawAccuracy = recorder::onPipelineAccuracy
         pushSensorStatus()
         ensureUsableStepSource()
         recomputeAnchor()
@@ -275,8 +286,15 @@ class IndoorNavigationBackend(
                 }
                 persistGaitIfUpdated(pdrState)
                 if (localizationEnabled) {
-                    if (pdrState.canStart) startWithSavedOrDefaultStepLength() // the PDR starts by itself (spec §6.1)
+                    // The PDR starts by itself (spec §6.1), once True North is known.
+                    if (LocalizationController.shouldAutoStartPdr(pdrState, SystemClock.elapsedRealtimeNanos() - localizationEnabledAtNs)) {
+                        startWithSavedOrDefaultStepLength()
+                    }
                     localization.onPdrState(pdrState)
+                    if (recorderStatus.value.recording && pdrState.stepCount != lastLoggedLiveStep) {
+                        lastLoggedLiveStep = pdrState.stepCount
+                        recordLive(pdrState)
+                    }
                 } else {
                     matchJunction(pdrState)
                 }
@@ -518,7 +536,7 @@ class IndoorNavigationBackend(
         return tracker.startWithManualStepLength(lengthM, cadence)
     }
 
-    fun startWithSavedOrDefaultStepLength(defaultM: Double = 0.74): Boolean {
+    fun startWithSavedOrDefaultStepLength(defaultM: Double = DEFAULT_STEP_LENGTH_M): Boolean {
         val len = savedStepLengthM ?: defaultM
         return startWithStepLength(len)
     }
@@ -605,6 +623,10 @@ class IndoorNavigationBackend(
     }
 
     fun onBackground() {
+        if (recorder.status.value.recording) {
+            recorder.note("background", "app left the foreground")
+            recorder.stop()
+        }
         settlingJob?.cancel()
         settlingJob = null
         inVerticalTransit = false
@@ -688,6 +710,7 @@ class IndoorNavigationBackend(
 
     private fun handleGpsFix(fix: GpsFix) {
         latestGpsFix = fix
+        recorder.onFix(fix.toRecEvent())
         // Outdoors next to MB with a clean fix: this pressure is the street level for the altitude floor estimate
         val distFromCoreM = fix.eastNorthM.norm()
         val pressure = latestPressureHpa
@@ -770,6 +793,63 @@ class IndoorNavigationBackend(
     }
 
     /**
+     * Starts recording the walk on the current floor (debug app). The live search restarts at the same
+     * moment, so the phone's run and the computer's replay start together.
+     */
+    fun startRecording(): Boolean {
+        val floorId = userFloorId ?: return false
+        if (localizationEnabled && localization.floorId == floorId) localization.start(floorId, freshSystemFix())
+        val s = tracker.state.value
+        val len = savedStepLengthM ?: DEFAULT_STEP_LENGTH_M
+        val header = RecordingHeader(
+            siteId = site.id,
+            floorId = floorId,
+            startedWallMs = System.currentTimeMillis(),
+            startedNs = SystemClock.elapsedRealtimeNanos(),
+            appVersion = runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName }.getOrNull().orEmpty(),
+            stepSource = s.stepSource.name,
+            stepLengthM = len,
+            cadenceHz = savedCadenceHz?.takeIf { savedStepLengthM != null },
+            declinationDeg = adapter.magneticDeclinationDeg
+        )
+        val ok = recorder.start(header, listOfNotNull(latestGpsFix?.toRecEvent()))
+        if (ok) {
+            lastLoggedLiveStep = -1
+            recorder.note("start", "phase=${s.phase} steps=${s.stepCount} localization=$localizationEnabled")
+        }
+        _state.value = buildSnapshot(tracker.state.value)
+        return ok
+    }
+
+    fun stopRecording(): java.io.File? = recorder.stop()
+
+    /** The phone can range Wi-Fi access points by time of flight (802.11mc); the app then needs NEARBY_WIFI_DEVICES (Android 13+). */
+    val wifiRttSupported: Boolean get() = recorder.wifiRttSupported
+
+    /** Ground truth while recording: the walker is at [mapM] (plan metres). Marker number, null when not recording. */
+    fun addRecordingMarker(mapM: PointM): Int? = recorder.addMarker(mapM.x, mapM.y)
+
+    fun recordings(): List<java.io.File> = recorder.recordings()
+
+    private var lastLoggedLiveStep = -1
+
+    private fun recordLive(s: PdrState) {
+        val est = localization.estimate
+        val zone = est?.zones?.firstOrNull()
+        recorder.onLive(
+            RecEvent.Live(
+                SystemClock.elapsedRealtimeNanos(), s.stepCount, s.position.x, s.position.y, s.headingRadians,
+                est?.state?.name ?: "OFF", zone?.centerM?.x, zone?.centerM?.y, zone?.radiusM
+            )
+        )
+    }
+
+    private fun GpsFix.toRecEvent() = RecEvent.Fix(
+        elapsedRealtimeNs, wgs84.latitude, wgs84.longitude, accuracyM, provider, null, verticalAccuracyM,
+        trueNorthBearingRad?.let(Math::toDegrees), speedMps, magneticDeclinationDeg, satellitesUsed
+    )
+
+    /**
      * Developer switch for map localization (plan 1). On: the PDR starts by itself, its plan-based
      * corrections (corridor pull, junction landmarks, GPS nudge, map axis) are off, and every PDR
      * state feeds the filter. Off: everything is as before.
@@ -778,8 +858,8 @@ class IndoorNavigationBackend(
         if (enabled == localizationEnabled) return
         localizationEnabled = enabled
         if (enabled) {
-            val s = tracker.state.value
-            if (s.canStart) startWithSavedOrDefaultStepLength()
+            localizationEnabledAtNs = SystemClock.elapsedRealtimeNanos()
+            if (LocalizationController.shouldAutoStartPdr(tracker.state.value, 0L)) startWithSavedOrDefaultStepLength()
         } else {
             localization.stop()
             localizationStartingFor = null
@@ -1011,6 +1091,7 @@ class IndoorNavigationBackend(
         private const val MAX_CAMPUS_RADIUS_M = 350.0
         private const val SYSTEM_FIX_MAX_AGE_NS = 120_000_000_000L
         private const val MAX_PARTICLES_SHOWN = 1000
+        private const val DEFAULT_STEP_LENGTH_M = 0.74
         private const val NEAR_CONNECTOR_BARO_RADIUS_M = 7.0
         private const val HIGH_PRECISION_OUTDOOR_GPS_M = 4.5
         private const val STREET_REFERENCE_MAX_ACCURACY_M = 15.0
