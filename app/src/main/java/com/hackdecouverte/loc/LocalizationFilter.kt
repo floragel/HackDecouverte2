@@ -1,0 +1,223 @@
+package com.hackdecouverte.loc
+
+import com.hackdecouverte.map.IndoorMap
+import com.hackdecouverte.map.axialDiff
+import com.hackdecouverte.pdr.PointM
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.ln
+import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.random.Random
+
+/**
+ * Particle filter on a floor's precise map (spec §6.3): each hypothesis carries a position, the
+ * angle between the phone and the walking direction, and a step-length scale. Walls eliminate,
+ * the direction map favours walking along corridors. Pure Kotlin, deterministic with a seeded [random].
+ */
+class LocalizationFilter(
+    val map: IndoorMap,
+    val params: LocParams = LocParams(),
+    private val random: Random = Random.Default
+) {
+    private var east = DoubleArray(0)
+    private var north = DoubleArray(0)
+    private var offset = DoubleArray(0)
+    private var scale = DoubleArray(0)
+    private var weight = DoubleArray(0)
+    private var n = 0
+    private var lastHeadingRad = 0.0
+    private var badSteps = 0
+    private var goodSteps = 0
+    /** After a (re)start the filter claims nothing until [GOOD_STEPS_TO_TRUST] plausible steps in a row. */
+    private var forcedSearching = false
+    private val freeCells: IntArray by lazy { map.freeCellIndices() }
+
+    fun size(): Int = n
+
+    /** Positions drawn uniformly over the free cells, random phone angle, scale 1. */
+    fun initUniform(count: Int = params.maxParticles) {
+        allocate(count)
+        for (i in 0 until count) {
+            val p = randomFreePoint()
+            east[i] = p.x; north[i] = p.y
+            offset[i] = random.nextDouble(0.0, 2 * PI)
+            scale[i] = 1.0
+            weight[i] = 1.0 / count
+        }
+        forcedSearching = true
+        goodSteps = 0
+    }
+
+    /** Explicit hypotheses (tests, shortcuts): one per point, with its phone angle. */
+    fun initAt(points: List<PointM>, offsetsRad: List<Double>) {
+        require(points.size == offsetsRad.size && points.isNotEmpty())
+        allocate(points.size)
+        for (i in points.indices) {
+            east[i] = points[i].x; north[i] = points[i].y
+            offset[i] = offsetsRad[i]; scale[i] = 1.0; weight[i] = 1.0 / points.size
+        }
+        forcedSearching = false
+    }
+
+    /** One accepted PDR displacement: [lengthM] metres at relative heading [headingRad]. */
+    fun onStep(lengthM: Double, headingRad: Double) {
+        if (n == 0 || !(lengthM > 1e-6) || !headingRad.isFinite()) return
+        lastHeadingRad = headingRad
+        val g = map.grid
+        val dirs = map.directions
+        var likelihood = 0.0
+        for (i in 0 until n) {
+            val h = headingRad + offset[i] + gaussian() * params.headingNoiseRad
+            val len = lengthM * scale[i] * (1 + gaussian() * params.lengthNoise)
+            val from = PointM(east[i], north[i])
+            val to = PointM(east[i] + len * sin(h), north[i] + len * cos(h))
+            var f = if (g.segmentBlocked(from, to)) params.wallFactor else 1.0
+            val c = dirs.coherenceAt(to)
+            if (c > 0) {
+                val s = sin(axialDiff(h, dirs.axisAt(to)))
+                f *= 1 - params.beta * c * s * s
+            }
+            east[i] = to.x; north[i] = to.y
+            offset[i] += gaussian() * params.offsetDriftRad
+            scale[i] = (scale[i] + gaussian() * params.scaleDrift).coerceIn(0.8, 1.25)
+            likelihood += weight[i] * f
+            weight[i] *= f
+        }
+        if (!(likelihood > 0) || !likelihood.isFinite()) {
+            initUniform(n)
+            return
+        }
+        for (i in 0 until n) weight[i] /= likelihood
+        // Most of the mass walked through walls: the map or the estimate is wrong — re-seed around it.
+        badSteps = if (likelihood < BAD_STEP_LIKELIHOOD) badSteps + 1 else 0
+        goodSteps = if (likelihood >= GOOD_STEP_LIKELIHOOD) goodSteps + 1 else 0
+        if (badSteps > 0) forcedSearching = true // the estimate just walked through walls: stop claiming it
+        if (badSteps >= BAD_STEPS_BEFORE_RECOVERY) {
+            reseedAround(0.5)
+            badSteps = 0
+            goodSteps = 0
+            forcedSearching = true
+        } else if (goodSteps >= GOOD_STEPS_TO_TRUST) {
+            forcedSearching = false
+        }
+        if (effectiveSampleSize() < params.resampleEssRatio * n) resample()
+    }
+
+    fun effectiveSampleSize(): Double {
+        var s = 0.0
+        for (i in 0 until n) s += weight[i] * weight[i]
+        return if (s > 0) 1.0 / s else 0.0
+    }
+
+    /** Up to [max] particle positions, evenly picked (for display). */
+    fun samplePositions(max: Int): List<PointM> {
+        if (n == 0 || max <= 0) return emptyList()
+        val stride = maxOf(1, n / max)
+        return (0 until n step stride).take(max).map { PointM(east[it], north[it]) }
+    }
+
+    /** Single weighted zone (refined by clustering later). */
+    fun estimate(): LocEstimate {
+        if (n == 0) return LocEstimate(emptyList(), LocState.SEARCHING)
+        var me = 0.0; var mn = 0.0; var ws = 0.0; var sinH = 0.0; var cosH = 0.0
+        for (i in 0 until n) {
+            me += weight[i] * east[i]; mn += weight[i] * north[i]; ws += weight[i]
+            sinH += weight[i] * sin(lastHeadingRad + offset[i]); cosH += weight[i] * cos(lastHeadingRad + offset[i])
+        }
+        me /= ws; mn /= ws
+        var v = 0.0
+        for (i in 0 until n) v += weight[i] * ((east[i] - me) * (east[i] - me) + (north[i] - mn) * (north[i] - mn))
+        val radius = 2.45 * sqrt(v / ws / 2)
+        val zone = LocZone(PointM(me, mn), radius, 1.0, atan2(sinH, cosH))
+        val state = when {
+            forcedSearching -> LocState.SEARCHING
+            radius < 3.0 -> LocState.FOUND
+            radius <= 8.0 -> LocState.APPROXIMATE
+            else -> LocState.SEARCHING
+        }
+        return LocEstimate(listOf(zone), state)
+    }
+
+    // ---- internals
+
+    private fun allocate(count: Int) {
+        if (east.size < count) {
+            east = DoubleArray(count); north = DoubleArray(count); offset = DoubleArray(count)
+            scale = DoubleArray(count); weight = DoubleArray(count)
+        }
+        n = count
+    }
+
+    private fun randomFreePoint(): PointM {
+        val c = map.grid.centerOf(freeCells[random.nextInt(freeCells.size)])
+        val r = map.grid.resM
+        return PointM(c.x + (random.nextDouble() - 0.5) * r, c.y + (random.nextDouble() - 0.5) * r)
+    }
+
+    /** Free point within [radius] of [center], or anywhere free if none is found quickly. */
+    private fun randomFreePointNear(center: PointM, radius: Double): PointM {
+        repeat(60) {
+            val p = PointM(center.x + random.nextDouble(-radius, radius), center.y + random.nextDouble(-radius, radius))
+            if (p.distanceTo(center) <= radius && !map.grid.isBlocked(p)) return p
+        }
+        return randomFreePoint()
+    }
+
+    private fun mainCenter(): PointM = estimate().zones.firstOrNull()?.centerM ?: randomFreePoint()
+
+    /** Replace a [fraction] of the particles by fresh ones around the main zone (recovery). */
+    private fun reseedAround(fraction: Double) {
+        val center = mainCenter()
+        val count = (n * fraction).roundToInt().coerceAtLeast(1)
+        for (k in 0 until count) {
+            val i = random.nextInt(n)
+            val donor = random.nextInt(n)
+            val p = randomFreePointNear(center, params.recoveryRadiusM)
+            east[i] = p.x; north[i] = p.y
+            offset[i] = offset[donor]; scale[i] = scale[donor]
+            weight[i] = 1.0 / n
+        }
+        normalize()
+    }
+
+    private fun normalize() {
+        var s = 0.0
+        for (i in 0 until n) s += weight[i]
+        if (s > 0) for (i in 0 until n) weight[i] /= s
+    }
+
+    /** Systematic resampling to the target size, then a small recovery injection. */
+    private fun resample() {
+        val target = if (estimate().state == LocState.FOUND) params.minParticles else params.maxParticles
+        val ne = DoubleArray(target); val nn = DoubleArray(target); val no = DoubleArray(target); val ns = DoubleArray(target)
+        val step = 1.0 / target
+        var u = random.nextDouble() * step
+        var cum = weight[0]
+        var j = 0
+        for (k in 0 until target) {
+            while (u > cum && j < n - 1) { j++; cum += weight[j] }
+            ne[k] = east[j]; nn[k] = north[j]; no[k] = offset[j]; ns[k] = scale[j]
+            u += step
+        }
+        east = ne; north = nn; offset = no; scale = ns
+        weight = DoubleArray(target) { 1.0 / target }
+        n = target
+        if (params.recoveryFraction > 0) reseedAround(params.recoveryFraction)
+    }
+
+    private fun gaussian(): Double {
+        val u1 = random.nextDouble().coerceAtLeast(1e-12)
+        val u2 = random.nextDouble()
+        return sqrt(-2 * ln(u1)) * cos(2 * PI * u2)
+    }
+
+    private companion object {
+        const val BAD_STEP_LIKELIHOOD = 0.05
+        const val GOOD_STEP_LIKELIHOOD = 0.5
+        const val BAD_STEPS_BEFORE_RECOVERY = 3
+        const val GOOD_STEPS_TO_TRUST = 10
+    }
+}
