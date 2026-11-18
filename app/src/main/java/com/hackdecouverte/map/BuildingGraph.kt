@@ -207,6 +207,26 @@ class BuildingGraph(
     }
 
     /**
+     * Every way from [fromFloorId] to [toFloorId]: (stairs / lift node on the first floor, the same
+     * shaft's node on the second), matched by `vertical_group_id`.
+     */
+    fun verticalTransfers(fromFloorId: String, toFloorId: String): List<Pair<PointM, PointM>> {
+        val from = floorsById[fromFloorId] ?: return emptyList()
+        val to = floorsById[toFloorId] ?: return emptyList()
+        val landings = to.nodes.filter { !it.verticalGroupId.isNullOrBlank() }.groupBy { it.verticalGroupId!! }
+        return from.nodes.mapNotNull { n ->
+            val group = n.verticalGroupId?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val landing = landings[group]?.minByOrNull { it.posM.distanceTo(n.posM) } ?: return@mapNotNull null
+            n.posM to landing.posM
+        }
+    }
+
+    /** Stairs and lift nodes of [floorId]. */
+    fun verticalConnectorPositions(floorId: String): List<PointM> =
+        floorsById[floorId]?.nodes?.filter { !it.verticalGroupId.isNullOrBlank() || it.type == "stairs" || it.type == "elevator" }
+            ?.map { it.posM }.orEmpty()
+
+    /**
      * Adjacent floor (`+1` up or `-1` down) relative to [fromFloorId] in sorted building order.
      */
     fun adjacentFloorId(fromFloorId: String, floorDelta: Int): String? {

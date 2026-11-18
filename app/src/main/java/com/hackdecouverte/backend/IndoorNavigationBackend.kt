@@ -352,6 +352,14 @@ class IndoorNavigationBackend(
         }
     }
 
+    /** Builds the maps of the floors above and below in the background, so a floor change can carry the hypotheses. */
+    private fun prepareAdjacentFloors(floorId: String) {
+        val next = listOfNotNull(buildingGraph.adjacentFloorId(floorId, 1), buildingGraph.adjacentFloorId(floorId, -1))
+            .filter { !localization.isPrepared(it) }
+        if (next.isEmpty()) return
+        scope.launch(Dispatchers.Default) { next.forEach { localization.prepare(it) } }
+    }
+
     /** Background tracking nobody uses (phone left on a desk, forgotten in a bag) stops by itself. */
     private suspend fun idleWatchdog() {
         while (true) {
@@ -788,12 +796,17 @@ class IndoorNavigationBackend(
         latestPressureNs = timestampNs
         val uFloor = userFloorId ?: return
         val currentMapPos = anchor?.toMap(tracker.state.value.position) ?: currentFloorOriginM
-        val nearConnector = buildingGraph.findNearestVerticalConnector(
-            floorId = uFloor,
-            posM = currentMapPos,
-            maxRadiusM = NEAR_CONNECTOR_BARO_RADIUS_M,
-            accessibleOnly = false
-        ) != null
+        // Map localization: "near stairs" is how much of the filter's weight is next to one.
+        val nearConnector = if (localizationEnabled && localization.floorId == uFloor) {
+            localization.massNear(buildingGraph.verticalConnectorPositions(uFloor), NEAR_CONNECTOR_BARO_RADIUS_M) >= NEAR_CONNECTOR_MIN_MASS
+        } else {
+            buildingGraph.findNearestVerticalConnector(
+                floorId = uFloor,
+                posM = currentMapPos,
+                maxRadiusM = NEAR_CONNECTOR_BARO_RADIUS_M,
+                accessibleOnly = false
+            ) != null
+        }
 
         val update = floorTracker.onPressure(timestampNs, pressureHpa, nearConnector) ?: return
         val wasInTransit = inVerticalTransit
@@ -811,6 +824,20 @@ class IndoorNavigationBackend(
             val targetFloor = buildingGraph.adjacentFloorId(uFloor, update.floorStepDelta)
             if (targetFloor == null) {
                 floorTracker.revertRejectedFloorStep(update.floorStepDelta)
+            } else if (localizationEnabled) {
+                // The hypotheses next to stairs / lifts move to their landings; the stair steps are dropped.
+                recorder.note("floor", "$uFloor -> $targetFloor")
+                tracker.endVerticalHold(commit = false)
+                userFloorId = targetFloor
+                viewedFloorId = targetFloor
+                val moved = localization.changeFloor(targetFloor, buildingGraph.verticalTransfers(uFloor, targetFloor))
+                if (!moved) localizationStartingFor = null // target map not built yet: a fresh search starts there once it is
+                recomputeAnchor()
+                prepareAdjacentFloors(targetFloor)
+                loadVectorPlansInBackground()
+                lastPublishedAltM = floorDeltaAltitudeM
+                invalidateRouteAndPublish()
+                return
             } else {
                 val landing = buildingGraph.resolveFloorTransition(
                     fromFloorId = uFloor,
@@ -1080,6 +1107,7 @@ class IndoorNavigationBackend(
             if (!ok) Log.w(LOG_TAG, "map localization unavailable: ${localization.lastError}")
             Log.d(LOG_TAG, "map localization prepare($floorId) ok=$ok enabled=$localizationEnabled user=$userFloorId")
             if (ok && localizationEnabled && userFloorId == floorId) beginSearch(floorId, allowWarm = true)
+            if (ok) prepareAdjacentFloors(floorId)
             if (localizationStartingFor == floorId) localizationStartingFor = null
             _state.value = buildSnapshot(tracker.state.value)
         }
@@ -1304,6 +1332,8 @@ class IndoorNavigationBackend(
         /** About 2/3 of a floor (0.47 hPa per 4 m): more and the walker probably changed floor. */
         private const val WARM_MAX_PRESSURE_DELTA_HPA = 0.3
         private const val NEAR_CONNECTOR_BARO_RADIUS_M = 7.0
+        /** Map localization: share of the weight next to stairs / lifts for the barometer to accept a floor change. */
+        private const val NEAR_CONNECTOR_MIN_MASS = 0.15
         private const val HIGH_PRECISION_OUTDOOR_GPS_M = 4.5
         private const val STREET_REFERENCE_MAX_ACCURACY_M = 15.0
         private const val STREET_REFERENCE_MIN_DIST_M = 45.0

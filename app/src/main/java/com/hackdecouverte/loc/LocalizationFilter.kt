@@ -78,6 +78,51 @@ class LocalizationFilter(
     fun initAround(center: PointM, radiusM: Double, count: Int = params.maxParticles) =
         initDisks(listOf(Disk(center, radiusM, 1 - OUTSIDE_DISK_SHARE)), count)
 
+    /** One hypothesis's full state, to carry it to another floor's filter. */
+    data class Hypothesis(val positionM: PointM, val offsetRad: Double, val scale: Double, val weight: Double)
+
+    fun exportHypotheses(): List<Hypothesis> = List(n) { Hypothesis(PointM(east[it], north[it]), offset[it], scale[it], weight[it]) }
+
+    /**
+     * Continues a search on this (other) floor from [carried] hypotheses (spec §6.5: a floor change is
+     * only possible next to stairs or a lift): drawn by weight, placed on a free cell within
+     * [jitterM] of their position (else near it), keeping their phone angle and stride; [freshShare]
+     * of new ones anywhere in case the barometer or the carried zone is wrong.
+     */
+    fun initFrom(carried: List<Hypothesis>, offsetKnown: Boolean, jitterM: Double = 1.0, freshShare: Double = 0.1, count: Int = params.maxParticles) {
+        val total = carried.sumOf { it.weight }
+        if (carried.isEmpty() || total <= 0) {
+            initUniform(count)
+            return
+        }
+        allocate(count)
+        val cum = DoubleArray(carried.size)
+        var acc = 0.0
+        for ((k, h) in carried.withIndex()) { acc += h.weight / total; cum[k] = acc }
+        for (i in 0 until count) {
+            if (random.nextDouble() < freshShare) {
+                val p = randomFreePoint()
+                east[i] = p.x; north[i] = p.y
+                offset[i] = random.nextDouble(0.0, 2 * PI); scale[i] = randomStrideScale()
+            } else {
+                val u = random.nextDouble()
+                var k = 0
+                while (k < cum.size - 1 && cum[k] < u) k++
+                val h = carried[k]
+                val p = if (!map.grid.isBlocked(h.positionM) && jitterM <= 0) h.positionM else randomFreePointNear(h.positionM, jitterM.coerceAtLeast(0.3))
+                east[i] = p.x; north[i] = p.y
+                offset[i] = h.offsetRad; scale[i] = h.scale
+            }
+            score[i] = 1.0
+            weight[i] = 1.0 / count
+        }
+        this.offsetKnown = offsetKnown
+        pendingSteps.clear()
+        forcedSearching = true
+        goodSteps = 0
+        startHistory()
+    }
+
     /** A search area: a disk and the share of the hypotheses it gets. */
     data class Disk(val center: PointM, val radiusM: Double, val share: Double)
 

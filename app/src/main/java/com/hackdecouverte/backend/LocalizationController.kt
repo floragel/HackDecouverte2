@@ -64,16 +64,61 @@ class LocalizationController(
      * Builds (or fetches from cache) the map of [floorId]; heavy, safe to call off the main thread.
      * A map that fails to build, or has nowhere to stand, counts as missing (never throws).
      */
-    fun prepare(floorId: String): Boolean = synchronized(maps) {
-        maps.getOrPut(floorId) {
-            val built = runCatching { mapProvider(floorId) }
-            built.exceptionOrNull()?.let { lastError = "$floorId: ${it::class.simpleName}: ${it.message}" }
-            val map = built.getOrNull()
-            if (built.isSuccess && map == null) lastError = "$floorId: no map files"
-            if (map != null && map.freeCellIndices().isEmpty()) lastError = "$floorId: map has no free space"
-            map?.takeIf { it.freeCellIndices().isNotEmpty() }
+    fun prepare(floorId: String): Boolean {
+        synchronized(maps) { if (maps.containsKey(floorId)) return maps[floorId] != null }
+        // Built outside the lock: a background build of the next floor never blocks the main thread.
+        val built = runCatching { mapProvider(floorId) }
+        built.exceptionOrNull()?.let { lastError = "$floorId: ${it::class.simpleName}: ${it.message}" }
+        val map = built.getOrNull()
+        if (built.isSuccess && map == null) lastError = "$floorId: no map files"
+        if (map != null && map.freeCellIndices().isEmpty()) lastError = "$floorId: map has no free space"
+        val usable = map?.takeIf { it.freeCellIndices().isNotEmpty() }
+        synchronized(maps) { if (!maps.containsKey(floorId)) maps[floorId] = usable }
+        return isPrepared(floorId)
+    }
+
+    /** The map of [floorId] is built and usable (no building triggered). */
+    fun isPrepared(floorId: String): Boolean = synchronized(maps) { maps[floorId] != null }
+
+    /**
+     * The barometer says the walker changed floor (spec §6.5): hypotheses within [nearM] of a stairs /
+     * lift on the current floor move to its landing on [targetFloorId] ([transfers]: departure →
+     * landing), keeping their phone angle and stride; the others are dropped. Nobody near a connector
+     * → a fresh search around every landing. False (nothing changed) if the target map is not built.
+     */
+    fun changeFloor(targetFloorId: String, transfers: List<Pair<PointM, PointM>>, nearM: Double = TRANSFER_RADIUS_M): Boolean {
+        val old = filter ?: return false
+        val map = synchronized(maps) { maps[targetFloorId] } ?: return false
+        val carried = old.exportHypotheses().mapNotNull { h ->
+            val (from, to) = transfers.minByOrNull { it.first.distanceTo(h.positionM) } ?: return@mapNotNull null
+            if (from.distanceTo(h.positionM) > nearM) null else h.copy(positionM = to)
         }
-    } != null
+        val f = LocalizationFilter(map, params, random)
+        val carriedShare = carried.sumOf { it.weight } / old.exportHypotheses().sumOf { it.weight }.coerceAtLeast(1e-12)
+        if (carried.isEmpty() || carriedShare < MIN_CARRIED_SHARE) {
+            f.initDisks(transfers.map { LocalizationFilter.Disk(it.second, LANDING_RADIUS_M, 0.85 / transfers.size.coerceAtLeast(1)) })
+        } else {
+            f.initFrom(carried, offsetKnown = old.offsetKnown, jitterM = LANDING_RADIUS_M / 2)
+        }
+        filter = f
+        floorId = targetFloorId
+        lastPosition = null
+        stepsSinceStart = 0
+        floorChanges++
+        refresh(f)
+        return true
+    }
+
+    @Volatile var floorChanges = 0
+        private set
+
+    /** Share of the weight within [radiusM] of any of [points] (e.g. stairs: may the barometer change the floor?). */
+    fun massNear(points: List<PointM>, radiusM: Double): Double {
+        val ps = particles
+        if (ps.isEmpty() || points.isEmpty()) return 0.0
+        val total = ps.sumOf { it.weight }.takeIf { it > 0 } ?: return 0.0
+        return ps.filter { p -> points.any { it.distanceTo(p.positionM) <= radiusM } }.sumOf { it.weight } / total
+    }
 
     /** Why the last map could not be built (shown on the debug screen), null if none failed. */
     @Volatile var lastError: String? = null
@@ -280,6 +325,10 @@ class LocalizationController(
             s.canStart && (s.trueNorthAligned || waitedNs >= COMPASS_WAIT_NS)
 
         const val COMPASS_WAIT_NS = 3_000_000_000L
+        /** Hypotheses this close to a stairs / lift node may change floor with it. */
+        const val TRANSFER_RADIUS_M = 7.0
+        const val LANDING_RADIUS_M = 3.0
+        const val MIN_CARRIED_SHARE = 0.03
         /** Longer than any real step (trace reset, merged burst): only resets the reference position. */
         const val MAX_STEP_DISPLACEMENT_M = 2.0
         const val MAX_STEPS_PER_STATE = 40

@@ -57,7 +57,8 @@ data class ReplayResult(
 )
 
 /**
- * Replays a recorded walk through the phone's own code: [SensorRouter] → [PdrTracker] →
+ * Replays a recorded walk through the phone's own code (one floor: barometric floor changes are not
+ * replayed yet): [SensorRouter] → [PdrTracker] →
  * [LocalizationController], wired as `IndoorNavigationBackend` does in localization mode
  * (PDR starts by itself, no corridor pull / junction / GPS nudge, GPS feeds the filter).
  * Keep the two in step when the backend's localization wiring changes.
