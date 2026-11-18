@@ -17,7 +17,9 @@ data class LocParams(
     val beta: Double = 0.2,
     val resampleEssRatio: Double = 0.5,
     val recoveryFraction: Double = 0.02,
-    val recoveryRadiusM: Double = 15.0
+    val recoveryRadiusM: Double = 15.0,
+    /** Steps kept for the walk traced back (Zee's backward propagation); the computer replay keeps whole walks. */
+    val historySteps: Int = 300
 )
 
 enum class LocState { SEARCHING, APPROXIMATE, FOUND }

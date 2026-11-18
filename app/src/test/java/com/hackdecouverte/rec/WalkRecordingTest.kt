@@ -47,6 +47,7 @@ class WalkRecordingTest {
             RecEvent.Accuracy(11, 12L, 1),
             RecEvent.Fix(13L, 45.5, -73.6, 8.5, "fused", 52.0, null, 270.0, 1.2, -14.1, 9),
             RecEvent.Gnss(14L, listOf(RecEvent.Satellite(1, 12, 31.5f, 210f, 40f, true, 1575.42f), RecEvent.Satellite(6, 3, 18f, 90f, 12f, false, null))),
+            RecEvent.GnssRaw(14L, listOf(RecEvent.RawSignal(1, 12, 31.5, 1575.42, -412.25, 0, 16431), RecEvent.RawSignal(6, 3, 18.0, null, 2.5, 1, 0))),
             RecEvent.WifiScan(15L, listOf(RecEvent.AccessPoint("aa:bb:cc:dd:ee:ff", -61, 5180, true, 120))),
             RecEvent.Rtt(16L, listOf(RecEvent.Range("aa:bb:cc:dd:ee:ff", 0, 4520, 300, -60, 8, 7))),
             RecEvent.Marker(17L, 1, 1.5, -2.5, "door, M-101"),

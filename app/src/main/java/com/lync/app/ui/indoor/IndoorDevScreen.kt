@@ -260,15 +260,27 @@ private fun RecordBar(backend: IndoorNavigationBackend, backgroundTracking: Bool
                 }
             }
         }
+        if (status.recording) {
+            // One tap = "this is happening now": ground truth for hold changes, stairs and doors.
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                WALK_LABELS.forEach { label ->
+                    FilterChip(selected = status.lastLabel == label, onClick = { backend.recordLabel(label) }, label = { Text(label) })
+                }
+            }
+        }
         val hint = when {
             status.error != null -> "Erreur : ${status.error}"
-            status.recording -> "Touchez la carte là où vous êtes vraiment (départ, virages, portes) : chaque repère sert de vérité." +
+            status.recording -> "Touchez la carte là où vous êtes vraiment (départ, bouts de couloir, escalier) ; touchez une étiquette quand vous changez de tenue. " +
+                "${status.labels} étiquette(s)." +
                 if (backgroundTracking) " L'enregistrement continue écran éteint, téléphone en poche." else ""
             else -> "Posez un repère au départ, à chaque virage et à l'arrivée. Récupération : partager, ou tools/pull-walks.sh."
         }
         Text(hint, style = MaterialTheme.typography.labelSmall, color = if (status.error != null) Color(0xFFE53935) else c.textMuted, modifier = Modifier.padding(top = 4.dp))
     }
 }
+
+/** Labels the walker can stamp during a recording (what really happens, for the analysis). */
+private val WALK_LABELS = listOf("En main", "Poche", "Main qui balance", "Sac", "Écran éteint", "Arrêt", "Escalier", "Porte", "Virage")
 
 private fun shareWalk(context: Context, file: File) {
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.walks", file)

@@ -91,5 +91,13 @@ internal object SyntheticWalk {
         gpsCenter = PointM(3.0, -1.0)
     )
 
+    /** About 2 min up and down the college corridor (four legs), markers at both ends: for the analysis. */
+    fun stanislasBackAndForth(origin: GeoOrigin): Recording = record(
+        origin, "STAN", "STAN-1",
+        start = PointM(11.5, -11.5),
+        legs = listOf(Leg(-45.0, 48), Leg(135.0, 44), Leg(-45.0, 44), Leg(135.0, 44)),
+        gpsCenter = PointM(3.0, -1.0)
+    )
+
     fun angleDiffDeg(a: Double, b: Double) = abs(Math.toDegrees(wrapAnglePi(a - b)))
 }

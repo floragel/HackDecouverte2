@@ -389,7 +389,7 @@ class LocalizationFilter(
         return path
     }
 
-    /** Number of recorded positions (steps + start), at most [MAX_HISTORY_STEPS] + 1. */
+    /** Number of recorded positions (steps + start), at most [LocParams.historySteps] + 1. */
     fun historySize(): Int = history.size
 
     private fun startHistory() {
@@ -403,7 +403,7 @@ class LocalizationFilter(
         val e = FloatArray(n); val no = FloatArray(n); val parent = IntArray(n)
         for (i in 0 until n) { e[i] = east[i].toFloat(); no[i] = north[i].toFloat(); parent[i] = origin[i]; origin[i] = i }
         history.addLast(Snapshot(e, no, parent))
-        while (history.size > MAX_HISTORY_STEPS + 1) history.removeFirst()
+        while (history.size > params.historySteps + 1) history.removeFirst()
     }
 
     fun effectiveSampleSize(): Double {

@@ -12,6 +12,9 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.GnssStatus
+import android.os.PowerManager
+import android.os.BatteryManager
+import android.location.GnssMeasurementsEvent
 import android.location.LocationManager
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
@@ -49,6 +52,8 @@ data class RecorderStatus(
     val lines: Long = 0L,
     val wifiScans: Int = 0,
     val rttOk: Int = 0,
+    val labels: Int = 0,
+    val lastLabel: String? = null,
     val file: File? = null,
     /** The last finished recording (to share). */
     val lastFile: File? = null,
@@ -179,6 +184,14 @@ class WalkRecorder(context: Context) {
 
     fun note(name: String, detail: String) = put(RecEvent.Note(SystemClock.elapsedRealtimeNanos(), name, detail))
 
+    /** What the walker says is happening now ("poche", "escalier"…): ground truth for the carry and floor logic. */
+    fun label(text: String): Boolean {
+        if (!active) return false
+        note("label", text)
+        _status.value = _status.value.copy(labels = _status.value.labels + 1, lastLabel = text)
+        return true
+    }
+
     /** Ground truth: the walker says they are at ([eastM], [northM]) on the plan right now. Returns the marker number, or null when not recording. */
     fun addMarker(eastM: Double, northM: Double): Int? {
         if (!active) return null
@@ -213,6 +226,33 @@ class WalkRecorder(context: Context) {
         }
     }
 
+    /** Raw GNSS (research: pseudorange rates, multipath flags, per-signal C/N0 indoors). */
+    private val gnssRawCallback = object : GnssMeasurementsEvent.Callback() {
+        override fun onGnssMeasurementsReceived(event: GnssMeasurementsEvent) {
+            val signals = event.measurements.map { m ->
+                RecEvent.RawSignal(
+                    m.constellationType, m.svid, m.cn0DbHz,
+                    if (m.hasCarrierFrequencyHz()) m.carrierFrequencyHz / 1e6 else null,
+                    m.pseudorangeRateMetersPerSecond, m.multipathIndicator, m.state
+                )
+            }
+            if (signals.isNotEmpty()) put(RecEvent.GnssRaw(SystemClock.elapsedRealtimeNanos(), signals))
+        }
+    }
+
+    /** Battery and heat once a minute (spec §6.7 asks for both on long walks). */
+    private val healthTick = object : Runnable {
+        override fun run() {
+            if (!active) return
+            val battery = runCatching { (app.getSystemService(Context.BATTERY_SERVICE) as BatteryManager).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) }.getOrDefault(-1)
+            val thermal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                runCatching { (app.getSystemService(Context.POWER_SERVICE) as PowerManager).currentThermalStatus }.getOrDefault(-1)
+            } else -1
+            note("health", "battery=$battery thermal=$thermal")
+            handler?.postDelayed(this, 60_000L)
+        }
+    }
+
     private val scanReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) = recordScan()
     }
@@ -241,8 +281,9 @@ class WalkRecorder(context: Context) {
         val h = Handler(t.looper)
         handler = h
         for (type in EXTRA_TYPES) {
-            sensorManager.getDefaultSensor(type)?.let { sensorManager.registerListener(extraListener, it, EXTRA_PERIOD_US, h) }
+            sensorManager.getDefaultSensor(type)?.let { sensorManager.registerListener(extraListener, it, periodUs(type), h) }
         }
+        h.postDelayed(healthTick, 1_000L)
         if (hasFineLocation()) {
             runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -250,6 +291,14 @@ class WalkRecorder(context: Context) {
                 } else {
                     @Suppress("DEPRECATION")
                     locationManager.registerGnssStatusCallback(gnssCallback, h)
+                }
+            }
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    locationManager.registerGnssMeasurementsCallback({ r -> h.post(r) }, gnssRawCallback)
+                } else {
+                    @Suppress("DEPRECATION")
+                    locationManager.registerGnssMeasurementsCallback(gnssRawCallback, h)
                 }
             }
             runCatching {
@@ -264,6 +313,7 @@ class WalkRecorder(context: Context) {
     private fun stopResearchStreams() {
         sensorManager.unregisterListener(extraListener)
         runCatching { locationManager.unregisterGnssStatusCallback(gnssCallback) }
+        runCatching { locationManager.unregisterGnssMeasurementsCallback(gnssRawCallback) }
         runCatching { app.unregisterReceiver(scanReceiver) }
         handler?.removeCallbacksAndMessages(null)
         thread?.quitSafely()
@@ -322,14 +372,22 @@ class WalkRecorder(context: Context) {
     companion object {
         private const val TAG = "WalkRecorder"
         private const val END = "\u0000end"
-        private const val EXTRA_PERIOD_US = 10_000 // 100 Hz
-        private const val WIFI_SCAN_PERIOD_MS = 30_000L
+        /** Asked every 10 s; Android allows 4 per 2 min unless "Wi-Fi scan throttling" is off in Developer options. */
+        private const val WIFI_SCAN_PERIOD_MS = 10_000L
+
+        /** 200 Hz for the raw IMU (learned odometry wants it), 50 Hz for the rest; event sensors ignore it. */
+        private fun periodUs(type: Int): Int = when (type) {
+            Sensor.TYPE_ACCELEROMETER, Sensor.TYPE_GYROSCOPE, Sensor.TYPE_ACCELEROMETER_UNCALIBRATED,
+            Sensor.TYPE_GYROSCOPE_UNCALIBRATED -> 5_000
+            else -> 20_000
+        }
         private const val RTT_PERIOD_MS = 1_000L
 
         /** Logged for research only (not used by the PDR). */
         val EXTRA_TYPES = listOf(
-            Sensor.TYPE_ACCELEROMETER, Sensor.TYPE_GYROSCOPE, Sensor.TYPE_MAGNETIC_FIELD,
-            Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED, Sensor.TYPE_LIGHT
+            Sensor.TYPE_ACCELEROMETER, Sensor.TYPE_GYROSCOPE, Sensor.TYPE_ACCELEROMETER_UNCALIBRATED,
+            Sensor.TYPE_GYROSCOPE_UNCALIBRATED, Sensor.TYPE_GRAVITY, Sensor.TYPE_MAGNETIC_FIELD,
+            Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED, Sensor.TYPE_LIGHT, Sensor.TYPE_PROXIMITY
         )
 
         /** What the PDR registers (described in the header). */

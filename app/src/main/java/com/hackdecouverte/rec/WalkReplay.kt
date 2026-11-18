@@ -22,7 +22,10 @@ data class ReplayStep(
     val pdr: PointM,
     val state: LocState?,
     val estimate: PointM?,
-    val radiusM: Double?
+    val radiusM: Double?,
+    /** Filter step index (since the search's last start) right after this PDR step, and that search's number. */
+    val filterStep: Int = 0,
+    val epoch: Int = 0
 )
 
 /**
@@ -53,7 +56,14 @@ data class ReplayResult(
     val gpsFixesUsed: Int,
     val gpsPoints: List<Pair<PointM, Double>>,
     val systemCircle: Pair<PointM, Double>?,
-    val map: IndoorMap?
+    val map: IndoorMap?,
+    /** The last walk traced back, each point with its time (the analysis' pseudo ground truth). */
+    val tracedWalk: List<Pair<Long, PointM>> = emptyList(),
+    /** Carry mode over time (t, mode, moving to a new hold) and the times hold changes were committed. */
+    val carryTimeline: List<Triple<Long, com.hackdecouverte.pdr.CarryMode, Boolean>> = emptyList(),
+    val holdChangeTimes: List<Long> = emptyList(),
+    val droppedSteps: Int = 0,
+    val recoveredSteps: Int = 0
 )
 
 /**
@@ -70,7 +80,13 @@ class WalkReplay(
     private val seed: Int = 1,
     private val params: LocParams = LocParams(),
     /** False = replay as if there were no GPS at all (does the map alone find the walker?). */
-    private val useGps: Boolean = true
+    private val useGps: Boolean = true,
+    /**
+     * Replay only this part of the walk, from a cold start at [windowStartNs] (the 3 s before only warm
+     * the sensors up: orientation buffer, compass); markers outside are ignored. Null = the whole walk.
+     */
+    private val windowStartNs: Long? = null,
+    private val windowEndNs: Long? = null
 ) {
     fun run(): ReplayResult {
         val h = recording.header
@@ -112,21 +128,29 @@ class WalkReplay(
         var lastTrace: List<PointM> = emptyList()
         var lastTraceSteps = 0
         var lastTraceEpoch = -1
+        val carry = ArrayList<Triple<Long, com.hackdecouverte.pdr.CarryMode, Boolean>>()
+        val holdTimes = ArrayList<Long>()
+        val startGate = windowStartNs ?: h.startedNs
+        val firstEventNs = startGate - WARMUP_NS
 
         class Pending(val marker: RecEvent.Marker, val epoch: Int, val stepIdx: Int, val state: LocState?, val online: PointM?, val pdr: PointM, val stepCount: Int)
         val pending = ArrayList<Pending>()
 
         fun afterEvent() {
+            if (now < startGate) return
             if (!started) {
                 started = true
                 val fix = latestFix?.takeIf { useGps && now - it.timeNs <= SYSTEM_FIX_MAX_AGE_NS }
                 controller.start(h.floorId, fix)
             }
-            if (LocalizationController.shouldAutoStartPdr(tracker.state.value, now - h.startedNs)) {
+            if (LocalizationController.shouldAutoStartPdr(tracker.state.value, now - startGate)) {
                 tracker.startWithManualStepLength(h.stepLengthM, h.cadenceHz)
             }
             val s = tracker.state.value
             if (s === lastState) return
+            val c = carry.lastOrNull()
+            if (c == null || c.second != s.carryMode || c.third != s.inHoldTransition) carry += Triple(now, s.carryMode, s.inHoldTransition)
+            if (s.holdChanges > (lastState?.holdChanges ?: 0)) holdTimes += now
             val prevSteps = lastState?.stepCount
             lastState = s
             controller.onPdrState(s)
@@ -141,12 +165,15 @@ class WalkReplay(
             if (s.stepCount != prevSteps && s.stepCount > 0) {
                 val est = controller.estimate
                 val zone = est?.zones?.firstOrNull()
-                steps += ReplayStep(now, s.stepCount, s.position, est?.state, zone?.centerM, zone?.radiusM)
+                steps += ReplayStep(now, s.stepCount, s.position, est?.state, zone?.centerM, zone?.radiusM, controller.stepsSinceStart, epoch)
                 if (firstFoundNs == null && est?.state == LocState.FOUND) firstFoundNs = now
             }
         }
 
         for (e in recording.events) {
+            if (e.tNs < firstEventNs && e !is RecEvent.Fix && e !is RecEvent.Note) continue
+            if (windowEndNs != null && e.tNs > windowEndNs) break
+            if (e is RecEvent.Marker && e.tNs < startGate) continue
             when (e) {
                 is RecEvent.Sample -> {
                     if (!e.pipeline) continue
@@ -204,7 +231,25 @@ class WalkReplay(
                 liveErrM = live?.let { l -> if (l.eastM != null && l.northM != null) PointM(l.eastM, l.northM).distanceTo(m) else null }
             )
         }
+        // Time of every filter step of the traced search, to put the traced walk back on the clock.
+        val timeOfFilterStep = HashMap<Int, Long>()
+        var prevK = 0
+        var prevT = startGate
+        for (st in steps) {
+            if (st.epoch != lastTraceEpoch) continue
+            for (k in prevK + 1..st.filterStep) timeOfFilterStep[k] = prevT + (st.tNs - prevT) * (k - prevK) / maxOf(1, st.filterStep - prevK)
+            if (st.filterStep > prevK) { prevK = st.filterStep; prevT = st.tNs }
+        }
+        val tracedWalk = trace.mapIndexedNotNull { i, p ->
+            val k = finalSteps - (trace.size - 1 - i)
+            timeOfFilterStep[k]?.let { it to p }
+        }
         return ReplayResult(
+            tracedWalk = tracedWalk,
+            carryTimeline = carry,
+            holdChangeTimes = holdTimes,
+            droppedSteps = tracker.state.value.droppedStepCount,
+            recoveredSteps = tracker.state.value.recoveredStepCount,
             steps = steps,
             markers = markers,
             trace = trace,
@@ -224,5 +269,6 @@ class WalkReplay(
         const val MAX_CAMPUS_RADIUS_M = 350.0
         const val SYSTEM_FIX_MAX_AGE_NS = 120_000_000_000L
         const val GPS_MATCH_NS = 5_000_000_000L
+        const val WARMUP_NS = 3_000_000_000L
     }
 }

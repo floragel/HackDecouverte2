@@ -22,7 +22,11 @@ for the complete hackathon app:
   `LocalizationController` exactly as the phone does. The phone side is `sensor/WalkRecorder`
   (record button on the debug map, tap = ground-truth marker). `tools/pull-walks.sh` pulls the walks
   into the git-ignored `recordings/`, then `RecordingReplayTest` writes `app/build/replay/<walk>/`
-  (report.txt, steps.csv, walk.svg). Research directions: `docs/research/`.
+  (report.txt, steps.csv, walk.svg) plus `WalkAnalysis`: analysis.txt, segments.csv,
+  walk-full.svg — the whole walk traced back as pseudo truth (checked against the markers),
+  90 s windows replayed cold (3 seeds, with / without GPS) measured against it, detected
+  carry vs the walker's labels, step counts; `-Dsweep=true` compares filter settings.
+  Research directions: `docs/research/`.
 - `ui/`: Thin test harness UI + GPU-cached `FloorVectorRenderer` over `IndoorNavigationBackend`.
 
 ## Build / test

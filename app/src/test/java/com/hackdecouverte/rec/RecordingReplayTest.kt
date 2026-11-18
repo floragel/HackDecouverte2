@@ -38,15 +38,21 @@ class RecordingReplayTest {
         println(report)
     }
 
+    private val sweep = System.getProperty("sweep") == "true"
+
     @Test
     fun replayRecordedWalks() {
         write("synthetic-corridor", SyntheticWalk.stanislasNorthWestAndBack(IndoorSite.STANISLAS.origin))
+        val long = SyntheticWalk.stanislasBackAndForth(IndoorSite.STANISLAS.origin)
+        println(WalkAnalysis.write("synthetic-back-and-forth", long, File("build/replay/synthetic-back-and-forth"), sweep))
         val src = System.getProperty("replay")?.let(::File) ?: File("../recordings")
         val files = if (src.isDirectory) src.listFiles { f -> f.name.endsWith(".txt.gz") }.orEmpty().sorted() else listOfNotNull(src.takeIf { it.isFile })
         for (f in files) {
             val rec = runCatching { GZIPInputStream(f.inputStream()).bufferedReader().use(RecordingReader::read) }
                 .onFailure { println("${f.name}: unreadable (${it.message})") }.getOrNull() ?: continue
-            write(f.name.removeSuffix(".txt.gz"), rec)
+            val name = f.name.removeSuffix(".txt.gz")
+            write(name, rec)
+            println(WalkAnalysis.write(name, rec, File("build/replay/$name"), sweep))
         }
     }
 }

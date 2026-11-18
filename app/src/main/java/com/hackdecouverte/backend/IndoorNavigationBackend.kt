@@ -362,6 +362,14 @@ class IndoorNavigationBackend(
                         lastLocalizedStep = pdrState.stepCount
                         onLocalizedStep(pdrState)
                     }
+                    if (recorderStatus.value.recording) {
+                        // What the app believes about the carry, to compare with the walker's labels.
+                        val carry = "${pdrState.carryMode} transition=${pdrState.inHoldTransition} changes=${pdrState.holdChanges} reading=${pdrState.readingPose} aligned=${pdrState.headingAligned}"
+                        if (carry != lastCarryNote) {
+                            lastCarryNote = carry
+                            recorder.note("carry", carry)
+                        }
+                    }
                     if (recorderStatus.value.recording && pdrState.stepCount != lastLoggedLiveStep) {
                         lastLoggedLiveStep = pdrState.stepCount
                         recordLive(pdrState)
@@ -1226,6 +1234,7 @@ class IndoorNavigationBackend(
         val ok = recorder.start(header, listOfNotNull(latestGpsFix?.toRecEvent()))
         if (ok) {
             lastLoggedLiveStep = -1
+            lastCarryNote = null
             recorder.note("start", "phase=${s.phase} steps=${s.stepCount} localization=$localizationEnabled")
             recorder.note("screen", if (tracker.screenInteractive) "on" else "off")
         }
@@ -1234,6 +1243,11 @@ class IndoorNavigationBackend(
     }
 
     fun stopRecording(): java.io.File? = recorder.stop()
+
+    /** The walker says what is happening ("poche", "escalier"…), stamped in the recording. */
+    fun recordLabel(text: String): Boolean = recorder.label(text)
+
+    private var lastCarryNote: String? = null
 
     /** The phone can range Wi-Fi access points by time of flight (802.11mc); the app then needs NEARBY_WIFI_DEVICES (Android 13+). */
     val wifiRttSupported: Boolean get() = recorder.wifiRttSupported

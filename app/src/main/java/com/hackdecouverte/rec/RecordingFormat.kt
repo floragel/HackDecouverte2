@@ -17,6 +17,7 @@ import java.io.Writer
  * A,type,t,acc                      sensor accuracy change
  * G,t,lat,lon,accM,provider,altM,vAccM,bearingDeg,speed,declDeg,sats   fix as the pipeline got it
  * N,t,c:svid:cn0:azDeg:elDeg:used:fMHz,…            GNSS satellites (no fix needed: works indoors)
+ * Q,t,c:svid:cn0:fMHz:prrMps:mp:state,…             raw GNSS measurements (pseudorange rate, multipath)
  * W,t,bssid/rssi/freqMHz/ftm/ageMs,…                Wi-Fi scan (no SSID: hotspot names are personal)
  * R,t,bssid/status/distMm/sdMm/rssi/attempted/ok,…  Wi-Fi RTT (802.11mc FTM) ranging
  * M,t,id,eastM,northM,label         ground truth: the walker tapped where they really are
@@ -92,6 +93,13 @@ sealed interface RecEvent {
 
     data class Gnss(override val tNs: Long, val satellites: List<Satellite>) : RecEvent
 
+    data class RawSignal(
+        val constellation: Int, val svid: Int, val cn0DbHz: Double, val carrierMHz: Double?,
+        val pseudorangeRateMps: Double, val multipath: Int, val state: Int
+    )
+
+    data class GnssRaw(override val tNs: Long, val signals: List<RawSignal>) : RecEvent
+
     data class AccessPoint(val bssid: String, val rssi: Int, val freqMHz: Int, val ftmResponder: Boolean, val ageMs: Long)
 
     data class WifiScan(override val tNs: Long, val aps: List<AccessPoint>) : RecEvent
@@ -161,6 +169,9 @@ class RecordingWriter(private val out: Writer) {
             is RecEvent.Gnss -> (listOf("N", e.tNs.toString()) + e.satellites.map {
                 "${it.constellation}:${it.svid}:${it.cn0DbHz}:${it.azimuthDeg}:${it.elevationDeg}:${if (it.usedInFix) 1 else 0}:${it.carrierMHz.f()}"
             }).joinToString(",")
+            is RecEvent.GnssRaw -> (listOf("Q", e.tNs.toString()) + e.signals.map {
+                "${it.constellation}:${it.svid}:${it.cn0DbHz}:${it.carrierMHz.f()}:${it.pseudorangeRateMps}:${it.multipath}:${it.state}"
+            }).joinToString(",")
             is RecEvent.WifiScan -> (listOf("W", e.tNs.toString()) + e.aps.map {
                 "${clean(it.bssid.replace(':', '-'))}/${it.rssi}/${it.freqMHz}/${if (it.ftmResponder) 1 else 0}/${it.ageMs}"
             }).joinToString(",")
@@ -210,6 +221,10 @@ object RecordingReader {
             "N" -> RecEvent.Gnss(p[1].toLong(), p.drop(2).filter { it.isNotEmpty() }.map {
                 val s = it.split(':')
                 RecEvent.Satellite(s[0].toInt(), s[1].toInt(), s[2].toFloat(), s[3].toFloat(), s[4].toFloat(), s[5] == "1", s[6].fl())
+            })
+            "Q" -> RecEvent.GnssRaw(p[1].toLong(), p.drop(2).filter { it.isNotEmpty() }.map {
+                val s = it.split(':')
+                RecEvent.RawSignal(s[0].toInt(), s[1].toInt(), s[2].toDouble(), s[3].d(), s[4].toDouble(), s[5].toInt(), s[6].toInt())
             })
             "W" -> RecEvent.WifiScan(p[1].toLong(), p.drop(2).filter { it.isNotEmpty() }.map {
                 val s = it.split('/')
