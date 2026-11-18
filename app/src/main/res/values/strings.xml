@@ -260,7 +260,7 @@
     <string name="indoor_from_gps">Use my GPS position</string>
     <string name="indoor_from_gps_on">My GPS position</string>
     <string name="indoor_to">Going to</string>
-    <string name="indoor_to_hint">Search a room, e.g. 2.255</string>
+    <string name="indoor_to_hint">Search a room or a number</string>
     <string name="indoor_accessible">Step-free route</string>
     <string name="indoor_accessible_desc">Elevators only, no stairs</string>
     <string name="indoor_go">Let\'s go</string>
@@ -399,4 +399,5 @@
     <string name="go_position_label">Your starting point · then your steps guide you</string>
     <string name="go_position_hint">Set my position</string>
     <string name="go_position_change">Change</string>
+    <string name="indoor_building">Building</string>
 </resources>

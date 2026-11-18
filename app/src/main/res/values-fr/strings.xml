@@ -252,7 +252,7 @@
     <string name="indoor_from_gps">Utiliser ma position GPS</string>
     <string name="indoor_from_gps_on">Ma position GPS</string>
     <string name="indoor_to">Tu vas à</string>
-    <string name="indoor_to_hint">Cherche une salle, ex. 2.255</string>
+    <string name="indoor_to_hint">Cherche une salle ou un numéro</string>
     <string name="indoor_accessible">Itinéraire sans marches</string>
     <string name="indoor_accessible_desc">Ascenseurs seulement, pas d\'escalier</string>
     <string name="indoor_go">C\'est parti</string>
@@ -391,4 +391,5 @@
     <string name="go_position_label">Ton point de départ · puis tes pas te guident</string>
     <string name="go_position_hint">Définir ma position</string>
     <string name="go_position_change">Changer</string>
+    <string name="indoor_building">Bâtiment</string>
 </resources>

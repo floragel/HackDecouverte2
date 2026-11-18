@@ -32,11 +32,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.outlined.Apartment
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.GpsFixed
 import androidx.compose.material.icons.rounded.MyLocation
@@ -78,6 +81,7 @@ import com.hackdecouverte.PdrViewModel
 import com.hackdecouverte.backend.IndoorNavigationBackend
 import com.hackdecouverte.backend.NavigationSnapshot
 import com.hackdecouverte.map.BuildingGraph
+import com.hackdecouverte.map.IndoorSite
 import com.hackdecouverte.map.NavigationRoute
 import com.hackdecouverte.map.RejoinHint
 import com.hackdecouverte.map.RouteStep
@@ -107,8 +111,8 @@ fun floorNumber(floorId: String): String = floorId.substringAfterLast('-')
 @Composable
 fun rememberIndoorBackend(): Pair<IndoorNavigationBackend, NavigationSnapshot> {
     val vm: PdrViewModel = viewModel()
-    val backend = vm.backend
-    val snapshot by vm.snapshot.collectAsStateWithLifecycle()
+    val backend by vm.backendFlow.collectAsStateWithLifecycle()
+    val snapshot by backend.state.collectAsStateWithLifecycle()
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner, backend) {
         val observer = LifecycleEventObserver { _, event ->
@@ -151,9 +155,12 @@ fun IndoorScreen(initialDestinationFloorId: String? = null, initialDestinationNo
     val nav = LocalNavigator.current
     val c = Campus.colors
     val haptics = rememberHaptics()
-    val camera = remember { IndoorCamera() }
+    // A single-floor wing is small: start zoomed out enough to see all of it
+    val camera = remember(backend.site) { IndoorCamera().apply { if (backend.site.id == "STAN") zoom = 0.35f } }
     var sheetHeightPx by remember { mutableFloatStateOf(0f) }
     var picker by remember { mutableStateOf<Picker?>(null) }
+    var buildingPicker by remember { mutableStateOf(false) }
+    val vm: PdrViewModel = viewModel()
 
     val activityPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         backend.onActivityPermissionResult(it)
@@ -171,13 +178,22 @@ fun IndoorScreen(initialDestinationFloorId: String? = null, initialDestinationNo
 
         // ----- Top: back + title, floor picker on the right -----
         Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.shadow(8.dp, CircleShape).clip(CircleShape)) {
-                    CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.action_back), { nav.back() }, filled = false)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // Building name: tap to switch building
+                Box(Modifier.weight(1f)) {
+                Box(Modifier.shadow(8.dp, CircleShape).clip(CircleShape).background(c.bg)
+                    .pressable({ haptics.tick(); buildingPicker = true }, 0.97f).padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(backend.site.name, style = MaterialTheme.typography.titleLarge, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false))
+                        Spacer(Modifier.width(4.dp))
+                        Icon(Icons.Rounded.KeyboardArrowDown, stringResource(R.string.indoor_building), tint = c.textMuted)
+                    }
+                }
                 }
                 Spacer(Modifier.width(10.dp))
-                FloatingPill {
-                    Text(stringResource(R.string.indoor_title), style = MaterialTheme.typography.titleLarge, color = c.text, modifier = Modifier.padding(horizontal = 6.dp))
+                Box(Modifier.shadow(8.dp, CircleShape).clip(CircleShape)) {
+                    CircleIconButton(Icons.Rounded.Settings, stringResource(R.string.profile_settings), { nav.settings() }, filled = false)
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -225,6 +241,19 @@ fun IndoorScreen(initialDestinationFloorId: String? = null, initialDestinationNo
                 }
             }
         }
+    }
+
+    if (buildingPicker) {
+        BuildingPickerSheet(
+            current = backend.site,
+            onPick = { site ->
+                haptics.tick()
+                buildingPicker = false
+                camera.recenter()
+                vm.selectSite(site)
+            },
+            onDismiss = { buildingPicker = false },
+        )
     }
 
     picker?.let { which ->
@@ -285,7 +314,8 @@ private fun SetupSheet(
             hint = stringResource(R.string.indoor_from_hint),
             onClick = { onPick(Picker.FROM) },
             onClear = if (start != null || snap.usingGpsStart) backend::clearStartPose else null,
-            trailing = { CircleIconButton(Icons.Rounded.GpsFixed, stringResource(R.string.indoor_from_gps), onUseGps) },
+            // GPS start only where the building's position on Earth is known precisely
+            trailing = if (snap.site.gpsPositionTrusted) ({ CircleIconButton(Icons.Rounded.GpsFixed, stringResource(R.string.indoor_from_gps), onUseGps) }) else null,
         )
         RoomField(
             label = stringResource(R.string.indoor_to),
@@ -294,7 +324,7 @@ private fun SetupSheet(
             onClick = { onPick(Picker.TO) },
             onClear = if (dest != null) ({ backend.setDestination(null) }) else null,
         )
-        AccessibleRow(snap.accessibleOnly) { backend.setAccessibleOnly(it) }
+        if (snap.floors.size > 1) AccessibleRow(snap.accessibleOnly) { backend.setAccessibleOnly(it) }
         Spacer(Modifier.height(2.dp))
         PrimaryButton(stringResource(R.string.indoor_go), { backend.startWithSavedOrDefaultStepLength() }, enabled = s.canStart)
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -555,6 +585,36 @@ private fun AccessibleRow(on: Boolean, onChange: (Boolean) -> Unit) {
 }
 
 internal data class RoomItem(val floorId: String, val nodeId: String, val label: String, val name: String)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BuildingPickerSheet(current: IndoorSite, onPick: (IndoorSite) -> Unit, onDismiss: () -> Unit) {
+    val c = Campus.colors
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = c.bg,
+        shape = RoundedCornerShape(topStart = Tokens.RadiusCard, topEnd = Tokens.RadiusCard),
+    ) {
+        Column(Modifier.padding(horizontal = Tokens.Gutter).padding(bottom = 24.dp)) {
+            Text(stringResource(R.string.indoor_building), style = MaterialTheme.typography.titleLarge, color = c.text)
+            Spacer(Modifier.height(12.dp))
+            IndoorSite.ALL.forEach { site ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(Tokens.RadiusControl))
+                        .background(if (site == current) c.accentSoft else c.bg)
+                        .pressable({ onPick(site) }, 0.98f).padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Outlined.Apartment, null, tint = c.textMuted, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text(site.name, style = MaterialTheme.typography.titleMedium, color = c.text, modifier = Modifier.weight(1f))
+                    if (site == current) Icon(Icons.Rounded.Check, null, tint = c.accent, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
