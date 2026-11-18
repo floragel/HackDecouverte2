@@ -54,4 +54,24 @@ internal object MapTestSupport {
     }
 
     fun open(path: String) = javaClass.classLoader!!.getResourceAsStream(path)
+
+    val fixtureBounds = MetricBounds(-4.0, -5.0, 24.0, 10.0)
+
+    /** Building 22 × 9 m: corridor in the south, one sealed room in the north, room node r1 on the dividing wall. */
+    fun sealedRoomWalls(): List<List<PointM>> = listOf(
+        bar(PointM(10.0, -2.15), Math.PI / 2, 22.6, 0.3),
+        bar(PointM(10.0, 7.15), Math.PI / 2, 22.6, 0.3),
+        bar(PointM(-1.15, 2.5), 0.0, 9.6, 0.3),
+        bar(PointM(21.15, 2.5), 0.0, 9.6, 0.3),
+        bar(PointM(10.0, 1.15), Math.PI / 2, 22.0, 0.3)
+    )
+
+    fun sealedRoomPlan(extraNodes: List<FloorNode> = emptyList(), extraEdges: List<FloorEdge> = emptyList()): FloorPlan {
+        val nodes = listOf(
+            FloorNode(id = "c1", type = "corridor", posM = PointM(2.0, -0.5)),
+            FloorNode(id = "c2", type = "corridor", posM = PointM(18.0, -0.5)),
+            FloorNode(id = "r1", type = "room", label = "T-1.01", posM = PointM(5.0, 1.15))
+        ) + extraNodes
+        return FloorPlan("T-1", 30.0, 30.0, nodes, listOf(FloorEdge("c1", "c2"), FloorEdge("r1", "c1")) + extraEdges)
+    }
 }

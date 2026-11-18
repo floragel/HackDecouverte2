@@ -39,25 +39,9 @@ class IndoorMapBuilderTest {
         return false
     }
 
-    /** Building 22 × 9 m: corridor in the south, one sealed room in the north, room node r1 on the dividing wall. */
-    private fun sealedRoomFixture(): Pair<List<List<PointM>>, FloorPlan> {
-        val walls = listOf(
-            bar(PointM(10.0, -2.15), PI / 2, 22.6, 0.3), // south facade
-            bar(PointM(10.0, 7.15), PI / 2, 22.6, 0.3),  // north facade
-            bar(PointM(-1.15, 2.5), 0.0, 9.6, 0.3),      // west facade
-            bar(PointM(21.15, 2.5), 0.0, 9.6, 0.3),      // east facade
-            bar(PointM(10.0, 1.15), PI / 2, 22.0, 0.3)   // corridor / room wall, no gap
-        )
-        val nodes = listOf(
-            FloorNode(id = "c1", type = "corridor", posM = PointM(2.0, -0.5)),
-            FloorNode(id = "c2", type = "corridor", posM = PointM(18.0, -0.5)),
-            FloorNode(id = "r1", type = "room", label = "T-1.01", posM = PointM(5.0, 1.15))
-        )
-        val plan = FloorPlan("T-1", 30.0, 30.0, nodes, listOf(FloorEdge("c1", "c2"), FloorEdge("r1", "c1")))
-        return walls to plan
-    }
+    private fun sealedRoomFixture() = MapTestSupport.sealedRoomWalls() to MapTestSupport.sealedRoomPlan()
 
-    private val fixtureBounds = MetricBounds(-4.0, -5.0, 24.0, 10.0)
+    private val fixtureBounds = MapTestSupport.fixtureBounds
 
     @Test
     fun buildsMbFloor2FromBundledAssetsWithoutOverlay() {
