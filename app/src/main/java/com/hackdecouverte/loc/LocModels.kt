@@ -21,6 +21,15 @@ data class LocParams(
     val resampleEssRatio: Double = 0.5,
     val recoveryFraction: Double = 0.02,
     val recoveryRadiusM: Double = 15.0,
+    /** FOUND: main zone > [foundWeight] of the weight within [foundRadiusM]; APPROXIMATE: > [approxWeight] within [approxRadiusM]. */
+    val foundWeight: Double = 0.9,
+    val foundRadiusM: Double = 3.0,
+    val approxWeight: Double = 0.6,
+    val approxRadiusM: Double = 8.0,
+    /** Plausible steps in a row before claiming anything after a (re)start or a bad step. */
+    val goodStepsToTrust: Int = 10,
+    /** Mean step likelihood below this = a bad step (divided by the heading-noise scale in a pocket). */
+    val badStepLikelihood: Double = 0.05,
     /** × the heading noise for stride-averaged steps (pocket, swinging hand): their headings are looser. */
     val bodyCarryNoiseScale: Double = 2.0,
     /** Steps kept for the walk traced back (Zee's backward propagation); the computer replay keeps whole walks. */

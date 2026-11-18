@@ -57,6 +57,12 @@ data class FilterTuning(
     val wallFactor: Double = 0.02,
     val beta: Double = 0.2,
     val recoveryFraction: Double = 0.02,
+    val foundWeight: Double = 0.9,
+    val foundRadiusM: Double = 3.0,
+    val approxWeight: Double = 0.6,
+    val approxRadiusM: Double = 8.0,
+    val goodStepsToTrust: Int = 10,
+    val badStepLikelihood: Double = 0.05,
     val doorWallFactor: Double = 0.3,
     val doorSoftRadiusM: Double = 0.6,
     /** Width of the doors carved at the graph's room nodes (map rebuilt when it changes). */
@@ -75,6 +81,12 @@ fun TuningParams.locParams(base: LocParams = LocParams()): LocParams = base.copy
     wallFactor = filter.wallFactor,
     beta = filter.beta,
     recoveryFraction = filter.recoveryFraction,
+    foundWeight = filter.foundWeight,
+    foundRadiusM = filter.foundRadiusM,
+    approxWeight = filter.approxWeight,
+    approxRadiusM = filter.approxRadiusM,
+    goodStepsToTrust = filter.goodStepsToTrust,
+    badStepLikelihood = filter.badStepLikelihood,
     doorWallFactor = filter.doorWallFactor,
     doorSoftRadiusM = filter.doorSoftRadiusM
 )

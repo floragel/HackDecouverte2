@@ -335,7 +335,8 @@ class LocalizationFilter(
         for (i in 0 until n) weight[i] /= likelihood
         if (mainW > 0) checkAlarm(mainAlign / mainW, mainBlocked / mainW)
         // Most of the mass walked through walls: the map or the estimate is wrong — re-seed around it.
-        badSteps = if (likelihood < BAD_STEP_LIKELIHOOD) badSteps + 1 else 0
+        // Looser headings (pocket) make every step a little less plausible: only a clearly bad one counts.
+        badSteps = if (likelihood < params.badStepLikelihood / headingNoiseScale.coerceAtLeast(1.0)) badSteps + 1 else 0
         goodSteps = if (likelihood >= GOOD_STEP_LIKELIHOOD) goodSteps + 1 else 0
         if (badSteps > 0) forcedSearching = true // the estimate just walked through walls: stop claiming it
         if (badSteps >= BAD_STEPS_BEFORE_RECOVERY) {
@@ -343,7 +344,7 @@ class LocalizationFilter(
             badSteps = 0
             goodSteps = 0
             forcedSearching = true
-        } else if (goodSteps >= GOOD_STEPS_TO_TRUST) {
+        } else if (goodSteps >= params.goodStepsToTrust) {
             forcedSearching = false
         }
         if (effectiveSampleSize() < params.resampleEssRatio * n) resample()
@@ -457,8 +458,8 @@ class LocalizationFilter(
         val main = zones.firstOrNull() ?: return LocEstimate(emptyList(), LocState.SEARCHING)
         val state = when {
             forcedSearching -> LocState.SEARCHING
-            main.weight > 0.9 && main.radiusM < 3.0 && suppressFoundSteps == 0 -> LocState.FOUND
-            main.weight > 0.6 && main.radiusM <= 8.0 -> LocState.APPROXIMATE
+            main.weight > params.foundWeight && main.radiusM < params.foundRadiusM && suppressFoundSteps == 0 -> LocState.FOUND
+            main.weight > params.approxWeight && main.radiusM <= params.approxRadiusM -> LocState.APPROXIMATE
             else -> LocState.SEARCHING
         }
         return LocEstimate(zones, state)

@@ -130,6 +130,11 @@ internal object SyntheticWalk {
         listOf(Leg(-45.0, 44), Leg(135.0, 41), Leg(-45.0, 41), Leg(135.0, 41)), gpsCenter = PointM(3.0, -1.0)
     )
 
+    /** Starts inside the room at the north-west end (as the first real walk), out through its door, then down the corridor. */
+    fun stanislasFromRoom(origin: GeoOrigin): Walk = walk(
+        origin, "STAN", "STAN-1", PointM(-16.5, 7.9), listOf(Leg(41.0, 8), Leg(134.0, 44), Leg(314.0, 16))
+    )
+
     /** About 2 min up and down the college corridor (four legs), markers at both ends: for the analysis. */
     fun stanislasBackAndForth(origin: GeoOrigin): Recording = record(
         origin, "STAN", "STAN-1",
