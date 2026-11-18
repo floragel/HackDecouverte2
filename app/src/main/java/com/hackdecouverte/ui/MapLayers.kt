@@ -215,8 +215,21 @@ internal fun DrawScope.drawUserLocation(
  * Map localization (developer view): particles as small dots, each zone as a translucent circle,
  * the main zone (first) more opaque, and the walk traced back from it as a dashed line.
  */
-internal fun DrawScope.drawLocalization(particles: List<Offset>, zones: List<Pair<Offset, Float>>, density: Float, trace: List<Offset> = emptyList()) {
+internal fun DrawScope.drawLocalization(
+    particles: List<Offset>,
+    zones: List<Pair<Offset, Float>>,
+    density: Float,
+    trace: List<Offset> = emptyList(),
+    gpsDisk: Pair<Offset, Float>? = null
+) {
     val dot = Color(0xFF7C3AED)
+    // GPS disk: where the search started / is weighted (blue, behind everything)
+    gpsDisk?.let { (center, radiusPx) ->
+        val blue = Color(0xFF1A73E8)
+        drawCircle(blue.copy(alpha = 0.08f), radius = radiusPx, center = center)
+        drawCircle(blue.copy(alpha = 0.6f), radius = radiusPx, center = center, style = Stroke(width = 1.5f * density))
+        drawCircle(blue, radius = 4f * density, center = center)
+    }
     if (trace.size >= 2) {
         val path = androidx.compose.ui.graphics.Path().apply {
             moveTo(trace[0].x, trace[0].y)

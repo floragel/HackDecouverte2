@@ -265,7 +265,11 @@ Sinon, il est fixé par la première ligne droite, qui est supposée suivre le c
 **Mesures** (elles multiplient les poids) :
 - **Position du système** : vraisemblance tolérante, c'est-à-dire une gaussienne élargie plus
   une part réservée aux valeurs aberrantes, car elle peut être fausse de 20 à 50 m à l'intérieur.
-  Jamais une coupure nette.
+  Jamais une coupure nette. Réglage actuel : σ = max(1,5 × précision, 10 m), 20 % gardés pour
+  les aberrations ; au plus une position toutes les 15 s et tous les 5 pas (à l'intérieur, les
+  positions successives sont biaisées dans le même sens) ; ignorée au-delà de 80 m de précision.
+  Si la recherche a démarré sans position et qu'une première arrive dans les 10 premiers pas, la
+  recherche repart dans le disque.
 - **Baromètre** : un changement d'étage n'est possible que pour les particules proches d'un
   escalier ou d'un ascenseur.
 - **Boussole** : seulement comme indice de départ sur l'angle, jamais comme vérité.

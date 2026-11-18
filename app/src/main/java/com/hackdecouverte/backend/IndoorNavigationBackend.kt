@@ -116,6 +116,8 @@ data class NavigationSnapshot(
     val localizationParticles: List<PointM> = emptyList(),
     /** Walk traced back once the zone is found (backward belief propagation), oldest first. */
     val localizationTrace: List<PointM> = emptyList(),
+    /** GPS disk of the search: centre and radius (max(2 × accuracy, 30 m)), null without a usable fix. */
+    val localizationSystemCircle: Pair<PointM, Double>? = null,
     val localizationDebug: LocDebug? = null
 )
 
@@ -698,6 +700,9 @@ class IndoorNavigationBackend(
         if (site.gpsPositionTrusted && allowPositionNudge && anc != null && fix.eastNorthM.norm() <= MAX_CAMPUS_RADIUS_M && !localizationEnabled) {
             tracker.onExternalFix(anc.fromMap(fix.eastNorthM), fix.accuracyM)
         }
+        if (localizationEnabled && site.gpsPositionTrusted && fix.eastNorthM.norm() <= MAX_CAMPUS_RADIUS_M) {
+            localization.onSystemPosition(SystemFix(fix.eastNorthM, fix.accuracyM, fix.elapsedRealtimeNs))
+        }
         _state.value = buildSnapshot(tracker.state.value)
     }
 
@@ -783,10 +788,18 @@ class IndoorNavigationBackend(
         localizationStartingFor = floorId
         scope.launch {
             val ok = withContext(Dispatchers.Default) { localization.prepare(floorId) }
-            if (ok && localizationEnabled && userFloorId == floorId) localization.start(floorId)
+            if (ok && localizationEnabled && userFloorId == floorId) localization.start(floorId, freshSystemFix())
             if (localizationStartingFor == floorId) localizationStartingFor = null
             _state.value = buildSnapshot(tracker.state.value)
         }
+    }
+
+    /** Latest GPS / network position as a search disk, if recent, near the building and the building's origin is reliable. */
+    private fun freshSystemFix(): SystemFix? {
+        val fix = latestGpsFix ?: return null
+        if (!site.gpsPositionTrusted || fix.eastNorthM.norm() > MAX_CAMPUS_RADIUS_M) return null
+        if (SystemClock.elapsedRealtimeNanos() - fix.elapsedRealtimeNs > SYSTEM_FIX_MAX_AGE_NS) return null
+        return SystemFix(fix.eastNorthM, fix.accuracyM, fix.elapsedRealtimeNs)
     }
 
     private fun persistGaitIfUpdated(s: PdrState) {
@@ -883,6 +896,7 @@ class IndoorNavigationBackend(
             localization = if (localizationEnabled) localization.estimate else null,
             localizationParticles = if (localizationEnabled) localization.samplePositions(MAX_PARTICLES_SHOWN) else emptyList(),
             localizationTrace = if (localizationEnabled) localization.tracedPath() else emptyList(),
+            localizationSystemCircle = if (localizationEnabled) localization.systemCircle else null,
             localizationDebug = if (localizationEnabled) localization.debug else null
         )
     }
@@ -982,6 +996,7 @@ class IndoorNavigationBackend(
         private const val KEY_LAST_CADENCE = "last_cadence_hz"
         private const val SETTLING_DELAY_MS = 2_000L
         private const val MAX_CAMPUS_RADIUS_M = 350.0
+        private const val SYSTEM_FIX_MAX_AGE_NS = 120_000_000_000L
         private const val MAX_PARTICLES_SHOWN = 400
         private const val NEAR_CONNECTOR_BARO_RADIUS_M = 7.0
         private const val HIGH_PRECISION_OUTDOOR_GPS_M = 4.5

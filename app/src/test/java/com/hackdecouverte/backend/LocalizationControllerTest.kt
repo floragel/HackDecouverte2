@@ -87,6 +87,70 @@ class LocalizationControllerTest {
         assertTrue("start ${path.first()}", path.first().distanceTo(PointM(0.0, 2.4)) < 2.5)
     }
 
+    // ---- GPS / system position (spec §6.4 case 3, §6.3)
+
+    private val mb2 by lazy { com.hackdecouverte.map.loadIndoorMap(2) { javaClass.classLoader!!.getResourceAsStream(it) }!! }
+    private fun mbController() = LocalizationController({ mb2 }, Random(4))
+    private fun mbPoint() = mb2.grid.centerOf(mb2.freeCellIndices().let { it[it.size / 2] })
+    private val s = 1_000_000_000L
+
+    @Test
+    fun startWithAFixSearchesInTheGpsDisk() {
+        val c = mbController()
+        val center = mbPoint()
+        assertTrue(c.start("MB-2", SystemFix(center, accuracyM = 10.0, timeNs = 0)))
+        assertEquals(30.0, c.systemCircle!!.second, 1e-9) // max(2 × accuracy, 30 m)
+        val pts = c.samplePositions(2000)
+        assertTrue(pts.count { it.distanceTo(center) <= 30.0 } > 0.85 * pts.size)
+        assertEquals(1, c.debug!!.gpsFixesUsed)
+    }
+
+    @Test
+    fun impreciseFixIsIgnored() {
+        val c = mbController()
+        assertTrue(c.start("MB-2", SystemFix(mbPoint(), accuracyM = 150.0, timeNs = 0)))
+        assertTrue(c.systemCircle == null)
+        assertEquals(0, c.debug!!.gpsFixesUsed)
+    }
+
+    @Test
+    fun firstFixAfterTheStartRestartsTheSearchInTheDisk() {
+        val c = mbController()
+        assertTrue(c.start("MB-2"))
+        repeat(3) { k -> c.onPdrState(tracking(0.0, 0.7 * k, k)) }
+        val center = mbPoint()
+        c.onSystemPosition(SystemFix(center, accuracyM = 20.0, timeNs = 5 * s))
+        assertEquals(40.0, c.systemCircle!!.second, 1e-9)
+        val pts = c.samplePositions(2000)
+        assertTrue(pts.count { it.distanceTo(center) <= 40.0 } > 0.85 * pts.size)
+    }
+
+    @Test
+    fun firstFixAfterALongWalkWeighsInsteadOfRestarting() {
+        val c = mbController()
+        c.start("MB-2")
+        repeat(12) { k -> c.onPdrState(tracking(0.0, 0.7 * k, k)) }
+        c.onSystemPosition(SystemFix(mbPoint(), 10.0, 300 * s))
+        assertEquals(1, c.debug!!.gpsFixesUsed)
+    }
+
+    @Test
+    fun laterFixesAreWeighedAtMostEvery15sAnd5Steps() {
+        val c = mbController()
+        val center = mbPoint()
+        c.start("MB-2", SystemFix(center, 10.0, 0))
+        var steps = 0
+        fun walk(n: Int) = repeat(n) { c.onPdrState(tracking(0.0, 0.7 * steps, steps)); steps++ }
+        walk(8)
+        c.onSystemPosition(SystemFix(center, 10.0, 1 * s))  // too soon
+        assertEquals(1, c.debug!!.gpsFixesUsed)
+        c.onSystemPosition(SystemFix(center, 10.0, 20 * s)) // 20 s and 7 steps later: used
+        assertEquals(2, c.debug!!.gpsFixesUsed)
+        walk(2)
+        c.onSystemPosition(SystemFix(center, 10.0, 40 * s)) // enough time, only 2 steps: not used
+        assertEquals(2, c.debug!!.gpsFixesUsed)
+    }
+
     @Test
     fun unknownFloorDoesNotStart() {
         val c = controller()

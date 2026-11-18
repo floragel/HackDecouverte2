@@ -16,8 +16,12 @@ data class LocDebug(
     val stepMs: Double,
     val alarms: Int,
     val strideScale: Double = 1.0,
-    val strideSpread: Double = 0.0
+    val strideSpread: Double = 0.0,
+    val gpsFixesUsed: Int = 0
 )
+
+/** A system position (GPS / Wi-Fi / cell) in the plan frame, with its announced accuracy and clock (elapsedRealtimeNanos). */
+data class SystemFix(val centerM: PointM, val accuracyM: Double, val timeNs: Long)
 
 /**
  * Feeds the map localization filter with the PDR's displacements (pure Kotlin, no Android).
@@ -51,23 +55,82 @@ class LocalizationController(
         }
     } != null
 
-    /** Starts a fresh search over the whole floor. False if the floor has no usable map. */
-    fun start(floorId: String): Boolean {
+    /**
+     * Starts a fresh search: in the GPS disk around [fix] when it is usable (spec §6.4 case 3),
+     * otherwise over the whole floor. False if the floor has no usable map.
+     */
+    fun start(floorId: String, fix: SystemFix? = null): Boolean {
         if (!prepare(floorId)) return false
         val map = synchronized(maps) { maps[floorId] }!!
         val f = LocalizationFilter(map, random = random)
-        f.initUniform()
         filter = f
         this.floorId = floorId
         lastPosition = null
         lastStepCount = -1
+        stepsSinceStart = 0
+        gpsFixesUsed = 0
+        systemCircle = null
+        startedInDisk = false
+        lastFixUsedNs = null
+        stepsAtLastFix = 0
+        val usable = fix?.takeIf(::isUsable)
+        if (usable != null) startInDisk(f, usable) else f.initUniform()
         refresh(f)
         return true
+    }
+
+    /** Circle of the last system position used: centre and search-disk radius (for display). */
+    @Volatile var systemCircle: Pair<PointM, Double>? = null
+        private set
+    @Volatile private var gpsFixesUsed = 0
+    private var startedInDisk = false
+    private var stepsSinceStart = 0
+    private var lastFixUsedNs: Long? = null
+    private var stepsAtLastFix = 0
+
+    /**
+     * A new system position. Too imprecise ones are ignored. If the search started without one and
+     * has barely moved, it restarts in the disk; otherwise the fix only weighs the hypotheses, at most
+     * every [FIX_MIN_INTERVAL_NS] and [FIX_MIN_STEPS] steps (indoor fixes are biased and correlated).
+     */
+    fun onSystemPosition(fix: SystemFix) {
+        val f = filter ?: return
+        if (!isUsable(fix)) return
+        if (!startedInDisk && stepsSinceStart < RESTART_IN_DISK_MAX_STEPS) {
+            startInDisk(f, fix)
+            refresh(f)
+            return
+        }
+        val last = lastFixUsedNs
+        if (last != null && (fix.timeNs - last < FIX_MIN_INTERVAL_NS || stepsSinceStart - stepsAtLastFix < FIX_MIN_STEPS)) return
+        f.onSystemPosition(fix.centerM, fix.accuracyM)
+        markUsed(fix)
+        refresh(f)
+    }
+
+    private fun isUsable(fix: SystemFix) =
+        fix.accuracyM > 0 && fix.accuracyM <= MAX_FIX_ACCURACY_M && fix.centerM.x.isFinite() && fix.centerM.y.isFinite()
+
+    private fun startInDisk(f: LocalizationFilter, fix: SystemFix) {
+        val radius = maxOf(DISK_ACCURACY_FACTOR * fix.accuracyM, DISK_MIN_RADIUS_M)
+        f.initAround(fix.centerM, radius)
+        startedInDisk = true
+        stepsSinceStart = 0
+        systemCircle = fix.centerM to radius
+        markUsed(fix)
+    }
+
+    private fun markUsed(fix: SystemFix) {
+        gpsFixesUsed++
+        lastFixUsedNs = fix.timeNs
+        stepsAtLastFix = stepsSinceStart
+        systemCircle = fix.centerM to maxOf(DISK_ACCURACY_FACTOR * fix.accuracyM, DISK_MIN_RADIUS_M)
     }
 
     fun stop() {
         filter = null
         floorId = null
+        systemCircle = null
         estimate = null
         particles = emptyList()
         trace = emptyList()
@@ -96,6 +159,7 @@ class LocalizationController(
         if (d < 1e-6 || d > MAX_DISPLACEMENT_M) return
         val t0 = System.nanoTime()
         f.onStep(d, atan2(dx, dy))
+        stepsSinceStart++
         val ms = (System.nanoTime() - t0) / 1e6
         stepMs = if (stepMs == 0.0) ms else stepMs * 0.8 + ms * 0.2
         refresh(f)
@@ -104,7 +168,7 @@ class LocalizationController(
     @Volatile private var stepMs = 0.0
 
     val debug: LocDebug?
-        get() = filter?.let { LocDebug(it.size(), stepMs, it.alarms, it.strideScaleEstimate(), it.strideScaleSpread()) }
+        get() = filter?.let { LocDebug(it.size(), stepMs, it.alarms, it.strideScaleEstimate(), it.strideScaleSpread(), gpsFixesUsed) }
 
     fun samplePositions(max: Int): List<PointM> = if (max >= particles.size) particles else particles.take(max)
 
@@ -119,6 +183,15 @@ class LocalizationController(
 
     companion object {
         const val MAX_DISPLACEMENT_M = 3.0
+        /** Search disk = max(2 × accuracy, 30 m) around the fix (spec §6.4 case 3). */
+        const val DISK_ACCURACY_FACTOR = 2.0
+        const val DISK_MIN_RADIUS_M = 30.0
+        /** Fixes worse than this (cell towers) are ignored. */
+        const val MAX_FIX_ACCURACY_M = 80.0
+        const val FIX_MIN_INTERVAL_NS = 15_000_000_000L
+        const val FIX_MIN_STEPS = 5
+        /** A first fix arriving within this many steps of a whole-floor start restarts the search in its disk. */
+        const val RESTART_IN_DISK_MAX_STEPS = 10
         private const val MAX_PARTICLES_SHOWN_SOURCE = 2000
     }
 }

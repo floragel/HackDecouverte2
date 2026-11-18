@@ -712,7 +712,8 @@ fun TelemetryScreen(
                         particles = snapshot.localizationParticles.map { toScreen(it) },
                         zones = loc.zones.take(3).map { toScreen(it.centerM) to (it.radiusM * transform.pxPerMeter).toFloat() },
                         density = density,
-                        trace = snapshot.localizationTrace.map { toScreen(it) }
+                        trace = snapshot.localizationTrace.map { toScreen(it) },
+                        gpsDisk = snapshot.localizationSystemCircle?.let { (c, r) -> toScreen(c) to (r * transform.pxPerMeter).toFloat() }
                     )
                 }
 

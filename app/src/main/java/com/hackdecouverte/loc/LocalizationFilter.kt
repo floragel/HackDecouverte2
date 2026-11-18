@@ -7,6 +7,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -59,10 +60,48 @@ class LocalizationFilter(
         pendingSteps.clear()
     }
 
-    private fun spreadUniform(count: Int) {
+    /**
+     * Cold start with a system (GPS / Wi-Fi) position (spec §6.4 case 3, the "GPS zone"): 90 % of the
+     * hypotheses in the free space within [radiusM] of [center], 10 % anywhere on the floor in case
+     * the fix is wrong. Phone angle unknown, step length spread, as in [initUniform]. A disk with no
+     * free space (fix outside the plan) falls back to the whole floor.
+     */
+    fun initAround(center: PointM, radiusM: Double, count: Int = params.maxParticles) {
+        val r2 = radiusM * radiusM
+        val inside = freeCells.filter { c ->
+            val p = map.grid.centerOf(c)
+            (p.x - center.x) * (p.x - center.x) + (p.y - center.y) * (p.y - center.y) <= r2
+        }
+        if (inside.isEmpty()) {
+            initUniform(count)
+            return
+        }
+        spreadUniform(count) { if (random.nextDouble() < OUTSIDE_DISK_SHARE) randomFreePoint() else jittered(inside[random.nextInt(inside.size)]) }
+        offsetKnown = false
+        pendingSteps.clear()
+    }
+
+    /**
+     * System position as a tolerant measurement (spec §6.3): a widened gaussian plus a share kept for
+     * outliers, so far hypotheses lose weight but are never cut. The caller rate-limits it (fixes
+     * indoors are biased and correlated).
+     */
+    fun onSystemPosition(center: PointM, accuracyM: Double) {
+        if (n == 0 || !center.x.isFinite() || !center.y.isFinite() || !(accuracyM > 0)) return
+        val sigma = maxOf(accuracyM * SYSTEM_SIGMA_FACTOR, SYSTEM_MIN_SIGMA_M)
+        val k = 1.0 / (2 * sigma * sigma)
+        for (i in 0 until n) {
+            val dx = east[i] - center.x; val dy = north[i] - center.y
+            weight[i] *= (1 - SYSTEM_OUTLIER_SHARE) * exp(-(dx * dx + dy * dy) * k) + SYSTEM_OUTLIER_SHARE
+        }
+        normalize()
+        if (effectiveSampleSize() < params.resampleEssRatio * n) resample()
+    }
+
+    private fun spreadUniform(count: Int, point: () -> PointM = ::randomFreePoint) {
         allocate(count)
         for (i in 0 until count) {
-            val p = randomFreePoint()
+            val p = point()
             east[i] = p.x; north[i] = p.y
             offset[i] = random.nextDouble(0.0, 2 * PI)
             scale[i] = randomStrideScale()
@@ -219,7 +258,8 @@ class LocalizationFilter(
         var any = false
         for (i in 0 until n) {
             val dx = east[i] - zone.centerM.x; val dy = north[i] - zone.centerM.y
-            if (origin[i] == i && dx * dx + dy * dy <= r2) { mass[i] += weight[i]; any = true }
+            // origin = this hypothesis' index in the last snapshot (same place unless injected: −1)
+            if (origin[i] >= 0 && dx * dx + dy * dy <= r2) { mass[origin[i]] += weight[i]; any = true }
         }
         if (!any) return null
         val path = ArrayList<PointM>(history.size)
@@ -327,8 +367,11 @@ class LocalizationFilter(
     private fun randomStrideScale(): Double =
         if (params.strideScaleMax > params.strideScaleMin) random.nextDouble(params.strideScaleMin, params.strideScaleMax) else params.strideScaleMin
 
-    private fun randomFreePoint(): PointM {
-        val c = map.grid.centerOf(freeCells[random.nextInt(freeCells.size)])
+    private fun randomFreePoint(): PointM = jittered(freeCells[random.nextInt(freeCells.size)])
+
+    /** Random point inside free cell [cell]. */
+    private fun jittered(cell: Int): PointM {
+        val c = map.grid.centerOf(cell)
         val r = map.grid.resM
         return PointM(c.x + (random.nextDouble() - 0.5) * r, c.y + (random.nextDouble() - 0.5) * r)
     }
@@ -401,6 +444,10 @@ class LocalizationFilter(
         val LINE_SPREAD_RAD = Math.toRadians(8.0)
         const val MAX_STEPS_WITHOUT_LINE = 20
         const val FREE_OFFSET_SHARE = 0.1
+        const val OUTSIDE_DISK_SHARE = 0.1
+        const val SYSTEM_SIGMA_FACTOR = 1.5
+        const val SYSTEM_MIN_SIGMA_M = 10.0
+        const val SYSTEM_OUTLIER_SHARE = 0.2
         const val ALARM_STEPS = 5
 
         fun wrapPi(a: Double): Double {
