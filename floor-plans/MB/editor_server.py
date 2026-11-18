@@ -13,6 +13,13 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 PORT = 8765
 GRAPH = os.path.join(HERE, "MB-graph.json")
+# Map edits (doors, extra walls, passable furniture) read by the app: app/src/main/assets/maps/MB-<n>-overlay.json
+OVERLAYS = os.path.normpath(os.path.join(HERE, "..", "..", "app", "src", "main", "assets", "maps"))
+OVERLAY_PATH = re.compile(r"^/api/overlay/([1-7])$")
+
+
+def overlay_file(floor):
+    return os.path.join(OVERLAYS, f"MB-{floor}-overlay.json")
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -31,10 +38,28 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_GET(self):
+        m = OVERLAY_PATH.match(self.path)
+        if not m:
+            return super().do_GET()
+        path = overlay_file(m.group(1))
+        if not os.path.exists(path):
+            return self._reply(200, {"floorId": f"MB-{m.group(1)}"})
+        with open(path, encoding="utf-8") as f:
+            return self._reply(200, json.load(f))
+
     def do_POST(self):
         try:
             n = int(self.headers.get("Content-Length", 0))
             data = json.loads(self.rfile.read(n).decode("utf-8"))
+            m = OVERLAY_PATH.match(self.path)
+            if m:
+                if not isinstance(data, dict) or data.get("floorId") != f"MB-{m.group(1)}":
+                    return self._reply(400, {"error": "not an overlay for this floor"})
+                os.makedirs(OVERLAYS, exist_ok=True)
+                with open(overlay_file(m.group(1)), "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=1)
+                return self._reply(200, {"saved": f"app/src/main/assets/maps/MB-{m.group(1)}-overlay.json"})
             if self.path == "/api/graph":
                 if not isinstance(data, dict) or "nodes" not in data or "edges" not in data:
                     return self._reply(400, {"error": "not a graph"})

@@ -1,0 +1,66 @@
+{
+ "floorId": "MB-2",
+ "doors": [
+  {
+   "east": -2.95,
+   "north": -2.99
+  },
+  {
+   "east": 2.38,
+   "north": 3.26
+  },
+  {
+   "east": 21.29,
+   "north": -22.25
+  },
+  {
+   "east": -22.64,
+   "north": 11.97
+  },
+  {
+   "east": 7.71,
+   "north": -21.84,
+   "widthM": 1.6
+  },
+  {
+   "east": 2.1,
+   "north": -17.05,
+   "widthM": 1.6
+  },
+  {
+   "east": -3.07,
+   "north": -9.76,
+   "widthM": 1.2
+  },
+  {
+   "east": -12.39,
+   "north": 10.54,
+   "nodeId": "MB-2-n165"
+  },
+  {
+   "east": -13.52,
+   "north": 8.91,
+   "nodeId": "MB-2-n166"
+  },
+  {
+   "east": -9.84,
+   "north": 5.15,
+   "nodeId": "MB-2-n169"
+  },
+  {
+   "east": -16.54,
+   "north": 5.18,
+   "nodeId": "MB-2-n171"
+  },
+  {
+   "east": -21.35,
+   "north": 0.35,
+   "nodeId": "MB-2-n175"
+  },
+  {
+   "east": -23.36,
+   "north": 2.06,
+   "nodeId": "MB-2-n177"
+  }
+ ]
+}

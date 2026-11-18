@@ -49,4 +49,12 @@ class MapValidatorTest {
             println("MB-$n: " + MapValidator.validate(map!!, plan).summary())
         }
     }
+
+    @Test
+    fun mbFloor2WithOverlayPassesAllChecks() {
+        val map = loadIndoorMap(2) { MapTestSupport.open(it) }!!
+        val plan = FloorPlan.parse(MapTestSupport.open("floors/floorplan-MB-2.json")!!)
+        val report = MapValidator.validate(map, plan)
+        assertTrue(report.summary(), report.ok)
+    }
 }
