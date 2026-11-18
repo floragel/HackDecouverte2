@@ -176,6 +176,37 @@ object WalkEval {
         )
     }
 
+    /** One row per PDR step: how much weight sits on the truth, and the context (door distance, route label). */
+    data class SupportRow(val tS: Double, val arcM: Double, val support: Double, val zoneErrM: Double?, val state: LocState?, val nearestDoorM: Double?, val label: String?)
+
+    fun support(ds: Dataset, tuning: TuningParams, mode: StartMode, seed: Int): List<SupportRow> {
+        val map = WalkAnalysis.mapProvider(ds.site)(ds.route.floorId)
+        val rows = ArrayList<SupportRow>()
+        val t0 = ds.recording.header.startedNs
+        val labelPoints = ds.route.labels.mapNotNull { l -> ds.route.path.getOrNull(l.pointIndex)?.let { it to l.label } }
+        WalkReplay(
+            ds.recording, ds.site.origin, WalkAnalysis.mapProvider(ds.site), seed, tuning,
+            useGps = mode == StartMode.COLD_GPS,
+            startHint = if (mode == StartMode.KNOWN_START) WarmStart(listOf(LocZone(ds.route.path[0], 1.0, 1.0, 0.0)), 0.0) else null,
+            stepObserver = { tNs, c ->
+                val truth = TruthTrack.positionAt(ds.track, tNs)
+                if (truth != null) {
+                    val ps = c.sampleParticles(2000)
+                    val total = ps.sumOf { it.weight }.takeIf { it > 0 } ?: 1.0
+                    val zone = c.estimate?.zones?.firstOrNull()
+                    rows += SupportRow(
+                        (tNs - t0) / 1e9, arcAt(ds.track, tNs) ?: 0.0,
+                        ps.filter { it.positionM.distanceTo(truth) <= SUPPORT_RADIUS_M }.sumOf { it.weight } / total,
+                        zone?.centerM?.distanceTo(truth), c.estimate?.state,
+                        map?.doors?.minOfOrNull { it.centerM.distanceTo(truth) },
+                        labelPoints.filter { it.first.distanceTo(truth) <= 2.0 }.joinToString(",") { it.second }.ifEmpty { null }
+                    )
+                }
+            }
+        ).run()
+        return rows
+    }
+
     /** Runs [jobs] on a fixed pool (all processors); results in the order of [jobs]. */
     fun <T> parallel(jobs: List<() -> T>): List<T> {
         val pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
