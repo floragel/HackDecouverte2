@@ -91,6 +91,45 @@ internal object SyntheticWalk {
         gpsCenter = PointM(3.0, -1.0)
     )
 
+    /** A synthetic walk with its exact truth (start, legs, step length). */
+    data class Walk(val recording: Recording, val start: PointM, val legs: List<Leg>, val stepM: Double) {
+        /** Start then the end of every leg. */
+        fun routePoints(): List<PointM> {
+            var p = start
+            val out = arrayListOf(p)
+            for (l in legs) {
+                val h = Math.toRadians(l.headingDeg)
+                p = PointM(p.x + stepM * l.steps * sin(h), p.y + stepM * l.steps * cos(h))
+                out += p
+            }
+            return out
+        }
+
+        /** Where the walker is right after each step (time of the step event). */
+        fun truePositions(): List<Pair<Long, PointM>> {
+            val stepTimes = recording.events.filterIsInstance<RecEvent.Sample>().filter { it.type == SensorRouter.TYPE_STEP_DETECTOR }.map { it.tNs }
+            val out = ArrayList<Pair<Long, PointM>>()
+            var p = start
+            var k = 0
+            for (l in legs) {
+                val h = Math.toRadians(l.headingDeg)
+                repeat(l.steps) {
+                    p = PointM(p.x + stepM * sin(h), p.y + stepM * cos(h))
+                    out += stepTimes[k++] to p
+                }
+            }
+            return out
+        }
+    }
+
+    fun walk(origin: GeoOrigin, siteId: String, floorId: String, start: PointM, legs: List<Leg>, stepM: Double = 0.7, gpsCenter: PointM? = null): Walk =
+        Walk(record(origin, siteId, floorId, start, legs, stepM, gpsCenter), start, legs, stepM)
+
+    fun stanislasBackAndForthWalk(origin: GeoOrigin): Walk = walk(
+        origin, "STAN", "STAN-1", PointM(10.6, -10.6),
+        listOf(Leg(-45.0, 44), Leg(135.0, 41), Leg(-45.0, 41), Leg(135.0, 41)), gpsCenter = PointM(3.0, -1.0)
+    )
+
     /** About 2 min up and down the college corridor (four legs), markers at both ends: for the analysis. */
     fun stanislasBackAndForth(origin: GeoOrigin): Recording = record(
         origin, "STAN", "STAN-1",

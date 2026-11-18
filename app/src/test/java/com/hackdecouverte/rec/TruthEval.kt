@@ -12,11 +12,7 @@ import kotlin.math.sin
  * scale (the PDR frame and stride are free): mean distance in metres.
  */
 internal object TruthEval {
-    fun load(walk: File): List<PointM>? {
-        val f = File(walk.path.removeSuffix(".txt.gz") + ".truth.json").takeIf { it.isFile } ?: return null
-        val nums = Regex("-?\\d+(?:\\.\\d+)?").findAll(f.readText().substringAfter("\"path\"").substringBefore("]]")).map { it.value.toDouble() }.toList()
-        return nums.chunked(2).filter { it.size == 2 }.map { PointM(it[0], it[1]) }
-    }
+    fun load(walk: File): List<PointM>? = com.hackdecouverte.rec.truth.TruthTrack.load(walk)?.path
 
     private fun resample(t: List<PointM>, step: Double = 0.5): List<PointM> {
         val out = ArrayList<PointM>()
