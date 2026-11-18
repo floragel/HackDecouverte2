@@ -92,6 +92,8 @@ data class PdrState(
     val readingPose: Boolean = false,
     /** Step headings are stride averages (pocket, bag, swinging hand, screen off): looser than in front of the eyes. */
     val strideAveraged: Boolean = false,
+    /** Quality of the last step (1 = normal; < 1 = taken while pivoting or not confirmed by the counter). */
+    val stepQuality: Double = 1.0,
     /** Steps the detector missed that the step counter gave back. */
     val recoveredStepCount: Int = 0,
     val externalAccuracyM: Double? = null,

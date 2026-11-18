@@ -87,6 +87,7 @@ class SensorRouter(
 
             TYPE_STEP_DETECTOR -> {
                 reconciler.onDetector(timestampNs)
+                tracker.stepsUnconfirmed = (reconciler.recentCountRatio(timestampNs) ?: 1.0) < 0.5
                 tracker.onStep(timestampNs, StepSource.HARDWARE)
             }
 

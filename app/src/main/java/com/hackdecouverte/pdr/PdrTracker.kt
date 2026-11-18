@@ -51,10 +51,19 @@ class PdrTracker(
 
     /** Tuning switches (replay experiments): slow compass pull of the heading, hold-change bridging. */
     var compassPullEnabled: Boolean = true
-    /** Pivot shrink (stride-averaged heading only): from this turn rate, down to [pivotMinScale] over [pivotFullRateSpanRadS]. */
-    var pivotTurnRateRadS: Double = 99.0
+    /**
+     * Step quality (plan B3): a step taken while the body turns faster than [pivotTurnRateRadS] is
+     * doubtful — 1 − (rate − pivotTurnRateRadS) / [pivotFullRateSpanRadS], at least [pivotMinQuality] —
+     * and halved again when the step counter does not confirm the recent steps ([stepsUnconfirmed]).
+     * The PDR keeps the step as it is; the map filter trusts it less.
+     */
+    var pivotTurnRateRadS: Double = 1.2
     var pivotFullRateSpanRadS: Double = 1.0
-    var pivotMinScale: Double = 0.2
+    var pivotMinQuality: Double = 0.2
+
+    /** Set by the sensor router: the counter confirmed less than half of the detector's recent steps. */
+    var stepsUnconfirmed: Boolean = false
+    private var lastStepQuality = 1.0
     var holdBridgingEnabled: Boolean = true
 
     /** Screen on/off (set by the app): a phone with its screen off is not in a reading pose. */
@@ -610,14 +619,13 @@ class PdrTracker(
             }
             return true
         }
-        val turnScale = when {
-            // Pivoting on the spot (to dodge someone, to turn back) fires the step detector while the body
-            // barely moves: with a stride-averaged heading, steps under a fast turn shrink (tunable).
-            swinging && turnRate > pivotTurnRateRadS ->
-                (1.0 - (turnRate - pivotTurnRateRadS) / pivotFullRateSpanRadS).coerceIn(pivotMinScale, 1.0)
-            corridorAssistEnabled && turnRate > 1.2 -> (1.0 - (turnRate - 1.2) / 2.0).coerceIn(0.2, 1.0)
-            else -> 1.0
-        }
+        // Pivoting on the spot (to dodge someone, to turn back) fires the step detector while the body barely moves.
+        var quality = if (turnRate > pivotTurnRateRadS) {
+            (1.0 - (turnRate - pivotTurnRateRadS) / pivotFullRateSpanRadS).coerceIn(pivotMinQuality, 1.0)
+        } else 1.0
+        if (stepsUnconfirmed) quality *= 0.5
+        lastStepQuality = quality
+        val turnScale = if (corridorAssistEnabled && turnRate > 1.2) (1.0 - (turnRate - 1.2) / 2.0).coerceIn(0.2, 1.0) else 1.0
         val effectiveLength = dynamicLength * turnScale
         val previous = position
         val previousDistance = distanceM
@@ -1045,6 +1053,7 @@ class PdrTracker(
             readingPose = carry.readingPose,
             recoveredStepCount = recoveredSteps,
             strideAveraged = swinging,
+            stepQuality = lastStepQuality,
             externalAccuracyM = externalAccuracyM,
             warnings = warnings.toSet()
         )

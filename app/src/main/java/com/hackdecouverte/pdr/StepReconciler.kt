@@ -26,6 +26,24 @@ class StepReconciler(
 
     /** (counted, detected) at each settled reading, for [countRatio]. */
     private val tallies = ArrayDeque<Pair<Long, Int>>()
+    /** Time of each tally (reading time), same order as [tallies]. */
+    private val tallyTimes = ArrayDeque<Long>()
+
+    /**
+     * Counter / detector over the settled readings of the last [windowNs] before [nowNs] (null with
+     * fewer than 3 detector steps there). Low = the detector fired steps the counter did not count.
+     */
+    fun recentCountRatio(nowNs: Long, windowNs: Long = 5_000_000_000L): Double? {
+        if (tallies.size < 2) return null
+        val lastIdx = tallies.size - 1
+        var firstIdx = lastIdx
+        while (firstIdx > 0 && tallyTimes.elementAt(firstIdx - 1) >= nowNs - settleNs - windowNs) firstIdx--
+        if (firstIdx == lastIdx) firstIdx = lastIdx - 1
+        val counted = tallies.elementAt(lastIdx).first - tallies.elementAt(firstIdx).first
+        val detected = tallies.elementAt(lastIdx).second - tallies.elementAt(firstIdx).second
+        if (detected < 3) return null
+        return counted.toDouble() / detected
+    }
 
     /**
      * Counter steps / detector steps over the last ~[RATIO_WINDOW_STEPS] counted steps, once at least
@@ -44,7 +62,7 @@ class StepReconciler(
         baseTotal = null
         detectorTimes.clear()
         pending.clear()
-        tallies.clear()
+        tallies.clear(); tallyTimes.clear()
         recovered = 0
     }
 
@@ -78,13 +96,14 @@ class StepReconciler(
                 baseTotal = total
                 baseNs = t
                 detectorTimes.clear()
-                tallies.clear()
+                tallies.clear(); tallyTimes.clear()
                 recovered = 0
                 continue
             }
             val detected = detectedUpTo(t + toleranceNs)
             tallies.addLast(counted to detected)
-            while (tallies.size > 400) tallies.removeFirst()
+            tallyTimes.addLast(t)
+            while (tallies.size > 400) { tallies.removeFirst(); tallyTimes.removeFirst() }
             val deficit = counted - detected - recovered
             if (deficit >= minDeficit) {
                 val k = minOf(deficit, maxPerReading.toLong()).toInt()

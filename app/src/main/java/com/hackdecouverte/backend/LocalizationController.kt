@@ -248,6 +248,7 @@ class LocalizationController(
         if (!f.offsetKnown) f.compassAligned = s.trueNorthAligned && s.headingAligned
         // Step headings from a pocket or a swinging hand are looser than from a phone held in front (real walk: ±10–20°).
         f.headingNoiseScale = if (s.strideAveraged) f.params.bodyCarryNoiseScale else 1.0
+        f.stepQuality = s.stepQuality
         if (s.holdChanges != lastHoldChanges) {
             if (s.holdChanges > lastHoldChanges) f.onHoldChanged()
             lastHoldChanges = s.holdChanges

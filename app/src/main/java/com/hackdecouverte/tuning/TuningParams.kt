@@ -30,7 +30,10 @@ data class PdrTuning(
     val walkAxisTau: Double = 4.0,
     val walkAxisMinRatio: Double = 2.0,
     val strideWindowFactor: Double = 1.0,
-    val typicalCadenceHz: Double = 1.8
+    val typicalCadenceHz: Double = 1.8,
+    val pivotTurnRateRadS: Double = 1.2,
+    val pivotFullRateSpanRadS: Double = 1.0,
+    val pivotMinQuality: Double = 0.2
 )
 
 @Serializable
@@ -85,6 +88,9 @@ fun PdrTracker.applyTuning(t: PdrTuning) {
     walkAxisMinRatio = t.walkAxisMinRatio
     strideWindowFactor = t.strideWindowFactor
     typicalCadenceHz = t.typicalCadenceHz
+    pivotTurnRateRadS = t.pivotTurnRateRadS
+    pivotFullRateSpanRadS = t.pivotFullRateSpanRadS
+    pivotMinQuality = t.pivotMinQuality
 }
 
 fun CarryMonitor.Companion.from(t: CarryTuning): CarryMonitor =

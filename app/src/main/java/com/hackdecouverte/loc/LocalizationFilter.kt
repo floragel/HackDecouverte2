@@ -58,6 +58,9 @@ class LocalizationFilter(
      */
     var compassAligned: Boolean = false
 
+    /** Quality of the next steps (1 normal; < 1 pivot or unconfirmed): length × q, heading and length noise ÷ q. */
+    var stepQuality: Double = 1.0
+
     /** × the heading noise of the next steps (a phone in a pocket or a swinging hand gives looser step headings). */
     var headingNoiseScale: Double = 1.0
 
@@ -294,8 +297,9 @@ class LocalizationFilter(
         var likelihood = 0.0
         for (i in 0 until n) {
             val inMain = main != null && (east[i] - main.centerM.x).let { it * it } + (north[i] - main.centerM.y).let { it * it } <= mainRadius * mainRadius
-            val h = headingRad + offset[i] + gaussian() * params.headingNoiseRad * headingNoiseScale
-            val len = lengthM * scale[i] * (1 + gaussian() * params.lengthNoise)
+            val q = stepQuality.coerceIn(0.05, 1.0)
+            val h = headingRad + offset[i] + gaussian() * params.headingNoiseRad * headingNoiseScale / q
+            val len = lengthM * q * scale[i] * (1 + gaussian() * params.lengthNoise / q)
             val from = PointM(east[i], north[i])
             val to = PointM(east[i] + len * sin(h), north[i] + len * cos(h))
             val blockedCell = g.firstBlockedCell(from, to)
