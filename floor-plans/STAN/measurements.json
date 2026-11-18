@@ -1,0 +1,11 @@
+{
+  "note": "Mesures sur place par le marcheur (18/11). Pouces convertis : 1 in = 0.0254 m.",
+  "distances": [],
+  "corridorWidthM": 3.02,
+  "corridorWidthSource": "119 in, mur à mur",
+  "doorWidthM": 0.91,
+  "doorWidthSource": "36 in, porte de salle",
+  "obstacles": "aucun dans le couloir",
+  "stairs": "E-M-S et E-M-N bien placés sur la carte",
+  "todo": "longueur du couloir E-M-S -> E-M-N (tranche la question de l'échelle : la largeur dessinée suggère une carte ~8 % trop grande)"
+}
