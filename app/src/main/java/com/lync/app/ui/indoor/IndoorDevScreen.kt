@@ -19,12 +19,14 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.hackdecouverte.loc.LocState
 import com.hackdecouverte.pdr.PdrPhase
 import com.hackdecouverte.ui.CalibrationScreen
 import com.hackdecouverte.ui.TelemetryScreen
@@ -56,6 +58,27 @@ fun IndoorDevScreen() {
         Row(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             CircleIconButton(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.action_back), { nav.back() })
             Text(stringResource(R.string.settings_indoor_test), style = MaterialTheme.typography.titleLarge, color = c.text, modifier = Modifier.padding(start = 12.dp))
+        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(stringResource(R.string.indoor_dev_map_localization), style = MaterialTheme.typography.bodyLarge, color = c.text, modifier = Modifier.weight(1f))
+            Switch(checked = snapshot.localizationEnabled, onCheckedChange = backend::setLocalizationEnabled)
+        }
+        val loc = snapshot.localization
+        val debug = snapshot.localizationDebug
+        if (snapshot.localizationEnabled && loc != null && debug != null) {
+            val state = stringResource(
+                when (loc.state) {
+                    LocState.SEARCHING -> R.string.loc_state_searching
+                    LocState.APPROXIMATE -> R.string.loc_state_approximate
+                    LocState.FOUND -> R.string.loc_state_found
+                }
+            )
+            Text(
+                stringResource(R.string.loc_dev_status, state, debug.particleCount, debug.stepMs, debug.alarms),
+                style = MaterialTheme.typography.bodySmall,
+                color = c.textMuted,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            )
         }
         Box(Modifier.weight(1f)) {
             when (snapshot.pdr.phase) {

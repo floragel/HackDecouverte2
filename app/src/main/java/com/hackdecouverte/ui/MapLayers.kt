@@ -211,6 +211,25 @@ internal fun DrawScope.drawUserLocation(
 }
 
 /** Small "start" marker: white disc with a grey ring. */
+/**
+ * Map localization (developer view): particles as small dots, each zone as a translucent circle,
+ * the main zone (first) more opaque.
+ */
+internal fun DrawScope.drawLocalization(particles: List<Offset>, zones: List<Pair<Offset, Float>>, density: Float) {
+    val dot = Color(0xFF7C3AED)
+    for (p in particles) drawCircle(color = dot.copy(alpha = 0.55f), radius = 2f * density, center = p)
+    zones.forEachIndexed { i, (center, radiusPx) ->
+        val alpha = if (i == 0) 0.22f else 0.10f
+        drawCircle(color = dot.copy(alpha = alpha), radius = radiusPx.coerceAtLeast(6f * density), center = center)
+        drawCircle(
+            color = dot.copy(alpha = if (i == 0) 0.9f else 0.45f),
+            radius = radiusPx.coerceAtLeast(6f * density),
+            center = center,
+            style = Stroke(width = (if (i == 0) 2f else 1.2f) * density)
+        )
+    }
+}
+
 internal fun DrawScope.drawStartMarker(center: Offset, density: Float) {
     drawCircle(Color.White, radius = 5.5f * density, center = center)
     drawCircle(Color(0xFF5F6368), radius = 5.5f * density, center = center, style = Stroke(width = 2f * density))

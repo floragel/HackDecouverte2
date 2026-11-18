@@ -705,6 +705,16 @@ fun TelemetryScreen(
                     drawStartMarker(trail.first(), density)
                 }
 
+                // 9b. Map localization (developer switch): particles and zones, in the plan frame
+                val loc = snapshot.localization
+                if (snapshot.localizationEnabled && snapshot.isViewingUserFloor && loc != null) {
+                    drawLocalization(
+                        particles = snapshot.localizationParticles.map { toScreen(it) },
+                        zones = loc.zones.take(3).map { toScreen(it.centerM) to (it.radiusM * transform.pxPerMeter).toFloat() },
+                        density = density
+                    )
+                }
+
                 // 10. Navigation route, floor-transfer callouts and destination pin
                 if (routePtsOnViewed.size >= 2) {
                     val pts = ArrayList<Offset>(routePtsOnViewed.size + 1)

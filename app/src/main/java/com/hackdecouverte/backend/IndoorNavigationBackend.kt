@@ -110,7 +110,8 @@ data class NavigationSnapshot(
     /** Map localization (developer switch for now): zones, state, a sample of particles. */
     val localizationEnabled: Boolean = false,
     val localization: LocEstimate? = null,
-    val localizationParticles: List<PointM> = emptyList()
+    val localizationParticles: List<PointM> = emptyList(),
+    val localizationDebug: LocDebug? = null
 )
 
 class IndoorNavigationBackend(
@@ -871,7 +872,8 @@ class IndoorNavigationBackend(
             lastJunctionId = junctions.lastJunctionId,
             localizationEnabled = localizationEnabled,
             localization = if (localizationEnabled) localization.estimate else null,
-            localizationParticles = if (localizationEnabled) localization.samplePositions(MAX_PARTICLES_SHOWN) else emptyList()
+            localizationParticles = if (localizationEnabled) localization.samplePositions(MAX_PARTICLES_SHOWN) else emptyList(),
+            localizationDebug = if (localizationEnabled) localization.debug else null
         )
     }
 

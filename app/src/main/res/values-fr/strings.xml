@@ -239,6 +239,11 @@
 
     <!-- Indoor navigation (MB floors, from the algorythme branch) -->
     <string name="indoor_open">Trouver une salle</string>
+    <string name="indoor_dev_map_localization">Localisation par la carte</string>
+    <string name="loc_state_searching">Recherche</string>
+    <string name="loc_state_approximate">Approximatif</string>
+    <string name="loc_state_found">Trouvé</string>
+    <string name="loc_dev_status">%1$s · %2$d particules · %3$.1f ms/pas · %4$d alertes</string>
     <string name="indoor_title">Pavillon MB</string>
     <string name="indoor_floor">Étage %1$s</string>
     <string name="indoor_floor_short">Étage</string>

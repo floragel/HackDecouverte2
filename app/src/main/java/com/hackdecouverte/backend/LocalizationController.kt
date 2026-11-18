@@ -10,6 +10,9 @@ import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.random.Random
 
+/** Developer figures shown next to the particles. */
+data class LocDebug(val particleCount: Int, val stepMs: Double, val alarms: Int)
+
 /**
  * Feeds the map localization filter with the PDR's displacements (pure Kotlin, no Android).
  * Maps are built once per floor by [mapProvider] and cached; [prepare] can run off the main thread.
@@ -76,9 +79,17 @@ class LocalizationController(
         val dy = s.position.y - prev.y
         val d = hypot(dx, dy)
         if (d < 1e-6 || d > MAX_DISPLACEMENT_M) return
+        val t0 = System.nanoTime()
         f.onStep(d, atan2(dx, dy))
+        val ms = (System.nanoTime() - t0) / 1e6
+        stepMs = if (stepMs == 0.0) ms else stepMs * 0.8 + ms * 0.2
         refresh(f)
     }
+
+    @Volatile private var stepMs = 0.0
+
+    val debug: LocDebug?
+        get() = filter?.let { LocDebug(it.size(), stepMs, it.alarms) }
 
     fun samplePositions(max: Int): List<PointM> = if (max >= particles.size) particles else particles.take(max)
 
