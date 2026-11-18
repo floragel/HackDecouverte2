@@ -287,6 +287,10 @@ fun MapScreen() {
                                 onOpen = { flyTo(place.building.lat, place.building.lng, 18.0) },
                                 onGo = { searchQuery = ""; navigator.go(place.query) },
                             )
+                        }
+                    }
+                }
+            }
             // Room search results dropdown
             val matchingRooms = remember(searchQuery, indoorDestinations) {
                 if (searchQuery.isBlank()) emptyList()
