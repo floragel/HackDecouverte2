@@ -194,7 +194,7 @@ class IndoorNavigationBackend(
     /** Map localization (spec §6.3), behind a developer switch until plan 2. */
     private val localization = LocalizationController({ floorId ->
         buildingGraph.floor(floorId)?.let { plan ->
-            loadIndoorMap(plan) { path -> runCatching { appContext.assets.open(path) }.getOrNull() }
+            loadIndoorMap(plan, tuning.filter.graphDoorWidthM) { path -> runCatching { appContext.assets.open(path) }.getOrNull() }
         }
     })
     private var localizationEnabled = false

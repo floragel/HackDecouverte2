@@ -41,6 +41,18 @@ class OccupancyGrid(
 
     fun isBlocked(p: PointM): Boolean = isBlockedValue(cellAt(p))
 
+    /** Index of the first blocked cell along `a→b` (samples every `resM / 2`), −1 if none. */
+    fun firstBlockedCell(a: PointM, b: PointM): Int {
+        val len = hypot(b.x - a.x, b.y - a.y)
+        val steps = max(1, ceil(len / (resM / 2)).toInt())
+        for (k in 0..steps) {
+            val t = k.toDouble() / steps
+            val p = PointM(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+            if (isBlocked(p)) return indexOf(p)
+        }
+        return -1
+    }
+
     /** True if any sample along `a→b` (every `resM / 2`) is blocked. */
     fun segmentBlocked(a: PointM, b: PointM): Boolean {
         val len = hypot(b.x - a.x, b.y - a.y)

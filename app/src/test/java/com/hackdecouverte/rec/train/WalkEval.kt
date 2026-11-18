@@ -112,7 +112,7 @@ object WalkEval {
         val r = Math.toRadians(rotDeg.toDouble())
         val o = ds.route.path[0]
         val placed = pts.map { p -> PointM(o.x + k * (p.x * cos(r) + p.y * sin(r)), o.y + k * (-p.x * sin(r) + p.y * cos(r))) }
-        val grid = WalkAnalysis.mapProvider(ds.site)(ds.route.floorId)?.grid
+        val grid = WalkAnalysis.mapProvider(ds.site, tuning.filter.graphDoorWidthM)(ds.route.floorId)?.grid
         var crossings = 0
         if (grid != null) for ((a, b) in placed.zipWithNext()) {
             val n = (a.distanceTo(b) / 0.05).toInt().coerceAtLeast(1)
@@ -147,7 +147,7 @@ object WalkEval {
             }
         }
         val r = WalkReplay(
-            ds.recording, ds.site.origin, WalkAnalysis.mapProvider(ds.site), seed, tuning,
+            ds.recording, ds.site.origin, WalkAnalysis.mapProvider(ds.site, tuning.filter.graphDoorWidthM), seed, tuning,
             useGps = mode == StartMode.COLD_GPS,
             startHint = if (mode == StartMode.KNOWN_START) WarmStart(listOf(LocZone(start, 1.0, 1.0, 0.0)), 0.0) else null,
             stepObserver = observer
@@ -180,12 +180,12 @@ object WalkEval {
     data class SupportRow(val tS: Double, val arcM: Double, val support: Double, val zoneErrM: Double?, val state: LocState?, val nearestDoorM: Double?, val label: String?)
 
     fun support(ds: Dataset, tuning: TuningParams, mode: StartMode, seed: Int): List<SupportRow> {
-        val map = WalkAnalysis.mapProvider(ds.site)(ds.route.floorId)
+        val map = WalkAnalysis.mapProvider(ds.site, tuning.filter.graphDoorWidthM)(ds.route.floorId)
         val rows = ArrayList<SupportRow>()
         val t0 = ds.recording.header.startedNs
         val labelPoints = ds.route.labels.mapNotNull { l -> ds.route.path.getOrNull(l.pointIndex)?.let { it to l.label } }
         WalkReplay(
-            ds.recording, ds.site.origin, WalkAnalysis.mapProvider(ds.site), seed, tuning,
+            ds.recording, ds.site.origin, WalkAnalysis.mapProvider(ds.site, tuning.filter.graphDoorWidthM), seed, tuning,
             useGps = mode == StartMode.COLD_GPS,
             startHint = if (mode == StartMode.KNOWN_START) WarmStart(listOf(LocZone(ds.route.path[0], 1.0, 1.0, 0.0)), 0.0) else null,
             stepObserver = { tNs, c ->

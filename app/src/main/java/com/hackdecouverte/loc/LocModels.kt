@@ -14,6 +14,9 @@ data class LocParams(
     val strideScaleMin: Double = 0.75,
     val strideScaleMax: Double = 1.30,
     val wallFactor: Double = 0.02,
+    /** Instead of [wallFactor] when the wall crossed is within [doorSoftRadiusM] of a door opening (plan B2). */
+    val doorWallFactor: Double = 0.3,
+    val doorSoftRadiusM: Double = 0.6,
     val beta: Double = 0.2,
     val resampleEssRatio: Double = 0.5,
     val recoveryFraction: Double = 0.02,

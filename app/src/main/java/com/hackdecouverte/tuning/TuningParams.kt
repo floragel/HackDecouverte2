@@ -53,7 +53,11 @@ data class FilterTuning(
     val scaleDrift: Double = 0.005,
     val wallFactor: Double = 0.02,
     val beta: Double = 0.2,
-    val recoveryFraction: Double = 0.02
+    val recoveryFraction: Double = 0.02,
+    val doorWallFactor: Double = 0.3,
+    val doorSoftRadiusM: Double = 0.6,
+    /** Width of the doors carved at the graph's room nodes (map rebuilt when it changes). */
+    val graphDoorWidthM: Double = 1.0
 )
 
 /** Filter settings from the tuning; [base] keeps what the tuning does not own (stride prior, history). */
@@ -67,7 +71,9 @@ fun TuningParams.locParams(base: LocParams = LocParams()): LocParams = base.copy
     scaleDrift = filter.scaleDrift,
     wallFactor = filter.wallFactor,
     beta = filter.beta,
-    recoveryFraction = filter.recoveryFraction
+    recoveryFraction = filter.recoveryFraction,
+    doorWallFactor = filter.doorWallFactor,
+    doorSoftRadiusM = filter.doorSoftRadiusM
 )
 
 /** Sets the tracker's public knobs. */

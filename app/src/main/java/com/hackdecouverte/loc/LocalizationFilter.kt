@@ -44,6 +44,7 @@ class LocalizationFilter(
     /** After a (re)start the filter claims nothing until [GOOD_STEPS_TO_TRUST] plausible steps in a row. */
     private var forcedSearching = false
     private val freeCells: IntArray by lazy { map.freeCellIndices() }
+    private val nearDoor: BooleanArray by lazy { map.nearDoorMask(params.doorSoftRadiusM) }
 
     /** False while the phone→walking angle is unknown: steps are buffered until the first straight line. */
     var offsetKnown: Boolean = true
@@ -297,8 +298,13 @@ class LocalizationFilter(
             val len = lengthM * scale[i] * (1 + gaussian() * params.lengthNoise)
             val from = PointM(east[i], north[i])
             val to = PointM(east[i] + len * sin(h), north[i] + len * cos(h))
-            val blocked = g.segmentBlocked(from, to)
-            var f = if (blocked) params.wallFactor else 1.0
+            val blockedCell = g.firstBlockedCell(from, to)
+            val blocked = blockedCell >= 0
+            var f = when {
+                !blocked -> 1.0
+                nearDoor[blockedCell] -> params.doorWallFactor // a door jamb: probably the door, a little off
+                else -> params.wallFactor
+            }
             val c = dirs.coherenceAt(to)
             var align = 1.0
             if (c > 0) {

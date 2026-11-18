@@ -35,9 +35,9 @@ internal object WalkAnalysis {
 
     private val maps = HashMap<String, IndoorMap?>()
 
-    fun mapProvider(site: IndoorSite): (String) -> IndoorMap? = { floorId ->
-        synchronized(maps) { maps.getOrPut("${site.id}/$floorId") {
-            MapTestSupport.open(site.floorPlanAsset(floorId))?.let { loadIndoorMap(FloorPlan.parse(it)) { p -> MapTestSupport.open(p) } }
+    fun mapProvider(site: IndoorSite, graphDoorWidthM: Double = 1.0): (String) -> IndoorMap? = { floorId ->
+        synchronized(maps) { maps.getOrPut("${site.id}/$floorId/${"%.2f".format(java.util.Locale.ROOT, graphDoorWidthM)}") {
+            MapTestSupport.open(site.floorPlanAsset(floorId))?.let { loadIndoorMap(FloorPlan.parse(it), graphDoorWidthM) { p -> MapTestSupport.open(p) } }
         } }
     }
 

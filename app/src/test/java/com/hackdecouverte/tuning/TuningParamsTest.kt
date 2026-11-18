@@ -37,14 +37,20 @@ class TuningParamsTest {
         assertEquals(TuningParams(), Tuning.load { MapTestSupport.open(it) })
     }
 
-    /** Pinned from the replay before TuningParams existed (A2 step 0). */
+    /**
+     * Going through TuningParams changes nothing: same replay as with the plain filter defaults.
+     * (A2 first pinned the pre-A2 numbers — 60 steps, end (−4.3707, 4.3001), stride ×0.8718 — and
+     * passed; phase B changes the defaults on purpose, so the invariant is now this equality.)
+     */
     @Test
     fun replayWithDefaultTuningIsUnchanged() {
         val site = IndoorSite.STANISLAS
-        val r = WalkReplay(SyntheticWalk.stanislasNorthWestAndBack(site.origin), site.origin, WalkAnalysis.mapProvider(site), seed = 3, tuning = TuningParams()).run()
-        assertEquals(60, r.steps.size)
-        assertEquals(-4.370689849409958, r.steps.last().estimate!!.x, 1e-9)
-        assertEquals(4.300096126843306, r.steps.last().estimate!!.y, 1e-9)
-        assertEquals(0.8718040056618864, r.strideScale!!, 1e-9)
+        val rec = SyntheticWalk.stanislasNorthWestAndBack(site.origin)
+        val viaTuning = WalkReplay(rec, site.origin, WalkAnalysis.mapProvider(site), seed = 3, tuning = TuningParams()).run()
+        val plain = WalkReplay(rec, site.origin, WalkAnalysis.mapProvider(site), seed = 3, params = LocParams()).run()
+        assertEquals(plain.steps.size, viaTuning.steps.size)
+        assertEquals(plain.steps.last().estimate!!.x, viaTuning.steps.last().estimate!!.x, 1e-12)
+        assertEquals(plain.steps.last().estimate!!.y, viaTuning.steps.last().estimate!!.y, 1e-12)
+        assertEquals(plain.strideScale!!, viaTuning.strideScale!!, 1e-12)
     }
 }

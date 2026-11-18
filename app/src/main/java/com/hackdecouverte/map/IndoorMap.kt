@@ -15,6 +15,28 @@ class IndoorMap(
     val doors: List<DoorOpening>,
     val dominantAxisRad: Double
 ) {
+    private val nearDoorMasks = HashMap<Double, BooleanArray>()
+
+    /** Cells within [radiusM] of a door opening's edge (a step clipping them probably went through the door). */
+    fun nearDoorMask(radiusM: Double): BooleanArray = synchronized(nearDoorMasks) {
+        nearDoorMasks.getOrPut(radiusM) {
+            val mask = BooleanArray(grid.cells.size)
+            for (d in doors) {
+                val reach = d.widthM / 2 + radiusM
+                val k = kotlin.math.ceil(reach / grid.resM).toInt()
+                val center = grid.indexOf(d.centerM)
+                if (center < 0) continue
+                val r0 = center / grid.width
+                val c0 = center % grid.width
+                for (r in maxOf(0, r0 - k)..minOf(grid.height - 1, r0 + k)) for (c in maxOf(0, c0 - k)..minOf(grid.width - 1, c0 + k)) {
+                    val i = r * grid.width + c
+                    if (grid.centerOf(i).distanceTo(d.centerM) <= reach) mask[i] = true
+                }
+            }
+            mask
+        }
+    }
+
     /** Indices of cells a person can stand on (free floor or passable furniture). */
     fun freeCellIndices(): IntArray {
         val out = ArrayList<Int>()
@@ -33,7 +55,7 @@ object IndoorMapBuilder {
     const val FACADE_GROW_M = 0.95
     const val GRAPH_DOOR_WIDTH_M = 1.0
 
-    fun build(vector: FloorVectorPlan, plan: FloorPlan, overlay: MapOverlay?, resM: Double = 0.1): IndoorMap {
+    fun build(vector: FloorVectorPlan, plan: FloorPlan, overlay: MapOverlay?, resM: Double = 0.1, graphDoorWidthM: Double = GRAPH_DOOR_WIDTH_M): IndoorMap {
         val walls = ArrayList<List<PointM>>()
         for (c in 0 until vector.contourCount) {
             val start = vector.contourStartPairIndex[c]
@@ -45,11 +67,11 @@ object IndoorMapBuilder {
             val ext = maxOf(pts.maxOf { it.x } - pts.minOf { it.x }, pts.maxOf { it.y } - pts.minOf { it.y })
             if (ext >= TEXT_MAX_EXTENT_M) walls.add(pts)
         }
-        return build(walls, vector.viewBoundsM, plan, overlay, resM)
+        return build(walls, vector.viewBoundsM, plan, overlay, resM, graphDoorWidthM)
     }
 
     /** Same, from wall contours already filtered (synthetic floors in tests, other sources later). */
-    fun build(wallContours: List<List<PointM>>, bounds: MetricBounds, plan: FloorPlan, overlay: MapOverlay?, resM: Double = 0.1): IndoorMap {
+    fun build(wallContours: List<List<PointM>>, bounds: MetricBounds, plan: FloorPlan, overlay: MapOverlay?, resM: Double = 0.1, graphDoorWidthM: Double = GRAPH_DOOR_WIDTH_M): IndoorMap {
         val w = ceil(bounds.widthM / resM).toInt()
         val h = ceil(bounds.heightM / resM).toInt()
         val extra = overlay?.extraWalls.orEmpty().map { poly -> poly.map { PointM(it[0], it[1]) } }
@@ -62,7 +84,7 @@ object IndoorMapBuilder {
         val removed = overlay?.removeDoorNodeIds.orEmpty().toSet()
         val doors = ArrayList<DoorOpening>()
         for (node in plan.nodes) {
-            if (node.type == "room" && node.id !in removed) doors.add(DoorOpening(node.posM, GRAPH_DOOR_WIDTH_M, node.id))
+            if (node.type == "room" && node.id !in removed) doors.add(DoorOpening(node.posM, graphDoorWidthM, node.id))
         }
         for (d in overlay?.doors.orEmpty()) doors.add(DoorOpening(PointM(d.east, d.north), d.widthM, d.nodeId))
         for (d in doors) carveDoor(grid, d)
@@ -125,13 +147,13 @@ object IndoorMapBuilder {
  */
 fun loadIndoorMap(floorNumber: Int, open: (String) -> InputStream?): IndoorMap? {
     val graph = open("floors/floorplan-MB-$floorNumber.json") ?: return null
-    return loadIndoorMap(graph.use { FloorPlan.parse(it) }, open)
+    return loadIndoorMap(graph.use { FloorPlan.parse(it) }, open = open)
 }
 
 /** Any building: walls from the plan's own SVG (`svg_asset`), overlay from `maps/<floorId>-overlay.json`. */
-fun loadIndoorMap(plan: FloorPlan, open: (String) -> InputStream?): IndoorMap? {
+fun loadIndoorMap(plan: FloorPlan, graphDoorWidthM: Double = IndoorMapBuilder.GRAPH_DOOR_WIDTH_M, open: (String) -> InputStream?): IndoorMap? {
     val svg = plan.svgAsset?.let(open) ?: return null
     val vector = svg.use { FloorVectorPlan.parseSvg(plan.floorId, it) }
     val overlay = open("maps/${plan.floorId}-overlay.json")?.use { MapOverlay.parse(it.bufferedReader().readText()) }
-    return IndoorMapBuilder.build(vector, plan, overlay)
+    return IndoorMapBuilder.build(vector, plan, overlay, graphDoorWidthM = graphDoorWidthM)
 }
