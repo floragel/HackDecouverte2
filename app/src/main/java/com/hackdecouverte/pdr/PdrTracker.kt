@@ -167,6 +167,34 @@ class PdrTracker(
     /** × the stride used to average a rocking phone's heading (tuning). */
     var strideWindowFactor: Double = 1.0
 
+    /** |B| samples (µT) of the last ~70 s. */
+    private val fieldSamples = ArrayDeque<Pair<Long, Double>>()
+
+    /** Expected |B| (µT) for this place; null = running median of the last 60 s (starting at 52 µT). */
+    var expectedFieldMicroTesla: Double? = null
+
+    /** Compass samples are ignored while |B| is further than this fraction from the expected value (tuning). */
+    var magGateTolerance: Double = 0.15
+
+    fun onMagneticField(timestampNs: Long, magnitudeMicroTesla: Double) {
+        if (!magnitudeMicroTesla.isFinite() || magnitudeMicroTesla <= 0.0) return
+        fieldSamples.addLast(timestampNs to magnitudeMicroTesla)
+        while (fieldSamples.first().first < timestampNs - 70_000_000_000L) fieldSamples.removeFirst()
+    }
+
+    /** False when the field around [timestampNs] is abnormal (steel, magnets); true without field data. */
+    private fun fieldLooksNormal(timestampNs: Long): Boolean {
+        if (fieldSamples.isEmpty()) return true
+        val near = fieldSamples.filter { abs(it.first - timestampNs) <= 500_000_000L }
+        if (near.isEmpty()) return true
+        val expected = expectedFieldMicroTesla ?: run {
+            val recent = fieldSamples.filter { it.first >= timestampNs - 60_000_000_000L }.map { it.second }.sorted()
+            // Clamped to the Earth's range: a long disturbance cannot become the reference by itself.
+            if (recent.size < 20) NOMINAL_FIELD_MICRO_TESLA else recent[recent.size / 2].coerceIn(EARTH_FIELD_MIN_MICRO_TESLA, EARTH_FIELD_MAX_MICRO_TESLA)
+        }
+        return near.all { abs(it.second - expected) <= magGateTolerance * expected }
+    }
+
     private fun continuousCompassPull(timestampNs: Long): Double {
         val ref = referenceYaw ?: return 0.0
         val window = compassOffsets.filter { it.first in timestampNs - strideWindowNs()..timestampNs + 200_000_000L }
@@ -407,7 +435,7 @@ class PdrTracker(
             ?: orientation.lastValidYaw
             ?: return
         val sampleOffset = wrapAnglePi(trueAzimuthRad - gameYaw)
-        if (highConfidence) {
+        if (highConfidence && fieldLooksNormal(timestampNs)) {
             compassOffsets.addLast(timestampNs to sampleOffset)
             while (compassOffsets.first().first < timestampNs - 3_000_000_000L) compassOffsets.removeFirst()
         }
@@ -1060,6 +1088,10 @@ class PdrTracker(
     }
 
     companion object {
+        /** Field magnitude assumed before a minute of samples (Montréal ≈ 53 µT). */
+        const val NOMINAL_FIELD_MICRO_TESLA = 52.0
+        const val EARTH_FIELD_MIN_MICRO_TESLA = 25.0
+        const val EARTH_FIELD_MAX_MICRO_TESLA = 65.0
         const val MIN_STEP_LENGTH_M = 0.2
         const val MAX_STEP_LENGTH_M = 1.5
         private const val SHAKE_ACCEL_THRESHOLD_MSS = 11.5

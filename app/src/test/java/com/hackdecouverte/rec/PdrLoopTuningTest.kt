@@ -36,7 +36,7 @@ class PdrLoopTuningTest {
         for (e in rec.events) {
             if (end != null && e.tNs > end) break
             when (e) {
-                is RecEvent.Sample -> if (e.pipeline) {
+                is RecEvent.Sample -> if (rec.feedsPipeline(e)) {
                     now = maxOf(now, e.tNs + e.lagUs * 1000)
                     router.onSample(e.type, e.tNs, e.values, e.accuracy)
                     if (LocalizationController.shouldAutoStartPdr(tracker.state.value, now - h.startedNs)) tracker.startWithManualStepLength(h.stepLengthM, h.cadenceHz)

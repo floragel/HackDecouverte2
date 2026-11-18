@@ -32,6 +32,7 @@ class PdrSensorAdapter(
         sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
     val accelerometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     val pressureSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE)
+    private val magnetometer: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
     val fallbackCapable: Boolean
         get() = linearAcceleration != null || accelerometer != null
@@ -69,6 +70,10 @@ class PdrSensorAdapter(
             ) || failed
         }
         compassRotationSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI, 0)
+        }
+        // Field magnitude: steel and magnets show as an abnormal |B|, the compass pull ignores those seconds.
+        magnetometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI, 0)
         }
         pressureSensor?.let {

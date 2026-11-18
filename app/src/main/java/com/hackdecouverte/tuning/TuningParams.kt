@@ -33,7 +33,9 @@ data class PdrTuning(
     val typicalCadenceHz: Double = 1.8,
     val pivotTurnRateRadS: Double = 1.2,
     val pivotFullRateSpanRadS: Double = 1.0,
-    val pivotMinQuality: Double = 0.2
+    val pivotMinQuality: Double = 0.2,
+    /** Compass samples ignored while |B| is off its expected value by more than this fraction. */
+    val magGateTolerance: Double = 0.15
 )
 
 @Serializable
@@ -105,6 +107,7 @@ fun PdrTracker.applyTuning(t: PdrTuning) {
     pivotTurnRateRadS = t.pivotTurnRateRadS
     pivotFullRateSpanRadS = t.pivotFullRateSpanRadS
     pivotMinQuality = t.pivotMinQuality
+    magGateTolerance = t.magGateTolerance
 }
 
 fun CarryMonitor.Companion.from(t: CarryTuning): CarryMonitor =

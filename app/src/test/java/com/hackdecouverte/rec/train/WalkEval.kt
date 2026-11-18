@@ -68,10 +68,10 @@ object WalkEval {
     private const val SUPPORT_LOST_WEIGHT = 0.01
     private const val SUPPORT_LOST_STEPS = 5
 
-    fun pdrRun(rec: Recording, tuning: TuningParams): PdrRun {
+    fun pdrRun(rec: Recording, tuning: TuningParams, corridorAssist: Boolean = true): PdrRun {
         val h = rec.header
         var now = h.startedNs
-        val tracker = PdrTracker(clock = { now }, antiShakeEnabled = true, corridorAssistInitial = true, carry = CarryMonitor.from(tuning.carry)).apply {
+        val tracker = PdrTracker(clock = { now }, antiShakeEnabled = true, corridorAssistInitial = corridorAssist, carry = CarryMonitor.from(tuning.carry)).apply {
             useTrueNorthReference = true
             anyHoldHeading = true
             applyTuning(tuning.pdr)
@@ -84,7 +84,7 @@ object WalkEval {
         var lastCount = 0
         for (e in rec.events) {
             when (e) {
-                is RecEvent.Sample -> if (e.pipeline) {
+                is RecEvent.Sample -> if (rec.feedsPipeline(e)) {
                     now = maxOf(now, e.tNs + e.lagUs * 1000)
                     router.onSample(e.type, e.tNs, e.values, e.accuracy)
                     if (LocalizationController.shouldAutoStartPdr(tracker.state.value, now - h.startedNs)) tracker.startWithManualStepLength(h.stepLengthM, h.cadenceHz)

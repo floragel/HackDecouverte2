@@ -31,7 +31,13 @@ internal object SyntheticWalk {
         gpsCenter: PointM? = null,
         gpsAccuracyM: Double = 12.0,
         declinationDeg: Double = -14.2,
-        gameZeroDeg: Double = -68.0
+        gameZeroDeg: Double = -68.0,
+        /** The game rotation vector's yaw drifts this much (gyro), the compass does not. */
+        gyroDriftDegPerMin: Double = 0.0,
+        /** Compass error at t seconds after the start (steel, magnets). */
+        compassOffsetDeg: (tS: Double) -> Double = { 0.0 },
+        /** Field magnitude at t seconds; null = no magnetometer samples in the PDR stream (as before B6). */
+        fieldMicroTesla: ((tS: Double) -> Double)? = null
     ): Recording {
         val header = RecordingHeader(
             siteId = siteId, floorId = floorId, startedWallMs = 0L, startedNs = T0, device = "synthetic",
@@ -50,9 +56,12 @@ internal object SyntheticWalk {
         fun sensorsUntil(tEnd: Long, headingAt: (Long) -> Double) {
             while (t < tEnd) {
                 val h = headingAt(t)
-                ev += RecEvent.Sample(SensorRouter.TYPE_GAME_ROTATION_VECTOR, t, 3, true, 1500, rotationVectorFor(wrapAnglePi(h - Math.toRadians(gameZeroDeg))))
+                val tS = (t - T0) / 1e9
+                val drift = Math.toRadians(gyroDriftDegPerMin * tS / 60.0)
+                ev += RecEvent.Sample(SensorRouter.TYPE_GAME_ROTATION_VECTOR, t, 3, true, 1500, rotationVectorFor(wrapAnglePi(h - Math.toRadians(gameZeroDeg) + drift)))
                 if ((t / MS) % 60 == 0L) {
-                    ev += RecEvent.Sample(SensorRouter.TYPE_ROTATION_VECTOR, t, 3, true, 1500, rotationVectorFor(wrapAnglePi(h - Math.toRadians(declinationDeg))))
+                    ev += RecEvent.Sample(SensorRouter.TYPE_ROTATION_VECTOR, t, 3, true, 1500, rotationVectorFor(wrapAnglePi(h - Math.toRadians(declinationDeg) + Math.toRadians(compassOffsetDeg(tS)))))
+                    fieldMicroTesla?.let { ev += RecEvent.Sample(SensorRouter.TYPE_MAGNETIC_FIELD, t, 3, true, 1500, floatArrayOf(it(tS).toFloat(), 0f, 0f)) }
                 }
                 t += 20 * MS
             }

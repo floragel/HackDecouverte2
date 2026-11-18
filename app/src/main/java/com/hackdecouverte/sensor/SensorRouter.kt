@@ -85,6 +85,13 @@ class SensorRouter(
                 }
             }
 
+            TYPE_MAGNETIC_FIELD -> if (values.size >= 3) {
+                val bx = values[0].toDouble()
+                val by = values[1].toDouble()
+                val bz = values[2].toDouble()
+                tracker.onMagneticField(timestampNs, sqrt(bx * bx + by * by + bz * bz))
+            }
+
             TYPE_STEP_DETECTOR -> {
                 reconciler.onDetector(timestampNs)
                 tracker.stepsUnconfirmed = (reconciler.recentCountRatio(timestampNs) ?: 1.0) < 0.5

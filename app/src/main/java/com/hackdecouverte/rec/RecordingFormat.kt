@@ -125,6 +125,16 @@ data class Recording(val header: RecordingHeader, val events: List<RecEvent>) {
     val markers: List<RecEvent.Marker> get() = events.filterIsInstance<RecEvent.Marker>()
     val fixes: List<RecEvent.Fix> get() = events.filterIsInstance<RecEvent.Fix>()
     val endNs: Long get() = events.maxOfOrNull { it.tNs } ?: header.startedNs
+
+    /** Walks recorded before the pipeline read the magnetometer carry it in the extra stream: replay feeds those. */
+    private val magnetometerFromExtras: Boolean by lazy {
+        events.none { it is RecEvent.Sample && it.pipeline && it.type == MAGNETIC_FIELD_TYPE }
+    }
+
+    /** True when the replay must feed [e] to the PDR pipeline. */
+    fun feedsPipeline(e: RecEvent.Sample): Boolean = e.pipeline || (e.type == MAGNETIC_FIELD_TYPE && magnetometerFromExtras)
+
+    private companion object { const val MAGNETIC_FIELD_TYPE = 2 }
 }
 
 private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }

@@ -190,7 +190,7 @@ class WalkReplay(
             if (e is RecEvent.Marker && e.tNs < startGate) continue
             when (e) {
                 is RecEvent.Sample -> {
-                    if (!e.pipeline) continue
+                    if (!recording.feedsPipeline(e)) continue
                     now = maxOf(now, e.tNs + e.lagUs * 1000)
                     router.onSample(e.type, e.tNs, e.values, e.accuracy)
                     afterEvent()
