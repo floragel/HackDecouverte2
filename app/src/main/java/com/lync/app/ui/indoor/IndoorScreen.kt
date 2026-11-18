@@ -398,6 +398,11 @@ private fun TrackingSheet(snap: NavigationSnapshot, backend: IndoorNavigationBac
                     stringResource(R.string.indoor_floor, floorNumber(suggested.toFloorId)),
                     { backend.confirmUserFloor(suggested.toFloorId, suggested.verticalGroupId) },
                 )
+            } else {
+                // The barometer leans towards another floor: one tap confirms it (it can be wrong, so it never moves the user alone)
+                snap.barometerFloorSuggestionId?.let { baroFloor ->
+                    Pill(stringResource(R.string.indoor_floor_question, floorNumber(baroFloor)), { backend.confirmUserFloor(baroFloor) })
+                }
             }
             if (snap.destination != null) Pill(stringResource(R.string.indoor_clear), { backend.setDestination(null) }, style = PillStyle.Outline)
             Pill(stringResource(R.string.indoor_restart), { backend.resetPositionToStart() }, style = PillStyle.Outline)

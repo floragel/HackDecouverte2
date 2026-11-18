@@ -33,8 +33,10 @@ import com.hackdecouverte.map.OsmSurroundings
 import com.hackdecouverte.map.RouteStep
 import com.hackdecouverte.pdr.AltitudeFloorEstimate
 import com.hackdecouverte.pdr.AltitudeFloorEstimator
+import com.hackdecouverte.pdr.AltitudeFloorSource
 import com.hackdecouverte.pdr.CorridorConstraintResult
 import com.hackdecouverte.pdr.FloorTransitionTracker
+import com.hackdecouverte.pdr.PressureAnchor
 import com.hackdecouverte.pdr.PdrPhase
 import com.hackdecouverte.pdr.PdrState
 import com.hackdecouverte.pdr.PdrTracker
@@ -52,6 +54,7 @@ import com.hackdecouverte.sensor.GpsLocationSource
 import com.hackdecouverte.sensor.PdrSensorAdapter
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -123,6 +126,10 @@ data class NavigationSnapshot(
     val altitudeFloor: AltitudeFloorEstimate? = null,
     /** True once a street-level pressure was captured outdoors near the building. */
     val hasStreetPressureReference: Boolean = false,
+    /** Floor the barometer thinks the user is on when it differs from [userFloorId] (shown as « Floor N? »). */
+    val barometerFloorSuggestionId: String? = null,
+    /** Probability of [barometerFloorSuggestionId] (0–1). */
+    val barometerFloorSuggestionProbability: Double = 0.0,
     /** Last corridor junction that re-anchored the dot (see [JunctionMatcher]), for telemetry. */
     val lastJunctionId: String? = null,
     /** Map localization (developer switch for now): zones, state, a sample of particles. */
@@ -158,9 +165,19 @@ class IndoorNavigationBackend(
     }
 
     private val floorTracker = FloorTransitionTracker()
-    private val altitudeFloors = AltitudeFloorEstimator()
+    private var altitudeFloors = AltitudeFloorEstimator()
     private var latestPressureHpa: Double? = null
     private var latestPressureNs: Long = Long.MIN_VALUE
+    /** Pressure smoothed over a few seconds: anchors and estimates never use a single noisy sample. */
+    private var smoothPressureHpa: Double? = null
+    /** Floor known but no pressure yet: anchor it on the next sample with this sigma. */
+    private var pendingFloorAnchorSigmaM: Double? = null
+    /** How sure we are of the tracked floor (sigma of the last anchor event); null until a floor is known. */
+    private var floorTrustSigmaM: Double? = null
+    private var lastFloorAnchorRefreshNs: Long = Long.MIN_VALUE
+    private var baroSuggestionId: String? = null
+    private var baroSuggestionProbability: Double = 0.0
+    private var setupFloorFromBarometerDone = false
     private val junctions = JunctionMatcher()
 
     /** Map localization (spec §6.3), behind a developer switch until plan 2. */
@@ -249,6 +266,11 @@ class IndoorNavigationBackend(
 
     private var cachedRouteKey: RouteCacheKey? = null
     private var cachedRoute: NavigationRoute? = null
+
+    init {
+        altitudeFloors = buildAltitudeEstimator()
+        restoreFloorAnchor()
+    }
 
     private val _state = MutableStateFlow(buildSnapshot(tracker.state.value))
     val state: StateFlow<NavigationSnapshot> = _state
@@ -408,6 +430,8 @@ class IndoorNavigationBackend(
 
     fun loadFloorPlans(plans: List<FloorPlan>) {
         buildingGraph = BuildingGraph(plans)
+        altitudeFloors = buildAltitudeEstimator()
+        restoreFloorAnchor()
         if (userFloorId == null || buildingGraph.floor(userFloorId!!) == null) {
             userFloorId = plans.firstOrNull()?.floorId
         }
@@ -427,7 +451,8 @@ class IndoorNavigationBackend(
     fun setStartPose(
         floorId: String,
         nodeId: String,
-        facingOption: FacingOption = FacingOption.AutoTrueNorth
+        facingOption: FacingOption = FacingOption.AutoTrueNorth,
+        floorCertain: Boolean = true
     ) {
         val plan = buildingGraph.floor(floorId) ?: return
         val node = plan.node(nodeId) ?: return
@@ -447,6 +472,8 @@ class IndoorNavigationBackend(
             is FacingOption.Cardinal -> facingOption
         }
         floorTracker.onManualFloorSet()
+        if (floorCertain) markFloorKnown(AltitudeFloorEstimator.KNOWN_FLOOR_SIGMA_M)
+        clearBaroSuggestion()
         inVerticalTransit = false
         floorDeltaAltitudeM = 0.0
         tracker.endVerticalHold(commit = false)
@@ -558,6 +585,8 @@ class IndoorNavigationBackend(
         viewedFloorId = targetFloorId
         currentFloorOriginM = landing?.arrivalPosM ?: currentMapPos
         floorTracker.onManualFloorSet()
+        markFloorKnown(AltitudeFloorEstimator.KNOWN_FLOOR_SIGMA_M)
+        clearBaroSuggestion()
         inVerticalTransit = false
         floorDeltaAltitudeM = 0.0
         tracker.endVerticalHold(commit = false)
@@ -580,14 +609,15 @@ class IndoorNavigationBackend(
         val candidates = doors.takeIf { it.isNotEmpty() && around.norm() > ENTRANCE_SNAP_MIN_DIST_M }
             ?: plan.nodes.filter { it.type != "corridor" || it.label.isNotBlank() || it.name.isNotBlank() }.ifEmpty { plan.nodes }
         val start = candidates.minByOrNull { it.posM.distanceTo(around) } ?: return false
-        setStartPose(floorId, start.id)
+        // Entering from the street is not a certain floor (the street reference covers it)
+        setStartPose(floorId, start.id, floorCertain = false)
         if (tracker.state.value.phase == PdrPhase.IDLE) startWithSavedOrDefaultStepLength()
         return true
     }
 
     /** Current altitude-based floor estimate (also published in the snapshot). */
     fun estimateAltitudeFloor(): AltitudeFloorEstimate =
-        altitudeFloors.estimate(latestPressureNs, latestPressureHpa)
+        altitudeFloors.estimate(latestPressureNs, smoothPressureHpa ?: latestPressureHpa)
 
     fun setDestination(target: NodeKey?) {
         destination = target
@@ -792,9 +822,35 @@ class IndoorNavigationBackend(
     }
 
     private fun handlePressureSample(timestampNs: Long, pressureHpa: Double) {
+        if (!pressureHpa.isFinite() || pressureHpa !in 300.0..1_100.0) return
+        val previousNs = latestPressureNs
+        val resumedAfterGap = previousNs != Long.MIN_VALUE && timestampNs - previousNs > PRESSURE_GAP_NS
+        val prevSmooth = smoothPressureHpa
+        smoothPressureHpa = if (prevSmooth == null || resumedAfterGap || previousNs == Long.MIN_VALUE || timestampNs <= previousNs) {
+            pressureHpa
+        } else {
+            val dt = (timestampNs - previousNs) / 1e9
+            prevSmooth + (1.0 - exp(-dt / PRESSURE_SMOOTH_TAU_S)) * (pressureHpa - prevSmooth)
+        }
         latestPressureHpa = pressureHpa
         latestPressureNs = timestampNs
         val uFloor = userFloorId ?: return
+        updateFloorSpacing(uFloor)
+
+        pendingFloorAnchorSigmaM?.let { sigma ->
+            pendingFloorAnchorSigmaM = null
+            anchorCurrentFloor(timestampNs, sigma)
+        }
+        if (resumedAfterGap) {
+            // Sensors were off (app in the background): the relative tracker lost its baseline.
+            // The pressure difference to the last known floor says whether the user changed floor meanwhile.
+            floorTracker.reset()
+            inVerticalTransit = false
+            floorDeltaAltitudeM = 0.0
+            if (reconcileFloorWithBarometer(timestampNs, RESUME_SWITCH_PROBABILITY, anchorWhenUnsure = false)) return
+        }
+        maybeSetSetupFloorFromBarometer(timestampNs)
+
         val currentMapPos = anchor?.toMap(tracker.state.value.position) ?: currentFloorOriginM
         // Map localization: "near stairs" is how much of the filter's weight is next to one.
         val nearConnector = if (localizationEnabled && localization.floorId == uFloor) {
@@ -858,11 +914,206 @@ class IndoorNavigationBackend(
             }
         }
 
-        if (wasInTransit != inVerticalTransit || abs(floorDeltaAltitudeM - lastPublishedAltM) >= 0.25) {
+        if (wasInTransit && !inVerticalTransit) {
+            // A climb (or a false alarm) just settled: check the tracked floor against the absolute estimate
+            if (reconcileFloorWithBarometer(timestampNs, TRANSIT_SWITCH_PROBABILITY, anchorWhenUnsure = true)) return
+        } else if (!inVerticalTransit && abs(floorDeltaAltitudeM) < KEEPALIVE_MAX_DELTA_M) {
+            // Still on the tracked floor: refresh its anchor so weather drift does not age it
+            val trust = floorTrustSigmaM
+            if (trust != null && (lastFloorAnchorRefreshNs == Long.MIN_VALUE || timestampNs - lastFloorAnchorRefreshNs >= FLOOR_ANCHOR_REFRESH_NS)) {
+                anchorCurrentFloor(timestampNs, trust)
+            }
+        }
+        val suggestionChanged = updateBaroSuggestion(timestampNs)
+
+        if (suggestionChanged || wasInTransit != inVerticalTransit || abs(floorDeltaAltitudeM - lastPublishedAltM) >= 0.25) {
             lastPublishedAltM = floorDeltaAltitudeM
             _state.value = buildSnapshot(tracker.state.value)
         }
     }
+
+    // ---------- Barometric floor (absolute estimate on top of the relative tracker) ----------
+
+    private fun buildAltitudeEstimator(): AltitudeFloorEstimator {
+        val numbers = buildingGraph.floors.map { buildingGraph.floorNumber(it.floorId) }.filter { it != Int.MAX_VALUE }
+        val ground = numbers.minOrNull() ?: 1
+        val top = numbers.maxOrNull() ?: ground
+        return AltitudeFloorEstimator(groundFloor = ground, topFloor = top, groundFloorHeightM = site.groundFloorHeightM)
+    }
+
+    private fun floorIdForNumber(n: Int): String? =
+        buildingGraph.floors.firstOrNull { buildingGraph.floorNumber(it.floorId) == n }?.floorId
+
+    private fun updateFloorSpacing(floorId: String) {
+        val n = buildingGraph.floorNumber(floorId)
+        val up = buildingGraph.adjacentFloorId(floorId, +1)?.let { altitudeFloors.floorSpacingM(n, buildingGraph.floorNumber(it)) }
+        val down = buildingGraph.adjacentFloorId(floorId, -1)?.let { altitudeFloors.floorSpacingM(buildingGraph.floorNumber(it), n) }
+        floorTracker.setFloorSpacing(up, down)
+    }
+
+    /** The user's floor is known now: anchor the barometer there (now, or on the next sample). */
+    private fun markFloorKnown(sigmaM: Double) {
+        floorTrustSigmaM = sigmaM
+        val now = SystemClock.elapsedRealtimeNanos()
+        if (smoothPressureHpa != null && latestPressureNs != Long.MIN_VALUE && now - latestPressureNs <= PRESSURE_FRESH_NS) {
+            anchorCurrentFloor(latestPressureNs, sigmaM)
+        } else {
+            pendingFloorAnchorSigmaM = sigmaM
+        }
+    }
+
+    private fun anchorCurrentFloor(timestampNs: Long, sigmaM: Double) {
+        val floorId = userFloorId ?: return
+        val p = smoothPressureHpa ?: return
+        altitudeFloors.anchorAtFloor(timestampNs, p, buildingGraph.floorNumber(floorId), sigmaM)
+        floorTrustSigmaM = sigmaM
+        lastFloorAnchorRefreshNs = timestampNs
+        saveFloorAnchor()
+    }
+
+    /**
+     * Compares the tracked floor with the barometer's absolute estimate. Moves the user when the
+     * barometer is at least [switchProbability] sure of another floor (missed or double-counted
+     * climb, floor changed while the app was closed). Returns true if the floor changed.
+     */
+    private fun reconcileFloorWithBarometer(timestampNs: Long, switchProbability: Double, anchorWhenUnsure: Boolean): Boolean {
+        val uFloor = userFloorId ?: return false
+        val est = altitudeFloors.estimate(timestampNs, smoothPressureHpa)
+        if (est.source == AltitudeFloorSource.ENTRANCE_ASSUMED) {
+            if (anchorWhenUnsure) anchorCurrentFloor(timestampNs, AltitudeFloorEstimator.UNCONFIRMED_FLOOR_SIGMA_M)
+            return false
+        }
+        val current = buildingGraph.floorNumber(uFloor)
+        if (est.floorNumber != current && est.probability >= switchProbability) {
+            val target = floorIdForNumber(est.floorNumber) ?: return false
+            Log.d(LOG_TAG, "barometer: floor $uFloor -> $target (p=%.2f, h=%.1f m ± %.1f)".format(est.probability, est.heightAboveStreetM, est.sigmaM))
+            if (localizationEnabled) {
+                // Same path as a tracked climb: the hypotheses next to stairs / lifts move to their landings
+                recorder.note("floor", "barometer $uFloor -> $target")
+                tracker.endVerticalHold(commit = false)
+                userFloorId = target
+                viewedFloorId = target
+                if (!localization.changeFloor(target, buildingGraph.verticalTransfers(uFloor, target))) localizationStartingFor = null
+                floorTracker.onManualFloorSet()
+                inVerticalTransit = false
+                floorDeltaAltitudeM = 0.0
+                lastPublishedAltM = 0.0
+                recomputeAnchor()
+                prepareAdjacentFloors(target)
+                anchorCurrentFloor(timestampNs, (est.sigmaM ?: 1.0).coerceIn(AltitudeFloorEstimator.TRACKED_FLOOR_SIGMA_M, AltitudeFloorEstimator.UNCONFIRMED_FLOOR_SIGMA_M))
+                clearBaroSuggestion()
+                loadVectorPlansInBackground()
+                invalidateRouteAndPublish()
+                return true
+            }
+            val currentMapPos = anchor?.toMap(tracker.state.value.position) ?: currentFloorOriginM
+            val landing = buildingGraph.resolveFloorTransition(
+                fromFloorId = uFloor,
+                targetFloorId = target,
+                currentPosM = currentMapPos,
+                verticalSpeedMps = 0.0,
+                activeRoute = cachedRoute
+            )
+            userFloorId = target
+            viewedFloorId = target
+            currentFloorOriginM = landing?.arrivalPosM ?: currentMapPos
+            floorTracker.onManualFloorSet()
+            inVerticalTransit = false
+            floorDeltaAltitudeM = 0.0
+            lastPublishedAltM = 0.0
+            tracker.endVerticalHold(commit = false)
+            recomputeAnchor()
+            tracker.reanchorFloorOriginKeepHeading()
+            val sigma = (est.sigmaM ?: 1.0).coerceIn(AltitudeFloorEstimator.TRACKED_FLOOR_SIGMA_M, AltitudeFloorEstimator.UNCONFIRMED_FLOOR_SIGMA_M)
+            anchorCurrentFloor(timestampNs, sigma)
+            clearBaroSuggestion()
+            loadVectorPlansInBackground()
+            invalidateRouteAndPublish()
+            return true
+        }
+        when {
+            est.floorNumber == current && est.confident ->
+                anchorCurrentFloor(
+                    timestampNs,
+                    (floorTrustSigmaM ?: AltitudeFloorEstimator.TRACKED_FLOOR_SIGMA_M)
+                        .coerceIn(AltitudeFloorEstimator.KNOWN_FLOOR_SIGMA_M, AltitudeFloorEstimator.TRACKED_FLOOR_SIGMA_M)
+                )
+            anchorWhenUnsure ->
+                anchorCurrentFloor(timestampNs, AltitudeFloorEstimator.UNCONFIRMED_FLOOR_SIGMA_M)
+        }
+        return false
+    }
+
+    /** Before a start is chosen, pre-select the floor the barometer is sure of (spec §6.5 « Étage N ? » pre-filled). */
+    private fun maybeSetSetupFloorFromBarometer(timestampNs: Long) {
+        if (setupFloorFromBarometerDone || startPose != null || usingGpsStart) return
+        if (tracker.state.value.phase != PdrPhase.IDLE) return
+        val est = altitudeFloors.estimate(timestampNs, smoothPressureHpa)
+        if (est.source == AltitudeFloorSource.ENTRANCE_ASSUMED || !est.confident) return
+        val target = floorIdForNumber(est.floorNumber) ?: return
+        setupFloorFromBarometerDone = true
+        if (target != userFloorId) {
+            Log.d(LOG_TAG, "barometer: setup floor $target (p=%.2f)".format(est.probability))
+            userFloorId = target
+            viewedFloorId = target
+            _state.value = buildSnapshot(tracker.state.value)
+        }
+    }
+
+    /** « Floor N? » when the barometer leans towards another floor but not enough to move the user. Returns true if it changed. */
+    private fun updateBaroSuggestion(timestampNs: Long): Boolean {
+        val uFloor = userFloorId
+        var id: String? = null
+        var p = 0.0
+        if (uFloor != null && !inVerticalTransit) {
+            val est = altitudeFloors.estimate(timestampNs, smoothPressureHpa)
+            if (est.source != AltitudeFloorSource.ENTRANCE_ASSUMED &&
+                est.floorNumber != buildingGraph.floorNumber(uFloor) &&
+                est.probability >= SUGGEST_PROBABILITY
+            ) {
+                id = floorIdForNumber(est.floorNumber)
+                p = est.probability
+            }
+        }
+        val changed = id != baroSuggestionId
+        baroSuggestionId = id
+        baroSuggestionProbability = if (id != null) p else 0.0
+        return changed
+    }
+
+    private fun clearBaroSuggestion() {
+        baroSuggestionId = null
+        baroSuggestionProbability = 0.0
+    }
+
+    /** Saved with wall-clock time so it survives an app restart or a reboot (spec O6). */
+    private fun saveFloorAnchor() {
+        val a = altitudeFloors.floorAnchor ?: return
+        val ageMs = (SystemClock.elapsedRealtimeNanos() - a.timestampNs) / 1_000_000L
+        prefs.edit()
+            .putFloat(keyAnchor("p"), a.pressureHpa.toFloat())
+            .putFloat(keyAnchor("elev"), a.elevationM.toFloat())
+            .putFloat(keyAnchor("sigma"), a.sigmaM.toFloat())
+            .putLong(keyAnchor("wall"), System.currentTimeMillis() - ageMs)
+            .apply()
+    }
+
+    private fun restoreFloorAnchor() {
+        if (!prefs.contains(keyAnchor("wall"))) return
+        val ageMs = System.currentTimeMillis() - prefs.getLong(keyAnchor("wall"), 0L)
+        if (ageMs < 0) return
+        altitudeFloors.restoreFloorAnchor(
+            PressureAnchor(
+                timestampNs = SystemClock.elapsedRealtimeNanos() - ageMs * 1_000_000L,
+                pressureHpa = prefs.getFloat(keyAnchor("p"), 0f).toDouble(),
+                elevationM = prefs.getFloat(keyAnchor("elev"), 0f).toDouble(),
+                sigmaM = prefs.getFloat(keyAnchor("sigma"), 1f).toDouble(),
+                maxAgeNs = Long.MAX_VALUE
+            )
+        )
+    }
+
+    private fun keyAnchor(field: String) = "baro_anchor_${site.id}_$field"
 
     private fun handleGpsFix(fix: GpsFix) {
         latestGpsFix = fix
@@ -1208,8 +1459,10 @@ class IndoorNavigationBackend(
             activeRoute = route,
             destinations = buildingGraph.destinations,
             savedStepLengthM = savedStepLengthM,
-            altitudeFloor = if (latestPressureHpa != null || altitudeFloors.hasStreetReference) estimateAltitudeFloor() else null,
+            altitudeFloor = if (latestPressureHpa != null || altitudeFloors.hasStreetReference || altitudeFloors.floorAnchor != null) estimateAltitudeFloor() else null,
             hasStreetPressureReference = altitudeFloors.hasStreetReference,
+            barometerFloorSuggestionId = baroSuggestionId,
+            barometerFloorSuggestionProbability = baroSuggestionProbability,
             lastJunctionId = junctions.lastJunctionId,
             localizationEnabled = localizationEnabled,
             localization = if (localizationEnabled) localization.estimate else null,
@@ -1334,6 +1587,18 @@ class IndoorNavigationBackend(
         private const val NEAR_CONNECTOR_BARO_RADIUS_M = 7.0
         /** Map localization: share of the weight next to stairs / lifts for the barometer to accept a floor change. */
         private const val NEAR_CONNECTOR_MIN_MASS = 0.15
+        /** No pressure for this long = sensors were off (background): re-check the floor. */
+        private const val PRESSURE_GAP_NS = 15_000_000_000L
+        private const val PRESSURE_FRESH_NS = 3_000_000_000L
+        private const val PRESSURE_SMOOTH_TAU_S = 4.0
+        /** Move the user after a settled climb only when the barometer is this sure of another floor. */
+        private const val TRANSIT_SWITCH_PROBABILITY = 0.9
+        /** After the app was in the background (no relative tracking meanwhile). */
+        private const val RESUME_SWITCH_PROBABILITY = 0.8
+        /** Offer « Floor N? » from this probability on. */
+        private const val SUGGEST_PROBABILITY = 0.6
+        private const val FLOOR_ANCHOR_REFRESH_NS = 90_000_000_000L
+        private const val KEEPALIVE_MAX_DELTA_M = 1.0
         private const val HIGH_PRECISION_OUTDOOR_GPS_M = 4.5
         private const val STREET_REFERENCE_MAX_ACCURACY_M = 15.0
         private const val STREET_REFERENCE_MIN_DIST_M = 45.0

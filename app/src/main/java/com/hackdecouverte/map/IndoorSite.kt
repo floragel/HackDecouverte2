@@ -15,7 +15,9 @@ data class IndoorSite(
     /** False while [origin] is only approximate: GPS then gives the heading, never a position. */
     val gpsPositionTrusted: Boolean,
     /** OpenStreetMap streets around the building (bundled for MB only). */
-    val osmSurroundings: Boolean
+    val osmSurroundings: Boolean,
+    /** Height from the ground floor to the next one (m); lobbies are often taller than the other floors. */
+    val groundFloorHeightM: Double = 4.0
 ) {
     fun floorPlanAsset(floorId: String): String = "$floorsDir/floorplan-$floorId.json"
 
@@ -29,7 +31,8 @@ data class IndoorSite(
             defaultFloorId = "MB-2",
             origin = GeoOrigin.MB_ELEVATOR_CORE,
             gpsPositionTrusted = true,
-            osmSurroundings = true
+            osmSurroundings = true,
+            groundFloorHeightM = 5.0
         )
 
         /**

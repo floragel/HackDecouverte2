@@ -165,4 +165,35 @@ class FloorTransitionTrackerTest {
         tracker.endVerticalHold(commit = true)
         assertEquals(3.75, tracker.state.value.position.x, 0.05)
     }
+
+    @Test
+    fun tallLobbyClimbLandsOnTheNextFloorWithoutAResidualMetre() {
+        // MB-1 -> MB-2 is 5 m; the next floors are 4 m
+        fun climb(spacingUpM: Double?): Double {
+            val tracker = FloorTransitionTracker(floorHeightM = 4.0)
+            tracker.setFloorSpacing(upM = spacingUpM, downM = null)
+            var tNs = 1_000_000_000L
+            repeat(5) {
+                tracker.onPressure(tNs, 1013.0, nearVerticalConnector = true)
+                tNs += 200_000_000L
+            }
+            var steps = 0
+            val n = 50
+            var last: BarometerUpdate? = null
+            for (k in 1..n) {
+                // 5 m ≈ 0.60 hPa at sea level
+                last = tracker.onPressure(tNs, 1013.0 - 0.60 * k / n, nearVerticalConnector = true)
+                steps += last!!.floorStepDelta
+                tNs += 200_000_000L
+            }
+            repeat(3) {
+                last = tracker.onPressure(tNs, 1012.40, nearVerticalConnector = true)
+                tNs += 200_000_000L
+            }
+            assertEquals(1, steps)
+            return last!!.deltaFromFloorM
+        }
+        assertTrue("with the real 5 m spacing the user is on the landing", kotlin.math.abs(climb(5.0)) < 0.5)
+        assertTrue("with a flat 4 m the landing looks 1 m higher", climb(null) > 0.7)
+    }
 }

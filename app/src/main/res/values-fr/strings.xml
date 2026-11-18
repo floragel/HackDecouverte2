@@ -245,6 +245,7 @@
     <string name="loc_dev_status">%1$s · %2$d particules · %3$.1f ms/pas · %4$d alertes · pas ×%5$.2f ±%6$.2f · GPS %7$d</string>
     <string name="indoor_title">Pavillon MB</string>
     <string name="indoor_floor">Étage %1$s</string>
+    <string name="indoor_floor_question">Étage %1$s ?</string>
     <string name="indoor_floor_short">Étage</string>
     <string name="indoor_from">Tu es à</string>
     <string name="indoor_from_hint">Choisis la salle à côté de toi</string>

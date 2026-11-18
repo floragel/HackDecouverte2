@@ -32,6 +32,10 @@ class FloorTransitionTracker(
 ) {
     private data class AltSample(val timestampNs: Long, val altitudeM: Double)
 
+    /** Height of the next floor up / down from the current one (the MB lobby is taller than the other floors). */
+    private var stepUpM: Double = floorHeightM
+    private var stepDownM: Double = floorHeightM
+
     private var referencePressureHpa: Double? = null
     private val medianWindow = ArrayDeque<Double>(3)
     private var smoothedAltitudeM: Double? = null
@@ -71,6 +75,15 @@ class FloorTransitionTracker(
         inVerticalTransit = false
         transitVerticalSign = 0
         flatSinceNs = Long.MIN_VALUE
+    }
+
+    /**
+     * Sets the height to the floor above and below the current one. Called by the backend after
+     * every floor change; a missing floor (top or bottom of the building) keeps the default.
+     */
+    fun setFloorSpacing(upM: Double?, downM: Double?) {
+        stepUpM = upM?.takeIf { it.isFinite() && it > 1.0 } ?: floorHeightM
+        stepDownM = downM?.takeIf { it.isFinite() && it > 1.0 } ?: floorHeightM
     }
 
     fun onPressure(
@@ -164,13 +177,13 @@ class FloorTransitionTracker(
         if (effectiveNear || abs(vz) >= ENTER_TRANSIT_VZ_MPS) {
             if (deltaZ >= trigger) {
                 floorStep = 1
-                floorBaselineAltitudeM += floorHeightM
+                floorBaselineAltitudeM += stepUpM
                 deltaZ = smooth - floorBaselineAltitudeM
                 inVerticalTransit = true
                 transitVerticalSign = 1
             } else if (deltaZ <= -trigger) {
                 floorStep = -1
-                floorBaselineAltitudeM -= floorHeightM
+                floorBaselineAltitudeM -= stepDownM
                 deltaZ = smooth - floorBaselineAltitudeM
                 inVerticalTransit = true
                 transitVerticalSign = -1
@@ -192,7 +205,7 @@ class FloorTransitionTracker(
      * `floorBaselineAltitudeM` from winding up past building bounds.
      */
     fun revertRejectedFloorStep(rejectedDelta: Int) {
-        floorBaselineAltitudeM -= rejectedDelta * floorHeightM
+        floorBaselineAltitudeM -= if (rejectedDelta > 0) rejectedDelta * stepUpM else rejectedDelta * stepDownM
     }
 
     companion object {

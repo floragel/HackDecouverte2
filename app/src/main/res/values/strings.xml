@@ -253,6 +253,7 @@
     <string name="loc_dev_status">%1$s · %2$d particles · %3$.1f ms/step · %4$d alarms · step ×%5$.2f ±%6$.2f · GPS %7$d</string>
     <string name="indoor_title">MB building</string>
     <string name="indoor_floor">Floor %1$s</string>
+    <string name="indoor_floor_question">Floor %1$s?</string>
     <string name="indoor_floor_short">Floor</string>
     <string name="indoor_from">You\'re at</string>
     <string name="indoor_from_hint">Pick the room next to you</string>
