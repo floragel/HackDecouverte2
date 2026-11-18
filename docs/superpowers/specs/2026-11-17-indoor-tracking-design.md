@@ -354,6 +354,10 @@ Du cas le plus précis au moins précis :
   4. le rez-de-chaussée.
 - **Affichage :** « Étage N ? » tant que la confiance est sous 90 %, corrigeable d'un tap.
 - **Confiance faible :** les particules se répartissent sur les deux étages les plus probables.
+- **Réalisé (18/11) :** pendant la localisation, le baromètre ne change d'étage que si 15 % du
+  poids est à moins de 7 m d'un escalier ou d'un ascenseur ; les hypothèses proches passent au
+  palier correspondant (même `vertical_group_id`) avec leur angle et leur pas, les autres
+  disparaissent. Les cartes des étages voisins sont construites à l'avance.
 - **Sans baromètre :** chaîne C sans le point 2. Les changements d'étage ne viennent que des
   escaliers ou ascenseurs traversés et des corrections de l'utilisateur.
 
@@ -367,8 +371,21 @@ Du cas le plus précis au moins précis :
 - **Hors de la main :** le cap d'un pas est la moyenne sur un cycle de marche complet (2 pas,
   environ 1 s) au lieu de 150 ms, pour annuler le balancement de la cuisse ou du bras.
 - **Limite :** un téléphone qui change souvent de position ralentit la convergence.
+- **Réalisé (18/11) :** `CarryMonitor` (moyenne sur 1 s de la gravité dans le repère du
+  téléphone ; changement si elle s'écarte de plus de 25°, validé à plus de 35° une fois stable).
+  Raffinement : au lieu de tout réapprendre, le PDR **raccorde** son cap (le corps est supposé ne
+  pas avoir tourné pendant le changement) et le filtre élargit les angles : ±20° pour la plupart,
+  5 % demi-tour, 16 % sur les quatre axes du bâtiment (un virage caché par le changement). La
+  boussole ne sert d'indice que si la session a commencé en position de lecture (écran allumé,
+  téléphone stable en portrait). Pas de capteur de proximité pour l'instant.
 
 ### 6.7 Arrière-plan
+
+**Réalisé (18/11), en partie :** service de premier plan « localisation » démarré dès que la
+localisation tourne (pas seulement pendant un trajet), verrou de veille partiel, GPS en basse
+précision (réseau, 30 s) écran éteint, arrêt seul après 10 min sans pas. La « veille » (API
+Recording) n'est pas faite ; à la place, les dernières zones sont gardées sur le disque et le
+départ suivant (moins de 30 min, même étage, pression inchangée) part de là (§6.4).
 
 **Veille** (aucun trajet en cours) :
 - En passant en arrière-plan, on enregistre sur le disque l'heure, la pression, l'étage et sa

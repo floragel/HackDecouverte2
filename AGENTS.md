@@ -60,16 +60,35 @@ for the complete hackathon app:
   Opt-in: start node + facing picked on the calibration screen; without an
   anchor the local-frame behavior is unchanged. `pdr/` is untouched.
 - Sensor timestamps (`SensorEvent.timestamp` = `SystemClock.elapsedRealtimeNanos`,
-  CLOCK_BOOTTIME) are the truth; delayed events are matched against a 2.5 s
+  CLOCK_BOOTTIME) are the truth; delayed events are matched against a 4 s
   orientation buffer, not their arrival time. The whole app injects that same
   clock into `PdrTracker`/`FallbackStepDetector` — never `System.nanoTime`.
 
+## Map localization mode (debug app home)
+
+- Any hold: heading = phone twist about the vertical for every attitude but
+  screen-down; `pdr/CarryMonitor` classifies STEADY / SWINGING (stride-averaged
+  heading, no shake filter) and bridges hold changes (heading kept continuous,
+  the filter widens its phone→walking angles). Outside localization mode the
+  phone must be held flat, as before.
+- Background: `sensor/TrackingService` (location foreground service + partial
+  wake lock) keeps the engine running screen off / in a pocket; GPS goes low
+  power, tracking stops after 10 min without a step. Without the location
+  permission the old foreground-only behaviour applies (and the trace resumes
+  by itself).
+- Stride memory (`backend/StrideMemory`), warm start from the last zones
+  (≤ 30 min), step-counter reconciliation (`pdr/StepReconciler`) and floor
+  changes that carry hypotheses through stairs / lifts.
+
 ## Limitations
 
-- Foreground only: `onStop` pauses tracking / cancels calibration and clears the
+- Outside the tracking service: `onStop` pauses tracking / cancels calibration and clears the
   orientation buffer; resume requires the explicit "Reprendre (nouveau trajet)"
   action plus a fresh valid heading (sensor re-registration resets the reference
-  frame, so traces are never connected across registrations).
+  frame, so traces are never connected across registrations). Map localization
+  resumes by itself and widens its phone angles instead.
+- A phone spun about the vertical in the hand (no change of "up") looks like a
+  body turn: undetectable from attitude alone.
 - Step length is a scalar in [0.2, 1.5] m; calibration needs an actual 5 m walk.
 - Accelerometer fallback thresholds (1.0 m/s² crossing, 0.3 rearm, 330 ms refractory,
   500 ms warm-up) are experimental, no latency guarantee.
