@@ -131,12 +131,13 @@ internal object SyntheticWalk {
         }
     }
 
-    fun walk(origin: GeoOrigin, siteId: String, floorId: String, start: PointM, legs: List<Leg>, stepM: Double = 0.7, gpsCenter: PointM? = null): Walk =
-        Walk(record(origin, siteId, floorId, start, legs, stepM, gpsCenter), start, legs, stepM)
+    fun walk(origin: GeoOrigin, siteId: String, floorId: String, start: PointM, legs: List<Leg>, stepM: Double = 0.7, gpsCenter: PointM? = null, gyroDriftDegPerMin: Double = 0.0): Walk =
+        Walk(record(origin, siteId, floorId, start, legs, stepM, gpsCenter, gyroDriftDegPerMin = gyroDriftDegPerMin), start, legs, stepM)
 
-    fun stanislasBackAndForthWalk(origin: GeoOrigin): Walk = walk(
+    fun stanislasBackAndForthWalk(origin: GeoOrigin, gyroDriftDegPerMin: Double = 0.0): Walk = walk(
         origin, "STAN", "STAN-1", PointM(10.6, -10.6),
-        listOf(Leg(-45.0, 44), Leg(135.0, 41), Leg(-45.0, 41), Leg(135.0, 41)), gpsCenter = PointM(3.0, -1.0)
+        listOf(Leg(-45.0, 44), Leg(135.0, 41), Leg(-45.0, 41), Leg(135.0, 41)), gpsCenter = PointM(3.0, -1.0),
+        gyroDriftDegPerMin = gyroDriftDegPerMin
     )
 
     /** Starts inside the room at the north-west end (as the first real walk), out through its door, then down the corridor. */

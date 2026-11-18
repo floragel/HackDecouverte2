@@ -104,8 +104,8 @@ object WalkEval {
 
     fun pdrRun(ds: Dataset, tuning: TuningParams): PdrRun = pdrRun(ds.recording, tuning)
 
-    fun pdr(ds: Dataset, tuning: TuningParams): PdrMetrics {
-        val run = pdrRun(ds, tuning)
+    fun pdr(ds: Dataset, tuning: TuningParams, corridorAssist: Boolean = true): PdrMetrics {
+        val run = pdrRun(ds.recording, tuning, corridorAssist)
         val pts = listOf(PointM(0.0, 0.0)) + run.steps.map { it.second }
         val (dtw, rotDeg, k) = TruthEval.score(pts, ds.route.path)
         val routeLen = ds.route.path.zipWithNext().sumOf { (a, b) -> a.distanceTo(b) }
