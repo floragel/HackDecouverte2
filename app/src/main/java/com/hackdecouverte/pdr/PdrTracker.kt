@@ -47,6 +47,14 @@ class PdrTracker(
             orientation.anyHold = value
         }
 
+    /** Tuning switches (replay experiments): slow compass pull of the heading, hold-change bridging. */
+    var compassPullEnabled: Boolean = true
+    /** Pivot shrink (stride-averaged heading only): from this turn rate, down to [pivotMinScale] over [pivotFullRateSpanRadS]. */
+    var pivotTurnRateRadS: Double = 99.0
+    var pivotFullRateSpanRadS: Double = 1.0
+    var pivotMinScale: Double = 0.2
+    var holdBridgingEnabled: Boolean = true
+
     /** Screen on/off (set by the app): a phone with its screen off is not in a reading pose. */
     var screenInteractive: Boolean
         get() = carry.screenInteractive
@@ -116,8 +124,98 @@ class PdrTracker(
 
     fun onRotationVector(timestampNs: Long, values: FloatArray, size: Int = values.size) {
         orientation.onRotationVector(timestampNs, values, size)
-        rotationMatrixFromVector(values, size)?.let { carry.onRotation(timestampNs, it) }
+        rotationMatrixFromVector(values, size)?.let {
+            carry.onRotation(timestampNs, it)
+            lastRotation = it
+        }
         publish()
+    }
+
+    private var lastRotation: DoubleArray? = null
+    /** World-frame horizontal linear acceleration (east, north in the game frame), last few seconds. */
+    private val horizontalAcc = ArrayDeque<Triple<Long, Double, Double>>()
+
+    /**
+     * Linear acceleration in the phone frame (m/s²): rotated to the world with the latest game
+     * rotation and kept for the walking axis (see [walkAxisOffset]).
+     */
+    fun onLinearAcceleration(timestampNs: Long, ax: Double, ay: Double, az: Double) {
+        val r = lastRotation ?: return
+        horizontalAcc.addLast(Triple(timestampNs, r[0] * ax + r[1] * ay + r[2] * az, r[3] * ax + r[4] * ay + r[5] * az))
+        while (horizontalAcc.isNotEmpty() && horizontalAcc.first().first < timestampNs - 4_000_000_000L) horizontalAcc.removeFirst()
+    }
+
+    /**
+     * A phone in a pocket shifts a little at every stride and its heading (twist about the vertical)
+     * moves with it, while the walking direction does not. The walking axis is the main axis of the
+     * horizontal acceleration over a stride (body frame, mod 180°); the offset phone heading − walking
+     * axis is followed slowly (≈ [walkAxisTau] strides) and its drift since the hold settled is removed
+     * from the heading. Pure body-carry mode only (stride-averaged heading). **Off by default:** on the
+     * first real loop (2 min in a pocket) it only moved the gap from 15.7 % to 15.0 % of the distance (an
+     * apparent 4 % in a prototype came from 180° flips of the unwrapped axis); to be judged on more loops.
+     */
+    var walkAxisCorrectionEnabled: Boolean = false
+    var walkAxisTau: Double = 4.0
+    var walkAxisMinRatio: Double = 2.0
+    private var axisOffX = 0.0
+    private var axisOffY = 0.0
+    private var axisOffset: Double? = null
+    private var axisOffsetRef: Double? = null
+
+    private fun resetWalkAxis() {
+        axisOffset = null
+        axisOffsetRef = null
+    }
+
+    /** Main axis (clockwise from north, mod 180°) of the horizontal acceleration in [from, to] and its eigenvalue ratio. */
+    private fun walkAxis(from: Long, to: Long): Pair<Double, Double>? {
+        var n = 0
+        var mx = 0.0
+        var my = 0.0
+        for ((t, x, y) in horizontalAcc) if (t in from..to) { mx += x; my += y; n++ }
+        if (n < 15) return null
+        mx /= n; my /= n
+        var sxx = 0.0
+        var syy = 0.0
+        var sxy = 0.0
+        for ((t, x, y) in horizontalAcc) if (t in from..to) {
+            sxx += (x - mx) * (x - mx); syy += (y - my) * (y - my); sxy += (x - mx) * (y - my)
+        }
+        val d = kotlin.math.sqrt(((sxx - syy) / 2) * ((sxx - syy) / 2) + sxy * sxy)
+        val l1 = (sxx + syy) / 2 + d
+        val l2 = (sxx + syy) / 2 - d
+        return (PI / 2 - 0.5 * kotlin.math.atan2(2 * sxy, sxx - syy)) to l1 / maxOf(l2, 1e-9)
+    }
+
+    /** Drift of the phone→walking offset since it was first measured in this hold (0 until then). */
+    private fun walkAxisOffset(timestampNs: Long, phoneHeading: Double, strideNs: Long): Double {
+        if (!walkAxisCorrectionEnabled || !swinging) return 0.0
+        val (axis, ratio) = walkAxis(timestampNs - strideNs, timestampNs) ?: return currentAxisDrift()
+        if (ratio < walkAxisMinRatio) return currentAxisDrift()
+        val d2 = wrapAnglePi(2 * (phoneHeading - axis))
+        val prev = axisOffset
+        if (prev == null) {
+            axisOffX = kotlin.math.cos(d2); axisOffY = kotlin.math.sin(d2)
+        } else {
+            val k = 1.0 / walkAxisTau
+            axisOffX = (1 - k) * axisOffX + k * kotlin.math.cos(d2)
+            axisOffY = (1 - k) * axisOffY + k * kotlin.math.sin(d2)
+        }
+        var half = kotlin.math.atan2(axisOffY, axisOffX) / 2
+        // The offset is only known mod 180°: stay on the branch nearest to the previous value.
+        if (prev != null) {
+            while (half - prev > PI / 2) half -= PI
+            while (prev - half > PI / 2) half += PI
+        }
+        axisOffset = half
+        if (axisOffsetRef == null) axisOffsetRef = half
+        return currentAxisDrift()
+    }
+
+    private fun currentAxisDrift(): Double {
+        val o = axisOffset ?: return 0.0
+        val r = axisOffsetRef ?: return 0.0
+        return o - r
     }
 
     private var recoveredSteps = 0
@@ -149,10 +247,11 @@ class PdrTracker(
 
     /** A new hold has settled: keep the heading continuous (the body is assumed not to have turned meanwhile). */
     private fun onHoldChanged(@Suppress("UNUSED_PARAMETER") tNs: Long, deltaTwistRad: Double) {
-        if (!anyHoldHeading) return
+        if (!anyHoldHeading || !holdBridgingEnabled) return
         alignmentPending = false // the pose at the start is gone: whatever was decided stays
         holdOffsetRad = wrapAnglePi(holdOffsetRad + deltaTwistRad)
         bridgedHoldChanges++
+        resetWalkAxis() // the new hold has its own phone→walking offset
         recentStepYaws.clear() // the raw phone heading jumped: straightness starts over
     }
 
@@ -164,10 +263,7 @@ class PdrTracker(
     private val swinging: Boolean
         get() = anyHoldHeading && (carry.mode == CarryMode.SWINGING || !carry.readingPose)
 
-    /**
-     * Step-length correction when the step detector counts more steps than the step counter
-     * (a real pocket walk: +25 %, doubled steps): counter / detector, from [StepReconciler].
-     */
+    /** Step-length multiplier (tuning; 1 = none). The detector/counter disagreement turned out to be pivots, not doubled steps. */
     var stepCountScale: Double = 1.0
 
     /** One stride (2 steps) from the recent cadence, for averaging a rocking phone's heading. */
@@ -192,6 +288,7 @@ class PdrTracker(
 
     /** A new reference heading: hold bridging starts over from the current hold. */
     private fun onNewReference() {
+        resetWalkAxis()
         holdOffsetRad = 0.0
         lastTheta = null
         alignmentPending = anyHoldHeading && carry.up == null
@@ -428,9 +525,10 @@ class PdrTracker(
         val straight = updateStraightness(mean, turnRate)
         // While the phone is being moved to a new hold its heading means nothing: keep the last one.
         val frozen = lastTheta?.takeIf { anyHoldHeading && carry.inTransition }
-        var theta = frozen ?: wrapAnglePi(mean - reference - holdOffsetRad)
+        val axisDrift = if (frozen == null) walkAxisOffset(timestampNs, mean, strideWindowNs()) else 0.0
+        var theta = frozen ?: wrapAnglePi(mean - reference - holdOffsetRad - axisDrift)
 
-        if (useTrueNorthReference && straight && pendingTrueNorthDriftRad != 0.0) {
+        if (useTrueNorthReference && compassPullEnabled && straight && pendingTrueNorthDriftRad != 0.0) {
             reference = wrapAnglePi(reference + pendingTrueNorthDriftRad)
             referenceYaw = reference
             theta = wrapAnglePi(theta - pendingTrueNorthDriftRad)
@@ -460,10 +558,13 @@ class PdrTracker(
             }
             return true
         }
-        val turnScale = if (corridorAssistEnabled && turnRate > 1.2) {
-            (1.0 - (turnRate - 1.2) / 2.0).coerceIn(0.2, 1.0)
-        } else {
-            1.0
+        val turnScale = when {
+            // Pivoting on the spot (to dodge someone, to turn back) fires the step detector while the body
+            // barely moves: with a stride-averaged heading, steps under a fast turn shrink (tunable).
+            swinging && turnRate > pivotTurnRateRadS ->
+                (1.0 - (turnRate - pivotTurnRateRadS) / pivotFullRateSpanRadS).coerceIn(pivotMinScale, 1.0)
+            corridorAssistEnabled && turnRate > 1.2 -> (1.0 - (turnRate - 1.2) / 2.0).coerceIn(0.2, 1.0)
+            else -> 1.0
         }
         val effectiveLength = dynamicLength * turnScale
         val previous = position
