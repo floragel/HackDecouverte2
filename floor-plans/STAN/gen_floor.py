@@ -15,7 +15,9 @@ import json
 import math
 import os
 
-SCALE = 35.0                 # px per metre: corridor ≈ 3.4 m, classrooms ≈ 10 × 7.7 m
+# px per metre, from the corridor measured on site (18/11): 3.02 m wall to wall (119 in), i.e.
+# (Y_CS − Y_CN) / SCALE − INT = 3.02 → SCALE = 120 / 3.17. (First estimate from the photo: 35.)
+SCALE = 120.0 / 3.17         # ≈ 37.85: corridor 3.02 m clear, classrooms ≈ 9.2 × 7.1 m
 ORIGIN_PX = (870.0, 575.0)   # (0, 0) = middle of the main corridor
 # On Earth (0, 0) = 45.51805395604281, -73.61554355694975 (IndoorSite.STANISLAS, picked on a map)
 # North arrow on the plan points to the lower right: the photo's "right" faces 315° (north-west).
@@ -23,7 +25,7 @@ RIGHT_BEARING_DEG = 315.0
 
 EXT = 0.30                   # exterior wall thickness (m)
 INT = 0.15                   # interior wall thickness (m)
-DOOR = 0.95                  # door opening (m)
+DOOR = 0.91                  # door opening (m), measured on site: 36 in
 
 # ---- geometry, photo pixels (x right, y down) ----
 X_W, X_E = 160, 1590         # west / east facade

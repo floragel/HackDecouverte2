@@ -7,5 +7,6 @@
   "doorWidthSource": "36 in, porte de salle",
   "obstacles": "aucun dans le couloir",
   "stairs": "E-M-S et E-M-N bien placés sur la carte",
-  "todo": "longueur du couloir E-M-S -> E-M-N (tranche la question de l'échelle : la largeur dessinée suggère une carte ~8 % trop grande)"
+  "scaleApplied": "SCALE 35 -> 37.85 px/m (x0.925) depuis la largeur du couloir, le 18/11",
+  "todo": "longueur du couloir E-M-S -> E-M-N pour confirmer l'échelle"
 }

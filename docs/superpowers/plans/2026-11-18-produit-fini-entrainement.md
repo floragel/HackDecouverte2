@@ -30,12 +30,12 @@
 
 ## État de départ (mesuré le 18/11 sur la marche réelle `STAN-1_20261118-150346`)
 
-Marche avec un Pixel 9, en boucle, 139 s, téléphone en poche et écran éteint. Le trajet a été tracé dans `recordings/STAN-1_20261118-150346.truth.json` (81 m).
+Marche avec un Pixel 9, en boucle, 139 s, téléphone en poche et écran éteint. Le trajet a été tracé dans `recordings/STAN-1_20261118-150346.truth.json` (75 m depuis la mise à l'échelle du plan, voir plus bas).
 
 **Le PDR** (commit `16671d3`) :
-- distance moyenne (DTW) au trajet réel 1,78 m ;
+- distance moyenne (DTW) au trajet réel 1,64 m ;
 - écart de fermeture de la boucle 6,4 % ;
-- 91 m comptés pour 81 m réels.
+- 91 m comptés pour 75 m réels. Le filtre apprend ×0,82, ce qui colle au rapport réel.
 
 **Le filtre ne te trouve jamais à froid,** et **il te perd même avec le départ connu.** Placé à 1 m de la vérité, il reste en RECHERCHE environ 100 % des pas et finit à 19–25 m (3 tirages au hasard, 3 à 5 alarmes). C'est le problème n° 1.
 
@@ -46,6 +46,8 @@ Marche avec un Pixel 9, en boucle, 139 s, téléphone en poche et écran éteint
 - le cap en poche varie de ±13–20° dans une même foulée.
 
 **Les cartes** se construisent en 0,18 s (STAN-1) et 0,41 s (MB-2) sur la JVM, et en 39–49 s sur l'émulateur. Le temps sur un vrai téléphone n'est pas mesuré.
+
+**L'échelle du plan du collège est corrigée** (commit qui suit `aec2215`). La largeur du couloir a été mesurée sur place (3,02 m mur à mur) et les portes font 0,91 m : l'échelle passe de 35 à 37,85 px/m, soit ×0,925 sur tout le plan, et le tracé de la marche a été mis à la même échelle. La longueur du couloir (escalier sud → nord) reste à mesurer pour confirmer, et la tâche D1 la teste.
 
 **La base de code :**
 - branche `lync-algorythme`, 207 tests ;
@@ -433,7 +435,7 @@ object WalkEval {
 @Test fun aCorrectCloudWithPocketNoiseReachesFound() // L corridor, known start, heading noise σ 8°, headingNoiseScale 2 → FOUND within 30 steps
 @Test fun aSymmetricCorridorNeverClaimsFound()       // straight corridor, unknown start, no compass: never FOUND in 40 steps
 @Test fun coldStartInsideARoomIsFoundAfterLeavingIt() {
-    // SyntheticWalk on STAN-1 starting inside the room at (-17.8, 8.5), out through its door, along the corridor to the SE end:
+    // SyntheticWalk on STAN-1 starting inside the room at (-16.5, 7.9), out through its door, along the corridor to the SE end:
     // COLD_NO_GPS seed 1..3 → correct FOUND (≤ 5 m) before the end in ≥ 2 of 3 seeds; no false FOUND.
 }
 ```
@@ -494,7 +496,7 @@ object WalkEval {
 ```
 
 - [ ] **Step 2: Fails** → **Step 3: Implement.** Ajouter `SyntheticWalk.record(gyroDriftDegPerMin, compassOffsetDeg(t), fieldMicroTesla(t))` pour les deux tests.
-- [ ] **Step 4: Passes** + `… --tests '*PdrLoopTuningTest*'` : sur la vraie marche, l'écart au trajet ne doit pas dépasser 1,78 m + 0,2 m.
+- [ ] **Step 4: Passes** + `… --tests '*PdrLoopTuningTest*'` : sur la vraie marche, l'écart au trajet ne doit pas dépasser 1,64 m + 0,2 m.
 - [ ] **Step 5: Commit + push** — `"pdr: compass pull gated by the field magnitude (steel, magnets)"`.
 
 ---

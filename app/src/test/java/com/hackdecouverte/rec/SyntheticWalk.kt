@@ -94,8 +94,8 @@ internal object SyntheticWalk {
     /** About 2 min up and down the college corridor (four legs), markers at both ends: for the analysis. */
     fun stanislasBackAndForth(origin: GeoOrigin): Recording = record(
         origin, "STAN", "STAN-1",
-        start = PointM(11.5, -11.5),
-        legs = listOf(Leg(-45.0, 48), Leg(135.0, 44), Leg(-45.0, 44), Leg(135.0, 44)),
+        start = PointM(10.6, -10.6), // map rescaled ×0.925 on 18/11 (corridor measured 3.02 m wide)
+        legs = listOf(Leg(-45.0, 44), Leg(135.0, 41), Leg(-45.0, 41), Leg(135.0, 41)),
         gpsCenter = PointM(3.0, -1.0)
     )
 
