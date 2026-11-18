@@ -43,7 +43,10 @@ data class RecordingHeader(
     val declinationDeg: Double,
     val sensors: List<SensorInfo> = emptyList(),
     val wifiRttSupported: Boolean = false,
-    val note: String = ""
+    val note: String = "",
+    /** Stride-scale prior of the live search (narrowed by the stride memory); the replay uses the same. */
+    val strideScaleMin: Double? = null,
+    val strideScaleMax: Double? = null
 ) {
     companion object {
         const val FORMAT = "hackdecouverte-walk"

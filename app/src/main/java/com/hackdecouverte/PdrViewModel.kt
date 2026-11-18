@@ -29,11 +29,16 @@ class PdrViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectSite(site: IndoorSite) {
         if (site == backend.site) return
-        backend.onBackground()
+        backend.shutdown()
         engineScope.cancel()
         engineScope = newEngineScope()
         prefs.edit().putString(KEY_SITE, site.id).apply()
         _backend.value = IndoorNavigationBackend(getApplication(), engineScope, site)
+    }
+
+    override fun onCleared() {
+        backend.shutdown()
+        super.onCleared()
     }
 
     private fun newEngineScope() =

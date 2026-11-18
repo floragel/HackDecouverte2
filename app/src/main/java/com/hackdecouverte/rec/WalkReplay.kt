@@ -93,7 +93,11 @@ class WalkReplay(
         router.magneticDeclinationDeg = h.declinationDeg
         if (source == StepSource.FALLBACK) router.fallback.start(h.startedNs)
 
-        val controller = LocalizationController(mapProvider, Random(seed), params)
+        val prior = params.copy(
+            strideScaleMin = h.strideScaleMin ?: params.strideScaleMin,
+            strideScaleMax = h.strideScaleMax ?: params.strideScaleMax
+        )
+        val controller = LocalizationController(mapProvider, Random(seed), prior)
 
         val steps = ArrayList<ReplayStep>()
         val gpsPoints = ArrayList<Pair<PointM, Double>>()

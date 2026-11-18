@@ -11,6 +11,9 @@ import android.os.SystemClock
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.hackdecouverte.loc.LocParams
+import com.hackdecouverte.loc.LocZone
+import com.hackdecouverte.loc.LocState
 import com.hackdecouverte.map.BuildingGraph
 import com.hackdecouverte.map.IndoorSite
 import com.hackdecouverte.map.IndoorMap
@@ -42,10 +45,12 @@ import com.hackdecouverte.pdr.wrapAnglePi
 import com.hackdecouverte.rec.RecEvent
 import com.hackdecouverte.rec.RecordingHeader
 import com.hackdecouverte.sensor.RecorderStatus
+import com.hackdecouverte.sensor.TrackingService
 import com.hackdecouverte.sensor.WalkRecorder
 import com.hackdecouverte.sensor.GpsFix
 import com.hackdecouverte.sensor.GpsLocationSource
 import com.hackdecouverte.sensor.PdrSensorAdapter
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
@@ -132,7 +137,9 @@ data class NavigationSnapshot(
     val localizationTrace: List<PointM> = emptyList(),
     /** GPS disk of the search: centre and radius (max(2 × accuracy, 30 m)), null without a usable fix. */
     val localizationSystemCircle: Pair<PointM, Double>? = null,
-    val localizationDebug: LocDebug? = null
+    val localizationDebug: LocDebug? = null,
+    /** Tracking survives the screen turning off (tracking service running). */
+    val backgroundTracking: Boolean = false
 )
 
 class IndoorNavigationBackend(
@@ -202,6 +209,15 @@ class IndoorNavigationBackend(
         } else {
             null
         }
+
+    /** Step length learned by the map in earlier sessions (Zee, progressive): starts the PDR, narrows the stride prior. */
+    private var strideMemory = StrideMemory(
+        prefs.getFloat(KEY_LEARNED_STEP, Float.NaN).toDouble().takeIf { it.isFinite() },
+        prefs.getInt(KEY_STRIDE_SESSIONS, 0)
+    )
+    private var foundSteps = 0
+    private var learnedInRun = false
+    private var lastLearnFoundSteps = 0
 
     private var geoOrigin: GeoOrigin = site.origin
     private var osmSurroundings: OsmSurroundings? = null
@@ -293,12 +309,14 @@ class IndoorNavigationBackend(
             }
         }
         loadVectorPlansInBackground()
+        scope.launch { idleWatchdog() }
 
         scope.launch {
             var lastLoggedSteps = -1
             tracker.state.collect { pdrState ->
                 if (pdrState.stepCount != lastLoggedSteps) {
                     lastLoggedSteps = pdrState.stepCount
+                    lastStepElapsedNs = SystemClock.elapsedRealtimeNanos()
                     Log.d(
                         LOG_TAG,
                         "step=${pdrState.stepCount} pos=(%.2f, %.2f) dist=%.1f held=${tracker.heldStepCount} transit=$inVerticalTransit dz=%.2f floor=$userFloorId"
@@ -311,7 +329,17 @@ class IndoorNavigationBackend(
                     if (LocalizationController.shouldAutoStartPdr(pdrState, SystemClock.elapsedRealtimeNanos() - localizationEnabledAtNs)) {
                         startWithSavedOrDefaultStepLength()
                     }
+                    // Back from a pause (no tracking service): carry on by itself, the filter keeps its hypotheses.
+                    if (pdrState.phase == PdrPhase.PAUSED && pdrState.headingValid && !pdrState.tilted &&
+                        (pdrState.trueNorthAligned || SystemClock.elapsedRealtimeNanos() - foregroundAtNs >= LocalizationController.COMPASS_WAIT_NS)
+                    ) {
+                        resumeFromPause()
+                    }
                     localization.onPdrState(pdrState)
+                    if (pdrState.stepCount != lastLocalizedStep) {
+                        lastLocalizedStep = pdrState.stepCount
+                        onLocalizedStep(pdrState)
+                    }
                     if (recorderStatus.value.recording && pdrState.stepCount != lastLoggedLiveStep) {
                         lastLoggedLiveStep = pdrState.stepCount
                         recordLive(pdrState)
@@ -320,6 +348,20 @@ class IndoorNavigationBackend(
                     matchJunction(pdrState)
                 }
                 _state.value = buildSnapshot(pdrState)
+            }
+        }
+    }
+
+    /** Background tracking nobody uses (phone left on a desk, forgotten in a bag) stops by itself. */
+    private suspend fun idleWatchdog() {
+        while (true) {
+            delay(30_000L)
+            if (inBackground && backgroundTracking &&
+                SystemClock.elapsedRealtimeNanos() - lastStepElapsedNs > IDLE_STOP_NS
+            ) {
+                Log.d(LOG_TAG, "no step for 10 min in the background: tracking stops")
+                recorder.note("idle_stop", "")
+                stopBackgroundTracking()
             }
         }
     }
@@ -558,7 +600,7 @@ class IndoorNavigationBackend(
     }
 
     fun startWithSavedOrDefaultStepLength(defaultM: Double = DEFAULT_STEP_LENGTH_M): Boolean {
-        val len = savedStepLengthM ?: defaultM
+        val len = strideMemory.learnedStepM ?: savedStepLengthM ?: defaultM
         return startWithStepLength(len)
     }
 
@@ -632,18 +674,51 @@ class IndoorNavigationBackend(
         if (tracker.setStepSource(source)) refreshSensorRegistrations()
     }
 
+    /** The tracking service keeps this engine running with the screen off (localization mode, location allowed). */
+    private var backgroundTracking = false
+    /** The screen is off or the app is hidden while [backgroundTracking] keeps the sensors running. */
+    private var inBackground = false
+    private var lastStepElapsedNs = SystemClock.elapsedRealtimeNanos()
+    private var foregroundAtNs = SystemClock.elapsedRealtimeNanos()
+    private var lastLocalizedStep = -1
+
     fun onForeground() {
+        if (inBackground) {
+            // The sensors never stopped (tracking service): the same trace simply goes on.
+            inBackground = false
+            gpsSource.lowPower = false
+            locationPermissionGranted = gpsSource.hasLocationPermission()
+            recorder.note("foreground", "")
+            _state.value = buildSnapshot(tracker.state.value)
+            return
+        }
         permissionGranted = checkActivityPermission()
         locationPermissionGranted = gpsSource.hasLocationPermission()
+        foregroundAtNs = SystemClock.elapsedRealtimeNanos()
         pushSensorStatus()
         ensureUsableStepSource()
         tracker.onSensorFrameRestart()
         adapter.start()
         gpsSource.start()
+        updateTrackingService()
         _state.value = buildSnapshot(tracker.state.value)
     }
 
     fun onBackground() {
+        if (backgroundTracking && localizationEnabled) {
+            // Screen off / phone in a pocket: keep tracking (and recording), GPS on low power.
+            inBackground = true
+            gpsSource.lowPower = true
+            recorder.note("background", "tracking continues")
+            return
+        }
+        pauseEverything()
+    }
+
+    /** The old foreground-only behaviour: stop the sensors, pause the trace, close any recording. */
+    private fun pauseEverything() {
+        inBackground = false
+        saveLastZones()
         if (recorder.status.value.recording) {
             recorder.note("background", "app left the foreground")
             recorder.stop()
@@ -655,6 +730,38 @@ class IndoorNavigationBackend(
         gpsSource.stop()
         adapter.stop()
         tracker.pause()
+    }
+
+    /** Starts or stops the tracking service to match: localization on and the location permission granted. */
+    private fun updateTrackingService() {
+        val want = localizationEnabled && locationPermissionGranted
+        if (want && !backgroundTracking) {
+            TrackingService.onStopRequested = { scope.launch { stopBackgroundTracking() } }
+            TrackingService.start(appContext, "${site.name} · localisation active")
+            backgroundTracking = true
+        } else if (!want && backgroundTracking) {
+            TrackingService.stop(appContext)
+            backgroundTracking = false
+        }
+    }
+
+    /** "Arrêter" in the notification, or nobody walked for [IDLE_STOP_NS] in the background. */
+    fun stopBackgroundTracking() {
+        if (!backgroundTracking) return
+        TrackingService.stop(appContext)
+        backgroundTracking = false
+        if (inBackground) pauseEverything()
+        _state.value = buildSnapshot(tracker.state.value)
+    }
+
+    /** The engine is discarded (other building, app closed): stop everything for good. */
+    fun shutdown() {
+        pauseEverything()
+        if (backgroundTracking) {
+            TrackingService.stop(appContext)
+            backgroundTracking = false
+        }
+        runCatching { appContext.unregisterReceiver(screenReceiver) }
     }
 
     fun onActivityPermissionResult(granted: Boolean) {
@@ -672,6 +779,7 @@ class IndoorNavigationBackend(
         if (locationPermissionGranted) {
             gpsSource.start()
         }
+        updateTrackingService()
         _state.value = buildSnapshot(tracker.state.value)
     }
 
@@ -819,9 +927,11 @@ class IndoorNavigationBackend(
      */
     fun startRecording(): Boolean {
         val floorId = userFloorId ?: return false
-        if (localizationEnabled && localization.floorId == floorId) localization.start(floorId, freshSystemFix())
+        // A measured walk starts cold (no warm start), exactly like its replay.
+        if (localizationEnabled && localization.floorId == floorId) beginSearch(floorId, allowWarm = false)
         val s = tracker.state.value
-        val len = savedStepLengthM ?: DEFAULT_STEP_LENGTH_M
+        val len = strideMemory.learnedStepM ?: savedStepLengthM ?: DEFAULT_STEP_LENGTH_M
+        val prior = localization.params
         val header = RecordingHeader(
             siteId = site.id,
             floorId = floorId,
@@ -830,8 +940,10 @@ class IndoorNavigationBackend(
             appVersion = runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).versionName }.getOrNull().orEmpty(),
             stepSource = s.stepSource.name,
             stepLengthM = len,
-            cadenceHz = savedCadenceHz?.takeIf { savedStepLengthM != null },
-            declinationDeg = adapter.magneticDeclinationDeg
+            cadenceHz = savedCadenceHz?.takeIf { savedStepLengthM != null && strideMemory.learnedStepM == null },
+            declinationDeg = adapter.magneticDeclinationDeg,
+            strideScaleMin = prior.strideScaleMin,
+            strideScaleMax = prior.strideScaleMax
         )
         val ok = recorder.start(header, listOfNotNull(latestGpsFix?.toRecEvent()))
         if (ok) {
@@ -854,6 +966,69 @@ class IndoorNavigationBackend(
     fun recordings(): List<java.io.File> = recorder.recordings()
 
     private var lastLoggedLiveStep = -1
+
+    /**
+     * Starts a search on [floorId]: stride prior from [strideMemory], GPS disk if fresh, and, when
+     * [allowWarm], the zones where the last search ended (≤ 30 min ago, same building and floor).
+     */
+    private fun beginSearch(floorId: String, allowWarm: Boolean) {
+        val (lo, hi) = strideMemory.prior(tracker.state.value.lengthPerStepM ?: strideMemory.learnedStepM)
+        localization.params = LocParams(strideScaleMin = lo, strideScaleMax = hi)
+        localization.start(floorId, freshSystemFix(), if (allowWarm) loadWarmStart(floorId) else null)
+        foundSteps = 0
+        learnedInRun = false
+        lastLearnFoundSteps = 0
+    }
+
+    /** One more PDR step under map localization: stride learning and the last zones for the next warm start. */
+    private fun onLocalizedStep(s: PdrState) {
+        val est = localization.estimate ?: return
+        val d = localization.debug ?: return
+        foundSteps = if (est.state == LocState.FOUND) foundSteps + 1 else 0
+        if (est.state != LocState.SEARCHING && s.stepCount % 10 == 0) saveLastZones()
+        val l0 = s.lengthPerStepM ?: return
+        val due = if (!learnedInRun) foundSteps >= StrideMemory.FOUND_STEPS_TO_LEARN
+        else foundSteps - lastLearnFoundSteps >= StrideMemory.RELEARN_EVERY_STEPS
+        if (!due || d.strideSpread > StrideMemory.MAX_SPREAD) return
+        strideMemory = strideMemory.learn(l0, d.strideScale, newRun = !learnedInRun)
+        learnedInRun = true
+        lastLearnFoundSteps = foundSteps
+        prefs.edit()
+            .putFloat(KEY_LEARNED_STEP, strideMemory.learnedStepM!!.toFloat())
+            .putInt(KEY_STRIDE_SESSIONS, strideMemory.sessions)
+            .apply()
+        recorder.note("stride_learned", "%.3f m, sessions %d".format(Locale.ROOT, strideMemory.learnedStepM, strideMemory.sessions))
+        Log.d(LOG_TAG, "stride learned: ${strideMemory.learnedStepM} m (${strideMemory.sessions} sessions)")
+    }
+
+    /** Where the search stands (not while SEARCHING): building, floor, top 3 zones, time and pressure. */
+    private fun saveLastZones() {
+        val est = localization.estimate ?: return
+        val floor = localization.floorId ?: return
+        if (est.state == LocState.SEARCHING || est.zones.isEmpty()) return
+        prefs.edit()
+            .putString(KEY_LAST_SITE, site.id)
+            .putString(KEY_LAST_FLOOR, floor)
+            .putString(KEY_LAST_ZONES, est.zones.take(3).joinToString(";") { "${it.centerM.x},${it.centerM.y},${it.radiusM},${it.weight}" })
+            .putLong(KEY_LAST_WALL_MS, System.currentTimeMillis())
+            .putFloat(KEY_LAST_HPA, latestPressureHpa?.toFloat() ?: Float.NaN)
+            .apply()
+    }
+
+    /** The last zones if they are on this building and floor, recent, and the pressure says the floor did not change. */
+    private fun loadWarmStart(floorId: String): WarmStart? {
+        if (prefs.getString(KEY_LAST_SITE, null) != site.id || prefs.getString(KEY_LAST_FLOOR, null) != floorId) return null
+        val ageS = (System.currentTimeMillis() - prefs.getLong(KEY_LAST_WALL_MS, 0L)) / 1000.0
+        if (LocalizationController.warmShare(ageS) <= 0.0) return null
+        val thenHpa = prefs.getFloat(KEY_LAST_HPA, Float.NaN).toDouble()
+        val nowHpa = latestPressureHpa
+        if (thenHpa.isFinite() && nowHpa != null && abs(nowHpa - thenHpa) > WARM_MAX_PRESSURE_DELTA_HPA) return null
+        val zones = prefs.getString(KEY_LAST_ZONES, null)?.split(';')?.mapNotNull { z ->
+            val v = z.split(',').mapNotNull(String::toDoubleOrNull)
+            if (v.size == 4) LocZone(PointM(v[0], v[1]), v[2], v[3], 0.0) else null
+        }.orEmpty()
+        return if (zones.isEmpty()) null else WarmStart(zones, ageS)
+    }
 
     private fun recordLive(s: PdrState) {
         val est = localization.estimate
@@ -888,6 +1063,7 @@ class IndoorNavigationBackend(
             localization.stop()
             localizationStartingFor = null
         }
+        updateTrackingService()
         recomputeAnchor()
         _state.value = buildSnapshot(tracker.state.value)
     }
@@ -903,7 +1079,7 @@ class IndoorNavigationBackend(
             Log.d(LOG_TAG, "map localization: map of $floorId built in ${SystemClock.elapsedRealtime() - t0} ms")
             if (!ok) Log.w(LOG_TAG, "map localization unavailable: ${localization.lastError}")
             Log.d(LOG_TAG, "map localization prepare($floorId) ok=$ok enabled=$localizationEnabled user=$userFloorId")
-            if (ok && localizationEnabled && userFloorId == floorId) localization.start(floorId, freshSystemFix())
+            if (ok && localizationEnabled && userFloorId == floorId) beginSearch(floorId, allowWarm = true)
             if (localizationStartingFor == floorId) localizationStartingFor = null
             _state.value = buildSnapshot(tracker.state.value)
         }
@@ -1014,7 +1190,8 @@ class IndoorNavigationBackend(
             localizationError = localization.lastError,
             localizationTrace = if (localizationEnabled) localization.tracedPath() else emptyList(),
             localizationSystemCircle = if (localizationEnabled) localization.systemCircle else null,
-            localizationDebug = if (localizationEnabled) localization.debug else null
+            localizationDebug = if (localizationEnabled) localization.debug else null,
+            backgroundTracking = backgroundTracking
         )
     }
 
@@ -1116,6 +1293,16 @@ class IndoorNavigationBackend(
         private const val SYSTEM_FIX_MAX_AGE_NS = 120_000_000_000L
         private const val MAX_PARTICLES_SHOWN = 1000
         private const val DEFAULT_STEP_LENGTH_M = 0.74
+        private const val IDLE_STOP_NS = 10 * 60 * 1_000_000_000L
+        private const val KEY_LEARNED_STEP = "learned_step_length"
+        private const val KEY_STRIDE_SESSIONS = "stride_sessions"
+        private const val KEY_LAST_SITE = "last_site"
+        private const val KEY_LAST_FLOOR = "last_floor"
+        private const val KEY_LAST_ZONES = "last_zones"
+        private const val KEY_LAST_WALL_MS = "last_wall_ms"
+        private const val KEY_LAST_HPA = "last_hpa"
+        /** About 2/3 of a floor (0.47 hPa per 4 m): more and the walker probably changed floor. */
+        private const val WARM_MAX_PRESSURE_DELTA_HPA = 0.3
         private const val NEAR_CONNECTOR_BARO_RADIUS_M = 7.0
         private const val HIGH_PRECISION_OUTDOOR_GPS_M = 4.5
         private const val STREET_REFERENCE_MAX_ACCURACY_M = 15.0

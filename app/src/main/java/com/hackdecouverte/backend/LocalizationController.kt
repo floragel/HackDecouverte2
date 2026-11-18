@@ -3,6 +3,7 @@ package com.hackdecouverte.backend
 import com.hackdecouverte.loc.LocEstimate
 import com.hackdecouverte.loc.LocParams
 import com.hackdecouverte.loc.LocParticle
+import com.hackdecouverte.loc.LocZone
 import com.hackdecouverte.loc.LocalizationFilter
 import com.hackdecouverte.map.IndoorMap
 import com.hackdecouverte.pdr.PdrPhase
@@ -23,11 +24,16 @@ data class LocDebug(
     /** Effective sample size: how many hypotheses really count (low = weight concentrated). */
     val ess: Double = 0.0,
     /** False until the phone→walking angle is learned from the first straight line. */
-    val offsetKnown: Boolean = true
+    val offsetKnown: Boolean = true,
+    /** The search started from the last zones instead of from scratch. */
+    val warmStarted: Boolean = false
 )
 
 /** A system position (GPS / Wi-Fi / cell) in the plan frame, with its announced accuracy and clock (elapsedRealtimeNanos). */
 data class SystemFix(val centerM: PointM, val accuracyM: Double, val timeNs: Long)
+
+/** Where the last search ended (spec §6.4 "propagation depuis la dernière zone"): its zones and how long ago. */
+data class WarmStart(val zones: List<LocZone>, val ageS: Double)
 
 /**
  * Feeds the map localization filter with the PDR's displacements (pure Kotlin, no Android).
@@ -36,8 +42,8 @@ data class SystemFix(val centerM: PointM, val accuracyM: Double, val timeNs: Lon
 class LocalizationController(
     private val mapProvider: (floorId: String) -> IndoorMap?,
     private val random: Random = Random.Default,
-    /** Filter settings (the walk replay sweeps them to tune on real recordings). */
-    private val params: LocParams = LocParams()
+    /** Filter settings for the next search (the stride memory narrows the stride prior; the replay sweeps them). */
+    var params: LocParams = LocParams()
 ) {
     private val maps = HashMap<String, IndoorMap?>()
     @Volatile private var filter: LocalizationFilter? = null
@@ -77,7 +83,7 @@ class LocalizationController(
      * Starts a fresh search: in the GPS disk around [fix] when it is usable (spec §6.4 case 3),
      * otherwise over the whole floor. False if the floor has no usable map.
      */
-    fun start(floorId: String, fix: SystemFix? = null): Boolean {
+    fun start(floorId: String, fix: SystemFix? = null, warm: WarmStart? = null): Boolean {
         if (!prepare(floorId)) return false
         val map = synchronized(maps) { maps[floorId] }!!
         val f = LocalizationFilter(map, params, random)
@@ -91,11 +97,31 @@ class LocalizationController(
         startedInDisk = false
         lastFixUsedNs = null
         stepsAtLastFix = 0
+        lastHoldChanges = 0
         val usable = fix?.takeIf(::isUsable)
-        if (usable != null) startInDisk(f, usable) else f.initUniform()
+        val warmDisks = warm?.let(::warmDisks).orEmpty()
+        warmStarted = warmDisks.isNotEmpty()
+        when {
+            warmDisks.isNotEmpty() -> {
+                // Last zones first; the rest of the hypotheses go to the GPS disk (if any) and the whole floor.
+                val rest = 1 - warmDisks.sumOf { it.share }
+                val gps = usable?.let { listOf(LocalizationFilter.Disk(it.centerM, diskRadius(it), rest * (1 - LocalizationFilter.OUTSIDE_DISK_SHARE))) }.orEmpty()
+                f.initDisks(warmDisks + gps)
+                startedInDisk = true // a first GPS fix must not throw the warm start away
+                usable?.let(::markUsed)
+            }
+            usable != null -> startInDisk(f, usable)
+            else -> f.initUniform()
+        }
         refresh(f)
         return true
     }
+
+    /** The search started from the last zones ([WarmStart]). */
+    @Volatile var warmStarted = false
+        private set
+
+    private fun diskRadius(fix: SystemFix) = maxOf(DISK_ACCURACY_FACTOR * fix.accuracyM, DISK_MIN_RADIUS_M)
 
     /** Circle of the last system position used: centre and search-disk radius (for display). */
     @Volatile var systemCircle: Pair<PointM, Double>? = null
@@ -133,7 +159,7 @@ class LocalizationController(
         fix.accuracyM > 0 && fix.accuracyM <= MAX_FIX_ACCURACY_M && fix.centerM.x.isFinite() && fix.centerM.y.isFinite()
 
     private fun startInDisk(f: LocalizationFilter, fix: SystemFix) {
-        val radius = maxOf(DISK_ACCURACY_FACTOR * fix.accuracyM, DISK_MIN_RADIUS_M)
+        val radius = diskRadius(fix)
         f.initAround(fix.centerM, radius)
         startedInDisk = true
         stepsSinceStart = 0
@@ -179,6 +205,8 @@ class LocalizationController(
             if (s.holdChanges > lastHoldChanges) f.onHoldChanged()
             lastHoldChanges = s.holdChanges
         }
+        // A new PDR trace (resume after a pause): its heading frame may differ, as after a hold change.
+        if (prevSteps > 0 && s.stepCount < prevSteps) f.onHoldChanged()
         if (prev == null || s.stepCount < prevSteps) return
         val dx = s.position.x - prev.x
         val dy = s.position.y - prev.y
@@ -195,7 +223,7 @@ class LocalizationController(
     @Volatile private var stepMs = 0.0
 
     val debug: LocDebug?
-        get() = filter?.let { LocDebug(it.size(), stepMs, it.alarms, it.strideScaleEstimate(), it.strideScaleSpread(), gpsFixesUsed, it.effectiveSampleSize(), it.offsetKnown) }
+        get() = filter?.let { LocDebug(it.size(), stepMs, it.alarms, it.strideScaleEstimate(), it.strideScaleSpread(), gpsFixesUsed, it.effectiveSampleSize(), it.offsetKnown, warmStarted) }
 
     fun samplePositions(max: Int): List<PointM> = sampleParticles(max).map { it.positionM }
 
@@ -215,6 +243,31 @@ class LocalizationController(
     }
 
     companion object {
+        /**
+         * Hypotheses for a warm start: the last zones, widened by [WARM_BASE_RADIUS_M] plus
+         * [WARM_GROWTH_M_PER_MIN] per minute away (capped at 15 min), sharing [warmShare] of the
+         * hypotheses by their weight. Too old (> 30 min) → none.
+         */
+        fun warmDisks(w: WarmStart): List<LocalizationFilter.Disk> {
+            val share = warmShare(w.ageS)
+            val total = w.zones.take(3).sumOf { it.weight }
+            if (share <= 0.0 || total <= 0.0) return emptyList()
+            val grow = WARM_BASE_RADIUS_M + WARM_GROWTH_M_PER_MIN * (w.ageS / 60).coerceIn(0.0, 15.0)
+            return w.zones.take(3).map { z -> LocalizationFilter.Disk(z.centerM, z.radiusM + grow, share * z.weight / total) }
+        }
+
+        /** Share of the hypotheses placed on the last zones: the longer away, the less it says. */
+        fun warmShare(ageS: Double): Double = when {
+            ageS < 0 -> 0.0
+            ageS <= 120 -> 0.7
+            ageS <= 600 -> 0.5
+            ageS <= 1800 -> 0.3
+            else -> 0.0
+        }
+
+        const val WARM_BASE_RADIUS_M = 2.0
+        const val WARM_GROWTH_M_PER_MIN = 1.0
+
         /**
          * Localization mode starts the PDR by itself, but not before the compass has given True North
          * (else the trace stays in the phone's arbitrary frame), unless it never comes within [COMPASS_WAIT_NS].

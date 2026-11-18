@@ -10,6 +10,11 @@
     <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <!-- Tracking with the screen off / phone in a pocket: foreground service of type location -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Walk recorder (debug): Wi-Fi scans and Wi-Fi RTT ranging, logged for research -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
@@ -37,6 +42,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name="com.hackdecouverte.sensor.TrackingService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <!-- Shares recorded walks (Android/data/<app>/files/recordings) -->
         <provider

@@ -131,8 +131,10 @@ fun rememberIndoorBackend(): Pair<IndoorNavigationBackend, NavigationSnapshot> {
     // Keep the screen awake while walking
     val view = LocalView.current
     val phase = snapshot.pdr.phase
-    DisposableEffect(phase) {
-        view.keepScreenOn = phase == PdrPhase.CALIBRATING || phase == PdrPhase.SETTLING || phase == PdrPhase.TRACKING
+    val background = snapshot.backgroundTracking
+    DisposableEffect(phase, background) {
+        // With the tracking service the screen may sleep (phone in a pocket); otherwise it must stay on.
+        view.keepScreenOn = !background && (phase == PdrPhase.CALIBRATING || phase == PdrPhase.SETTLING || phase == PdrPhase.TRACKING)
         onDispose { view.keepScreenOn = false }
     }
     return backend to snapshot

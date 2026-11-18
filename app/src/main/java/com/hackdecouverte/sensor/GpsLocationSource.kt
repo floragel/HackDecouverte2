@@ -46,6 +46,20 @@ class GpsLocationSource(
     private val mainHandler = Handler(Looper.getMainLooper())
     private var running = false
 
+    /**
+     * Background (screen off, phone in a pocket): no satellite GPS at full power indoors, only the
+     * network position every 30 s (spec §6.7). Re-registers the providers when it changes.
+     */
+    var lowPower: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            if (running) {
+                stop()
+                start()
+            }
+        }
+
     private var satellitesUsedCount = 0
     private var galileoUsedCount = 0
     private var dualFreqUsedCount = 0
@@ -140,7 +154,7 @@ class GpsLocationSource(
         }
         bestSeed?.let(::handleLocation)
 
-        for (p in highAccProviders) {
+        for (p in if (lowPower) emptyList() else highAccProviders) {
             runCatching {
                 if (!locationManager.isProviderEnabled(p)) return@runCatching
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -163,7 +177,7 @@ class GpsLocationSource(
             ) {
                 locationManager.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
-                    5_000L,
+                    if (lowPower) 30_000L else 5_000L,
                     2f,
                     listener,
                     Looper.getMainLooper()

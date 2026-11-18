@@ -75,17 +75,37 @@ class LocalizationFilter(
      * the fix is wrong. Phone angle unknown, step length spread, as in [initUniform]. A disk with no
      * free space (fix outside the plan) falls back to the whole floor.
      */
-    fun initAround(center: PointM, radiusM: Double, count: Int = params.maxParticles) {
-        val r2 = radiusM * radiusM
-        val inside = freeCells.filter { c ->
-            val p = map.grid.centerOf(c)
-            (p.x - center.x) * (p.x - center.x) + (p.y - center.y) * (p.y - center.y) <= r2
+    fun initAround(center: PointM, radiusM: Double, count: Int = params.maxParticles) =
+        initDisks(listOf(Disk(center, radiusM, 1 - OUTSIDE_DISK_SHARE)), count)
+
+    /** A search area: a disk and the share of the hypotheses it gets. */
+    data class Disk(val center: PointM, val radiusM: Double, val share: Double)
+
+    /**
+     * Start from several areas at once (warm start: the last zones, plus the GPS disk): each disk gets
+     * its [Disk.share] of the hypotheses in its free space, the rest go anywhere on the floor (as does
+     * the share of a disk with no free space). Phone angle unknown, step length spread.
+     */
+    fun initDisks(disks: List<Disk>, count: Int = params.maxParticles) {
+        val inside = disks.map { d ->
+            val r2 = d.radiusM * d.radiusM
+            freeCells.filter { c ->
+                val p = map.grid.centerOf(c)
+                (p.x - d.center.x) * (p.x - d.center.x) + (p.y - d.center.y) * (p.y - d.center.y) <= r2
+            }
         }
-        if (inside.isEmpty()) {
-            initUniform(count)
-            return
+        fun draw(): PointM {
+            var u = random.nextDouble()
+            for ((k, d) in disks.withIndex()) {
+                if (u < d.share) {
+                    val cells = inside[k]
+                    return if (cells.isEmpty()) randomFreePoint() else jittered(cells[random.nextInt(cells.size)])
+                }
+                u -= d.share
+            }
+            return randomFreePoint()
         }
-        spreadUniform(count) { if (random.nextDouble() < OUTSIDE_DISK_SHARE) randomFreePoint() else jittered(inside[random.nextInt(inside.size)]) }
+        spreadUniform(count, ::draw)
         offsetKnown = false
         pendingSteps.clear()
     }

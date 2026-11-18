@@ -93,6 +93,7 @@ fun IndoorDevScreen() {
     var layerNames by rememberSaveable { mutableStateOf(DebugLayer.defaults.map { it.name }) }
     val layers = layerNames.mapNotNull { n -> DebugLayer.entries.firstOrNull { it.name == n } }.toSet()
     val recorder by backend.recorderStatus.collectAsState()
+    val context = LocalContext.current
 
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         r[Manifest.permission.ACTIVITY_RECOGNITION]?.let(backend::onActivityPermissionResult)
@@ -109,6 +110,10 @@ fun IndoorDevScreen() {
             if (!snapshot.locationPermissionGranted) {
                 add(Manifest.permission.ACCESS_FINE_LOCATION); add(Manifest.permission.ACCESS_COARSE_LOCATION)
             }
+            // The tracking notification (phone in a pocket) is hidden without it on Android 13+.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) add(Manifest.permission.POST_NOTIFICATIONS)
         }
         if (missing.isNotEmpty()) permissions.launch(missing.toTypedArray())
     }
@@ -141,7 +146,7 @@ fun IndoorDevScreen() {
             }
         }
         ConfidenceLegend()
-        RecordBar(backend)
+        RecordBar(backend, snapshot.backgroundTracking)
         DebugStatus(snapshot)
 
         Box(Modifier.weight(1f)) {
@@ -200,7 +205,7 @@ fun IndoorDevScreen() {
  * recording the screen stays on and a tap on the map drops a ground-truth marker ("I am here").
  */
 @Composable
-private fun RecordBar(backend: IndoorNavigationBackend) {
+private fun RecordBar(backend: IndoorNavigationBackend, backgroundTracking: Boolean) {
     val c = Campus.colors
     val context = LocalContext.current
     val status by backend.recorderStatus.collectAsState()
@@ -212,8 +217,9 @@ private fun RecordBar(backend: IndoorNavigationBackend) {
         }
     }
     val view = LocalView.current
-    DisposableEffect(status.recording) {
-        view.keepScreenOn = status.recording
+    // With the tracking service a recording goes on screen off (phone in a pocket); without it the screen must stay on.
+    DisposableEffect(status.recording, backgroundTracking) {
+        view.keepScreenOn = status.recording && !backgroundTracking
         onDispose { view.keepScreenOn = false }
     }
     // Wi-Fi RTT needs NEARBY_WIFI_DEVICES on Android 13+: asked once, the recording starts either way.
@@ -256,7 +262,8 @@ private fun RecordBar(backend: IndoorNavigationBackend) {
         }
         val hint = when {
             status.error != null -> "Erreur : ${status.error}"
-            status.recording -> "Touchez la carte là où vous êtes vraiment (départ, virages, portes) : chaque repère sert de vérité."
+            status.recording -> "Touchez la carte là où vous êtes vraiment (départ, virages, portes) : chaque repère sert de vérité." +
+                if (backgroundTracking) " L'enregistrement continue écran éteint, téléphone en poche." else ""
             else -> "Posez un repère au départ, à chaque virage et à l'arrivée. Récupération : partager, ou tools/pull-walks.sh."
         }
         Text(hint, style = MaterialTheme.typography.labelSmall, color = if (status.error != null) Color(0xFFE53935) else c.textMuted, modifier = Modifier.padding(top = 4.dp))
@@ -302,7 +309,8 @@ private fun DebugStatus(snapshot: NavigationSnapshot) {
         } else {
             val state = when (loc.state) { LocState.SEARCHING -> "RECHERCHE"; LocState.APPROXIMATE -> "APPROXIMATIF"; LocState.FOUND -> "TROUVÉ" }
             add("$state · ${d.particleCount} pts · ESS ${d.ess.roundToInt()} · ${fmt(d.stepMs, 1)} ms/pas · alertes ${d.alarms}")
-            add("pas ×${fmt(d.strideScale, 2)} ±${fmt(d.strideSpread, 2)} · angle tél. ${if (d.offsetKnown) "appris" else "attend une ligne droite"} · retracé ${snapshot.localizationTrace.size} pts")
+            add("pas ×${fmt(d.strideScale, 2)} ±${fmt(d.strideSpread, 2)} · angle tél. ${if (d.offsetKnown) "appris" else "attend une ligne droite"} · retracé ${snapshot.localizationTrace.size} pts" +
+                if (d.warmStarted) " · départ : dernière zone" else "")
             add(loc.zones.take(3).mapIndexed { i, z -> "#${i + 1} ${(z.weight * 100).roundToInt()} % r ${fmt(z.radiusM, 1)} m" }.joinToString("  ·  ").ifEmpty { "aucune zone" })
         }
         val fix = snapshot.latestGpsFix
@@ -320,6 +328,7 @@ private fun DebugStatus(snapshot: NavigationSnapshot) {
             p.readingPose -> "en main, écran regardé"
             else -> "stable (main, poche de veste, sac)"
         }
+        add(if (snapshot.backgroundTracking) "Suivi écran éteint : actif (notification)" else "Suivi écran éteint : non (permission de localisation ?)")
         add("Tenue : $carry · changements ${p.holdChanges} · cap = marche ${if (p.headingAligned) "oui" else "non (angle appris par la carte)"}")
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
