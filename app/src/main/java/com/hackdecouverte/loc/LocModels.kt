@@ -30,6 +30,13 @@ data class LocParams(
     val goodStepsToTrust: Int = 10,
     /** Mean step likelihood below this = a bad step (divided by the heading-noise scale in a pocket). */
     val badStepLikelihood: Double = 0.05,
+    /**
+     * Share of the hypotheses sent back around the last confident zone when the filter is lost (plan B5).
+     * Off by default: no gain measured on synthetic heading jumps (a wrong heading that fits the walls
+     * makes the filter confidently wrong, not lost), and the zone keeps following the first steps into
+     * a wall. Left to the training.
+     */
+    val lostRecoveryShare: Double = 0.0,
     /** × the heading noise for stride-averaged steps (pocket, swinging hand): their headings are looser. */
     val bodyCarryNoiseScale: Double = 2.0,
     /** Steps kept for the walk traced back (Zee's backward propagation); the computer replay keeps whole walks. */

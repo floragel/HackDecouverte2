@@ -341,6 +341,7 @@ class LocalizationFilter(
         if (badSteps > 0) forcedSearching = true // the estimate just walked through walls: stop claiming it
         if (badSteps >= BAD_STEPS_BEFORE_RECOVERY) {
             reseedAround(0.5)
+            reseedAroundLastConfident()
             badSteps = 0
             goodSteps = 0
             forcedSearching = true
@@ -349,6 +350,47 @@ class LocalizationFilter(
         }
         if (effectiveSampleSize() < params.resampleEssRatio * n) resample()
         recordStep()
+        trackConfidence(lengthM)
+    }
+
+    /** Last zone the filter was at least APPROXIMATE about, and how far the walker went since (plan B5). */
+    private var lastConfidentCenter: PointM? = null
+    private var lastConfidentRadiusM = 0.0
+    private var distanceSinceConfidentM = 0.0
+
+    private fun trackConfidence(stepM: Double) {
+        val e = estimate()
+        val main = e.zones.firstOrNull()
+        if (main != null && e.state != LocState.SEARCHING) {
+            lastConfidentCenter = main.centerM
+            lastConfidentRadiusM = main.radiusM
+            distanceSinceConfidentM = 0.0
+        } else {
+            distanceSinceConfidentM += stepM
+        }
+    }
+
+    /**
+     * Lost (several steps through walls in a row): besides the usual re-seed around the current main
+     * zone, [LocParams.lostRecoveryShare] of the hypotheses go anywhere free within the last confident
+     * zone grown by 3 m + 30 % of the distance walked since (at most 30 m), with surviving angles and strides.
+     */
+    private fun reseedAroundLastConfident() {
+        val center = lastConfidentCenter ?: return
+        if (params.lostRecoveryShare <= 0) return
+        val radius = (lastConfidentRadiusM + 3.0 + 0.3 * distanceSinceConfidentM).coerceAtMost(30.0)
+        val count = (n * params.lostRecoveryShare).roundToInt()
+        for (k in 0 until count) {
+            val i = random.nextInt(n)
+            val donor = random.nextInt(n)
+            val p = randomFreePointNear(center, radius)
+            east[i] = p.x; north[i] = p.y
+            offset[i] = offset[donor]; scale[i] = scale[donor]
+            score[i] = INJECTED_SCORE
+            weight[i] = 1.0 / n
+            origin[i] = -1
+        }
+        normalize()
     }
 
     /** Weighted mean step-length scale (× the PDR step). */
@@ -484,6 +526,7 @@ class LocalizationFilter(
             alarms++
             recentAlign.clear(); recentBlocked.clear()
             reseedAround(0.1)
+            reseedAroundLastConfident()
             suppressFoundSteps = 2 // still active right after this step; cleared at the start of the next-but-one
         }
     }
