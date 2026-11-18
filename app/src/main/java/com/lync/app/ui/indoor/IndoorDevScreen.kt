@@ -74,7 +74,7 @@ fun IndoorDevScreen() {
                 }
             )
             Text(
-                stringResource(R.string.loc_dev_status, state, debug.particleCount, debug.stepMs, debug.alarms),
+                stringResource(R.string.loc_dev_status, state, debug.particleCount, debug.stepMs, debug.alarms, debug.strideScale, debug.strideSpread),
                 style = MaterialTheme.typography.bodySmall,
                 color = c.textMuted,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)

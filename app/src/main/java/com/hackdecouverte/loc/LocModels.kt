@@ -10,6 +10,9 @@ data class LocParams(
     val lengthNoise: Double = 0.05,
     val offsetDriftRad: Double = Math.toRadians(0.5),
     val scaleDrift: Double = 0.005,
+    /** Step-length scale prior (× the PDR step), drawn uniformly at a search start and then sorted out by the walls (Zee §7). */
+    val strideScaleMin: Double = 0.75,
+    val strideScaleMax: Double = 1.30,
     val wallFactor: Double = 0.02,
     val beta: Double = 0.2,
     val resampleEssRatio: Double = 0.5,

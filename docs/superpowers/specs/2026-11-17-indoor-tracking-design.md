@@ -245,7 +245,10 @@ mauvais virage.
 
 **Chaque particule porte :** l'étage ; une position (x, y) dans l'espace libre de la carte
 (couloir, hall ou salle) ; l'angle entre le téléphone et la direction de marche ; une échelle de
-pas ; un poids.
+pas ; un poids. Au départ d'une recherche, l'échelle de pas est tirée uniformément entre ×0,75
+et ×1,30 du pas du PDR, comme dans Zee : ce sont les murs qui trient les bonnes valeurs. Il faut
+pour cela un segment de couloir entre deux virages ; avec un seul virage et un départ inconnu,
+le pas reste indéterminé.
 
 **À chaque pas accepté par le PDR** (longueur L, cap relatif θ) :
 1. Chaque particule avance de `L × échelle` dans la direction `θ + angle`, avec un petit bruit
@@ -272,6 +275,12 @@ de particules « de secours » sont réinjectées dans la zone plausible (15 m a
 principale, plus le cercle de la position du système), pour se rattraper si le filtre s'est
 trompé. Si toutes les particules deviennent improbables, le filtre repart de cette zone
 plausible et l'état repasse à « Recherche ».
+
+**Retour en arrière (backward belief propagation, Zee §7) :** chaque particule garde le lien vers
+la particule dont elle descend (300 derniers pas au plus). Une fois la zone trouvée, on remonte
+ces liens depuis les particules de la zone principale : les lignées éteintes disparaissent, et
+on obtient tout le trajet depuis le départ, alors qu'il était encore ambigu pendant la marche.
+Il sert à dessiner le chemin parcouru et à enregistrer des marches pour régler les paramètres.
 
 **Sorties :** les groupes de particules (zones), chacun avec son centre, son rayon (environ 95 %
 des particules) et son poids ; l'étage et sa confiance ; l'état (Recherche, Approximatif, ou

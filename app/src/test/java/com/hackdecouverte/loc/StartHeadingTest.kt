@@ -10,7 +10,8 @@ class StartHeadingTest {
 
     @Test
     fun lCorridorConvergesWithUnknownOffset() {
-        val f = LocalizationFilter(SyntheticMaps.lCorridor(), random = Random(42))
+        // Step length known here: with one turn and an unknown start it cannot be observed (see ZeeLearningTest)
+        val f = LocalizationFilter(SyntheticMaps.lCorridor(), LocParams(strideScaleMin = 1.0, strideScaleMax = 1.0), Random(42))
         f.initUniform()
         assertFalse(f.offsetKnown)
         val pdrOffset = Math.toRadians(-73.0) // the PDR frame is not aligned with the plan

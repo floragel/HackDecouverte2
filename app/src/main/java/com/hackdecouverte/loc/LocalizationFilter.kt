@@ -28,7 +28,13 @@ class LocalizationFilter(
     private var offset = DoubleArray(0)
     private var scale = DoubleArray(0)
     private var weight = DoubleArray(0)
+    /** Index, in the latest [history] snapshot, of the hypothesis each particle comes from (−1: injected, no past). */
+    private var origin = IntArray(0)
     private var n = 0
+    /** Positions after each step with a link to their parent (Zee's backward belief propagation), oldest first. */
+    private val history = ArrayDeque<Snapshot>()
+
+    private class Snapshot(val east: FloatArray, val north: FloatArray, val parent: IntArray)
     private var lastHeadingRad = 0.0
     private var badSteps = 0
     private var goodSteps = 0
@@ -44,8 +50,8 @@ class LocalizationFilter(
     fun size(): Int = n
 
     /**
-     * Positions drawn uniformly over the free cells, scale 1, phone angle **unknown**: it is set by
-     * the first straight line (spec §6.2 bis, usage 2).
+     * Positions drawn uniformly over the free cells, step-length scale spread over its prior (Zee:
+     * the walls sort it out), phone angle **unknown**: it is set by the first straight line (spec §6.2 bis).
      */
     fun initUniform(count: Int = params.maxParticles) {
         spreadUniform(count)
@@ -59,24 +65,29 @@ class LocalizationFilter(
             val p = randomFreePoint()
             east[i] = p.x; north[i] = p.y
             offset[i] = random.nextDouble(0.0, 2 * PI)
-            scale[i] = 1.0
+            scale[i] = randomStrideScale()
             weight[i] = 1.0 / count
         }
         forcedSearching = true
         goodSteps = 0
+        startHistory()
     }
 
-    /** Explicit hypotheses (tests, shortcuts): one per point, with its phone angle. */
-    fun initAt(points: List<PointM>, offsetsRad: List<Double>) {
+    /**
+     * Explicit hypotheses (tests, shortcuts): one per point, with its phone angle. Step-length scale 1,
+     * or spread over its prior when [spreadStride] (start known, step length not: Zee's own example).
+     */
+    fun initAt(points: List<PointM>, offsetsRad: List<Double>, spreadStride: Boolean = false) {
         require(points.size == offsetsRad.size && points.isNotEmpty())
         allocate(points.size)
         for (i in points.indices) {
             east[i] = points[i].x; north[i] = points[i].y
-            offset[i] = offsetsRad[i]; scale[i] = 1.0; weight[i] = 1.0 / points.size
+            offset[i] = offsetsRad[i]; scale[i] = if (spreadStride) randomStrideScale() else 1.0; weight[i] = 1.0 / points.size
         }
         forcedSearching = false
         offsetKnown = true
         pendingSteps.clear()
+        startHistory()
     }
 
     /** One accepted PDR displacement: [lengthM] metres at relative heading [headingRad]. */
@@ -149,7 +160,7 @@ class LocalizationFilter(
             }
             east[i] = to.x; north[i] = to.y
             offset[i] += gaussian() * params.offsetDriftRad
-            scale[i] = (scale[i] + gaussian() * params.scaleDrift).coerceIn(0.8, 1.25)
+            scale[i] = (scale[i] + gaussian() * params.scaleDrift).coerceIn(params.strideScaleMin, params.strideScaleMax)
             likelihood += weight[i] * f
             weight[i] *= f
         }
@@ -173,6 +184,75 @@ class LocalizationFilter(
             forcedSearching = false
         }
         if (effectiveSampleSize() < params.resampleEssRatio * n) resample()
+        recordStep()
+    }
+
+    /** Weighted mean step-length scale (× the PDR step). */
+    fun strideScaleEstimate(): Double {
+        var s = 0.0; var w = 0.0
+        for (i in 0 until n) { s += weight[i] * scale[i]; w += weight[i] }
+        return if (w > 0) s / w else 1.0
+    }
+
+    /** Weighted standard deviation of the step-length scale: how sure the filter is about the step. */
+    fun strideScaleSpread(): Double {
+        val m = strideScaleEstimate()
+        var v = 0.0; var w = 0.0
+        for (i in 0 until n) { v += weight[i] * (scale[i] - m) * (scale[i] - m); w += weight[i] }
+        return if (w > 0) sqrt(v / w) else 0.0
+    }
+
+    /**
+     * Backward belief propagation (Zee §7): once a zone is found, follow the hypotheses inside it back
+     * through their parents. Hypotheses whose line died out drop away, so each past step keeps only
+     * what is consistent with the whole walk. Returns the weighted centre of those survivors per
+     * step, oldest first (the start, then one point per step), or null while still searching.
+     */
+    fun tracePath(): List<PointM>? {
+        if (history.isEmpty() || n == 0) return null
+        val est = estimate()
+        if (est.state == LocState.SEARCHING) return null
+        val zone = est.zones.first()
+        val r2 = maxOf(zone.radiusM, 1.0).let { it * it }
+        val last = history.last()
+        var mass = DoubleArray(last.east.size)
+        var any = false
+        for (i in 0 until n) {
+            val dx = east[i] - zone.centerM.x; val dy = north[i] - zone.centerM.y
+            if (origin[i] == i && dx * dx + dy * dy <= r2) { mass[i] += weight[i]; any = true }
+        }
+        if (!any) return null
+        val path = ArrayList<PointM>(history.size)
+        for (k in history.indices.reversed()) {
+            val snap = history[k]
+            var sx = 0.0; var sy = 0.0; var sw = 0.0
+            for (i in mass.indices) if (mass[i] > 0) { sx += mass[i] * snap.east[i]; sy += mass[i] * snap.north[i]; sw += mass[i] }
+            if (sw <= 0) break
+            path.add(PointM(sx / sw, sy / sw))
+            if (k == 0) break
+            val prev = DoubleArray(history[k - 1].east.size)
+            for (i in mass.indices) if (mass[i] > 0 && snap.parent[i] >= 0) prev[snap.parent[i]] += mass[i]
+            mass = prev
+        }
+        path.reverse()
+        return path
+    }
+
+    /** Number of recorded positions (steps + start), at most [MAX_HISTORY_STEPS] + 1. */
+    fun historySize(): Int = history.size
+
+    private fun startHistory() {
+        history.clear()
+        for (i in 0 until n) origin[i] = -1
+        recordStep()
+    }
+
+    /** Store where every particle is now and which earlier hypothesis it came from. */
+    private fun recordStep() {
+        val e = FloatArray(n); val no = FloatArray(n); val parent = IntArray(n)
+        for (i in 0 until n) { e[i] = east[i].toFloat(); no[i] = north[i].toFloat(); parent[i] = origin[i]; origin[i] = i }
+        history.addLast(Snapshot(e, no, parent))
+        while (history.size > MAX_HISTORY_STEPS + 1) history.removeFirst()
     }
 
     fun effectiveSampleSize(): Double {
@@ -239,10 +319,13 @@ class LocalizationFilter(
     private fun allocate(count: Int) {
         if (east.size < count) {
             east = DoubleArray(count); north = DoubleArray(count); offset = DoubleArray(count)
-            scale = DoubleArray(count); weight = DoubleArray(count)
+            scale = DoubleArray(count); weight = DoubleArray(count); origin = IntArray(count)
         }
         n = count
     }
+
+    private fun randomStrideScale(): Double =
+        if (params.strideScaleMax > params.strideScaleMin) random.nextDouble(params.strideScaleMin, params.strideScaleMax) else params.strideScaleMin
 
     private fun randomFreePoint(): PointM {
         val c = map.grid.centerOf(freeCells[random.nextInt(freeCells.size)])
@@ -272,6 +355,7 @@ class LocalizationFilter(
             east[i] = p.x; north[i] = p.y
             offset[i] = offset[donor]; scale[i] = scale[donor]
             weight[i] = 1.0 / n
+            origin[i] = -1
         }
         normalize()
     }
@@ -285,17 +369,17 @@ class LocalizationFilter(
     /** Systematic resampling to the target size, then a small recovery injection. */
     private fun resample() {
         val target = if (estimate().state == LocState.FOUND) params.minParticles else params.maxParticles
-        val ne = DoubleArray(target); val nn = DoubleArray(target); val no = DoubleArray(target); val ns = DoubleArray(target)
+        val ne = DoubleArray(target); val nn = DoubleArray(target); val no = DoubleArray(target); val ns = DoubleArray(target); val nor = IntArray(target)
         val step = 1.0 / target
         var u = random.nextDouble() * step
         var cum = weight[0]
         var j = 0
         for (k in 0 until target) {
             while (u > cum && j < n - 1) { j++; cum += weight[j] }
-            ne[k] = east[j]; nn[k] = north[j]; no[k] = offset[j]; ns[k] = scale[j]
+            ne[k] = east[j]; nn[k] = north[j]; no[k] = offset[j]; ns[k] = scale[j]; nor[k] = origin[j]
             u += step
         }
-        east = ne; north = nn; offset = no; scale = ns
+        east = ne; north = nn; offset = no; scale = ns; origin = nor
         weight = DoubleArray(target) { 1.0 / target }
         n = target
         if (params.recoveryFraction > 0) reseedAround(params.recoveryFraction)
@@ -307,7 +391,8 @@ class LocalizationFilter(
         return sqrt(-2 * ln(u1)) * cos(2 * PI * u2)
     }
 
-    private companion object {
+    companion object {
+        const val MAX_HISTORY_STEPS = 300
         const val BAD_STEP_LIKELIHOOD = 0.05
         const val GOOD_STEP_LIKELIHOOD = 0.5
         const val BAD_STEPS_BEFORE_RECOVERY = 3

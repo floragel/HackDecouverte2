@@ -711,7 +711,8 @@ fun TelemetryScreen(
                     drawLocalization(
                         particles = snapshot.localizationParticles.map { toScreen(it) },
                         zones = loc.zones.take(3).map { toScreen(it.centerM) to (it.radiusM * transform.pxPerMeter).toFloat() },
-                        density = density
+                        density = density,
+                        trace = snapshot.localizationTrace.map { toScreen(it) }
                     )
                 }
 

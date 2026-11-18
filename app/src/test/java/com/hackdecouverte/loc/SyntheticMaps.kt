@@ -31,6 +31,31 @@ internal object SyntheticMaps {
         return build(walled(inner, outer), MetricBounds(-4.0, -4.0, 29.0, 24.0), nodes, listOf(FloorEdge("A", "B"), FloorEdge("B", "C")))
     }
 
+    /**
+     * Z corridor A(0,0) → B(0,20) → C(25,20) → D(25,35), 2 m wide: the middle leg has a fixed
+     * length between two corners, so it pins the step length even from an unknown start.
+     */
+    fun zCorridor(): IndoorMap {
+        val inner = listOf(
+            PointM(-1.0, -1.0), PointM(1.0, -1.0), PointM(1.0, 19.0), PointM(26.0, 19.0), PointM(26.0, 36.0),
+            PointM(24.0, 36.0), PointM(24.0, 21.0), PointM(-1.0, 21.0)
+        )
+        val outer = listOf(
+            PointM(-1.3, -1.3), PointM(1.3, -1.3), PointM(1.3, 18.7), PointM(26.3, 18.7), PointM(26.3, 36.3),
+            PointM(23.7, 36.3), PointM(23.7, 21.3), PointM(-1.3, 21.3)
+        )
+        val nodes = listOf(
+            FloorNode(id = "A", type = "corridor", posM = PointM(0.0, 0.0)),
+            FloorNode(id = "B", type = "corridor", posM = PointM(0.0, 20.0)),
+            FloorNode(id = "C", type = "corridor", posM = PointM(25.0, 20.0)),
+            FloorNode(id = "D", type = "corridor", posM = PointM(25.0, 35.0))
+        )
+        return build(
+            walled(inner, outer), MetricBounds(-4.0, -4.0, 29.0, 39.0), nodes,
+            listOf(FloorEdge("A", "B"), FloorEdge("B", "C"), FloorEdge("C", "D"))
+        )
+    }
+
     /** Straight north–south corridor x ∈ [-1, 1], y ∈ [-10, 30]. */
     fun straightCorridor(): IndoorMap {
         val inner = listOf(PointM(-1.0, -10.0), PointM(1.0, -10.0), PointM(1.0, 30.0), PointM(-1.0, 30.0))

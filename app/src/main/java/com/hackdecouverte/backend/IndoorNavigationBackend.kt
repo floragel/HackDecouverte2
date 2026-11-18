@@ -114,6 +114,8 @@ data class NavigationSnapshot(
     val localizationEnabled: Boolean = false,
     val localization: LocEstimate? = null,
     val localizationParticles: List<PointM> = emptyList(),
+    /** Walk traced back once the zone is found (backward belief propagation), oldest first. */
+    val localizationTrace: List<PointM> = emptyList(),
     val localizationDebug: LocDebug? = null
 )
 
@@ -880,6 +882,7 @@ class IndoorNavigationBackend(
             localizationEnabled = localizationEnabled,
             localization = if (localizationEnabled) localization.estimate else null,
             localizationParticles = if (localizationEnabled) localization.samplePositions(MAX_PARTICLES_SHOWN) else emptyList(),
+            localizationTrace = if (localizationEnabled) localization.tracedPath() else emptyList(),
             localizationDebug = if (localizationEnabled) localization.debug else null
         )
     }

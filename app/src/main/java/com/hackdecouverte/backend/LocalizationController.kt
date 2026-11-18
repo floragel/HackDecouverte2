@@ -10,8 +10,14 @@ import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.random.Random
 
-/** Developer figures shown next to the particles. */
-data class LocDebug(val particleCount: Int, val stepMs: Double, val alarms: Int)
+/** Developer figures shown next to the particles; [strideScale] ± [strideSpread] = learned step (× the PDR step). */
+data class LocDebug(
+    val particleCount: Int,
+    val stepMs: Double,
+    val alarms: Int,
+    val strideScale: Double = 1.0,
+    val strideSpread: Double = 0.0
+)
 
 /**
  * Feeds the map localization filter with the PDR's displacements (pure Kotlin, no Android).
@@ -33,6 +39,7 @@ class LocalizationController(
     @Volatile var estimate: LocEstimate? = null
         private set
     @Volatile private var particles: List<PointM> = emptyList()
+    @Volatile private var trace: List<PointM> = emptyList()
 
     /**
      * Builds (or fetches from cache) the map of [floorId]; heavy, safe to call off the main thread.
@@ -63,6 +70,7 @@ class LocalizationController(
         floorId = null
         estimate = null
         particles = emptyList()
+        trace = emptyList()
         lastPosition = null
     }
 
@@ -96,13 +104,17 @@ class LocalizationController(
     @Volatile private var stepMs = 0.0
 
     val debug: LocDebug?
-        get() = filter?.let { LocDebug(it.size(), stepMs, it.alarms) }
+        get() = filter?.let { LocDebug(it.size(), stepMs, it.alarms, it.strideScaleEstimate(), it.strideScaleSpread()) }
 
     fun samplePositions(max: Int): List<PointM> = if (max >= particles.size) particles else particles.take(max)
+
+    /** The walk traced back from the found zone (Zee's backward belief propagation), oldest first; empty while searching. */
+    fun tracedPath(): List<PointM> = trace
 
     private fun refresh(f: LocalizationFilter) {
         estimate = f.estimate()
         particles = f.samplePositions(MAX_PARTICLES_SHOWN_SOURCE)
+        trace = f.tracePath().orEmpty()
     }
 
     companion object {

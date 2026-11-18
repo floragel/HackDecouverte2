@@ -213,10 +213,21 @@ internal fun DrawScope.drawUserLocation(
 /** Small "start" marker: white disc with a grey ring. */
 /**
  * Map localization (developer view): particles as small dots, each zone as a translucent circle,
- * the main zone (first) more opaque.
+ * the main zone (first) more opaque, and the walk traced back from it as a dashed line.
  */
-internal fun DrawScope.drawLocalization(particles: List<Offset>, zones: List<Pair<Offset, Float>>, density: Float) {
+internal fun DrawScope.drawLocalization(particles: List<Offset>, zones: List<Pair<Offset, Float>>, density: Float, trace: List<Offset> = emptyList()) {
     val dot = Color(0xFF7C3AED)
+    if (trace.size >= 2) {
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(trace[0].x, trace[0].y)
+            for (k in 1 until trace.size) lineTo(trace[k].x, trace[k].y)
+        }
+        drawPath(
+            path, color = dot.copy(alpha = 0.8f),
+            style = Stroke(width = 3f * density, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f * density, 6f * density)))
+        )
+        drawStartMarker(trace.first(), density)
+    }
     for (p in particles) drawCircle(color = dot.copy(alpha = 0.55f), radius = 2f * density, center = p)
     zones.forEachIndexed { i, (center, radiusPx) ->
         val alpha = if (i == 0) 0.22f else 0.10f

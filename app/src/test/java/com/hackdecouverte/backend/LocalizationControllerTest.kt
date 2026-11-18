@@ -71,6 +71,23 @@ class LocalizationControllerTest {
     }
 
     @Test
+    fun learnedStepAndTracedPathAreExposedOnceFound() {
+        val c = LocalizationController({ SyntheticMapsAccess.zCorridor() }, Random(11))
+        assertTrue(c.start("SYN"))
+        assertTrue(c.tracedPath().isEmpty())
+        var x = 0.0; var y = 0.0; var steps = 0
+        c.onPdrState(tracking(x, y, steps))
+        fun walk(count: Int, dx: Double, dy: Double) = repeat(count) { x += dx; y += dy; steps++; c.onPdrState(tracking(x, y, steps)) }
+        walk(21, 0.0, 0.7)  // PDR steps of 0.7 m, real ones 0.84 m
+        walk(30, 0.7, 0.0)
+        walk(12, 0.0, 0.7)
+        assertEquals(1.2, c.debug!!.strideScale, 0.08)
+        val path = c.tracedPath()
+        assertTrue("traced ${path.size} points", path.size > 50)
+        assertTrue("start ${path.first()}", path.first().distanceTo(PointM(0.0, 2.4)) < 2.5)
+    }
+
+    @Test
     fun unknownFloorDoesNotStart() {
         val c = controller()
         assertFalse(c.start("MB-99"))
