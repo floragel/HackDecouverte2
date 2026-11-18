@@ -18,7 +18,7 @@ import org.junit.Test
  */
 class PdrLoopTuningTest {
 
-    data class Out(val end: PointM, val distanceM: Double, val steps: Int)
+    data class Out(val end: PointM, val distanceM: Double, val steps: Int, val path: List<PointM> = emptyList())
 
     fun runPdr(rec: Recording, untilS: Double? = null, configure: (PdrTracker) -> Unit = {}): Out {
         val h = rec.header
@@ -46,7 +46,7 @@ class PdrLoopTuningTest {
             }
         }
         val s = tracker.state.value
-        return Out(s.position, s.distanceM, s.stepCount)
+        return Out(s.position, s.distanceM, s.stepCount, s.rawPath)
     }
 
     @Test
@@ -56,6 +56,11 @@ class PdrLoopTuningTest {
         val rec = GZIPInputStream(f.inputStream()).bufferedReader().use(RecordingReader::read)
         val variants: List<Pair<String, (PdrTracker) -> Unit>> = listOf(
             "current" to {},
+            "old gated compass pull" to { t -> t.compassPullTauS = 1e9 },
+            "compass pull tau 6 s" to { t -> t.compassPullTauS = 6.0 },
+            "compass pull tau 15 s" to { t -> t.compassPullTauS = 15.0 },
+            "compass tau 8 + walk-axis" to { t -> t.compassPullTauS = 8.0; t.walkAxisCorrectionEnabled = true },
+            "compass tau 6 + walk-axis" to { t -> t.compassPullTauS = 6.0; t.walkAxisCorrectionEnabled = true },
             "walk-axis correction" to { t -> t.walkAxisCorrectionEnabled = true },
             "walk-axis tau 3" to { t -> t.walkAxisCorrectionEnabled = true; t.walkAxisTau = 3.0 },
             "walk-axis tau 6" to { t -> t.walkAxisCorrectionEnabled = true; t.walkAxisTau = 6.0 },
@@ -71,10 +76,13 @@ class PdrLoopTuningTest {
             val o = runPdr(rec, untilS = until)
             sb.append("current, walk cut at %.0f s: gap %.1f m · %.1f m · %d steps\n".format(Locale.ROOT, until, o.end.norm(), o.distanceM, o.steps))
         }
+        val truth = TruthEval.load(f)
         for ((name, cfg) in variants) {
             val o = runPdr(rec, configure = cfg)
             val gap = o.end.norm()
-            sb.append("%-26s gap %5.1f m · %5.1f m walked · %3d steps · %4.1f %%\n".format(Locale.ROOT, name, gap, o.distanceM, o.steps, 100 * gap / o.distanceM))
+            val t = truth?.let { TruthEval.score(o.path, it) }
+            sb.append("%-26s gap %5.1f m · %5.1f m walked · %3d steps · %4.1f %%%s\n".format(Locale.ROOT, name, gap, o.distanceM, o.steps, 100 * gap / o.distanceM,
+                t?.let { " · vs route %.2f m (rot %d°, ×%.2f)".format(Locale.ROOT, it.first, it.second, it.third) } ?: ""))
         }
         println(sb)
         File("build/replay").mkdirs()

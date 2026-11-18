@@ -132,6 +132,34 @@ class PdrTracker(
     }
 
     private var lastRotation: DoubleArray? = null
+
+    /** Compass − game heading samples of the last seconds (any-hold continuous pull). */
+    private val compassOffsets = ArrayDeque<Pair<Long, Double>>()
+    private var lastPullStepNs = Long.MIN_VALUE
+
+    /**
+     * Any-hold mode: the game rotation vector drifts (first real walk: ~25° in 2 min, the whole way back
+     * turned), the compass does not drift but is disturbed indoors for a few seconds at a time. At each
+     * step the reference moves toward the compass (stride-averaged compass − game offset) with a time
+     * constant of [compassPullTauS], at most 2.5° per step, and not at all when they disagree by more
+     * than 60° (the compass is plainly wrong there). On that walk (route traced by the walker): mean
+     * distance to it 3.6 m with the old straight-only pull → 2.5 m (10 s) → 2.1 m (6 s); 8 s is kept.
+     */
+    var compassPullTauS: Double = 8.0
+
+    private fun continuousCompassPull(timestampNs: Long): Double {
+        val ref = referenceYaw ?: return 0.0
+        val window = compassOffsets.filter { it.first in timestampNs - strideWindowNs()..timestampNs + 200_000_000L }
+        val dtS = if (lastPullStepNs == Long.MIN_VALUE) 0.7 else ((timestampNs - lastPullStepNs) / 1e9).coerceIn(0.0, 3.0)
+        lastPullStepNs = timestampNs
+        if (window.size < 2) return 0.0
+        val offset = atan2Mean(window.map { it.second }) ?: return 0.0
+        val err = angleDelta(ref, wrapAnglePi(-offset))
+        if (abs(err) > MAX_COMPASS_PULL_ERR_RAD) return 0.0
+        return (err * minOf(1.0, dtS / compassPullTauS)).coerceIn(-MAX_HEADING_STEP_RAD, MAX_HEADING_STEP_RAD)
+    }
+
+    private fun atan2Mean(a: List<Double>): Double? = circularMean(a)
     /** World-frame horizontal linear acceleration (east, north in the game frame), last few seconds. */
     private val horizontalAcc = ArrayDeque<Triple<Long, Double, Double>>()
 
@@ -150,11 +178,11 @@ class PdrTracker(
      * moves with it, while the walking direction does not. The walking axis is the main axis of the
      * horizontal acceleration over a stride (body frame, mod 180°); the offset phone heading − walking
      * axis is followed slowly (≈ [walkAxisTau] strides) and its drift since the hold settled is removed
-     * from the heading. Pure body-carry mode only (stride-averaged heading). **Off by default:** on the
-     * first real loop (2 min in a pocket) it only moved the gap from 15.7 % to 15.0 % of the distance (an
-     * apparent 4 % in a prototype came from 180° flips of the unwrapped axis); to be judged on more loops.
+     * from the heading. Pure body-carry mode only (stride-averaged heading). On the first real walk with
+     * the route traced by the walker, together with the compass pull: mean distance to the route
+     * 2.5 → 1.8 m, loop gap 10.7 → 6.4 % (alone, before the compass pull existed, it did little).
      */
-    var walkAxisCorrectionEnabled: Boolean = false
+    var walkAxisCorrectionEnabled: Boolean = true
     var walkAxisTau: Double = 4.0
     var walkAxisMinRatio: Double = 2.0
     private var axisOffX = 0.0
@@ -358,6 +386,10 @@ class PdrTracker(
             ?: orientation.lastValidYaw
             ?: return
         val sampleOffset = wrapAnglePi(trueAzimuthRad - gameYaw)
+        if (highConfidence) {
+            compassOffsets.addLast(timestampNs to sampleOffset)
+            while (compassOffsets.first().first < timestampNs - 3_000_000_000L) compassOffsets.removeFirst()
+        }
         val prev = trueNorthOffsetRad
         if (prev == null) {
             trueNorthOffsetRad = sampleOffset
@@ -528,7 +560,15 @@ class PdrTracker(
         val axisDrift = if (frozen == null) walkAxisOffset(timestampNs, mean, strideWindowNs()) else 0.0
         var theta = frozen ?: wrapAnglePi(mean - reference - holdOffsetRad - axisDrift)
 
-        if (useTrueNorthReference && compassPullEnabled && straight && pendingTrueNorthDriftRad != 0.0) {
+        if (anyHoldHeading && useTrueNorthReference && compassPullEnabled) {
+            val pull = continuousCompassPull(timestampNs)
+            if (pull != 0.0) {
+                reference = wrapAnglePi(reference + pull)
+                referenceYaw = reference
+                theta = wrapAnglePi(theta - pull)
+            }
+            pendingTrueNorthDriftRad = 0.0
+        } else if (useTrueNorthReference && compassPullEnabled && straight && pendingTrueNorthDriftRad != 0.0) {
             reference = wrapAnglePi(reference + pendingTrueNorthDriftRad)
             referenceYaw = reference
             theta = wrapAnglePi(theta - pendingTrueNorthDriftRad)
@@ -1032,6 +1072,7 @@ class PdrTracker(
         private const val MAX_EXTERNAL_STEP_M = 0.08
         private const val MAX_HELD_STEPS = 32
         private const val DEFAULT_STRIDE_NS = 1_100_000_000L
+        private val MAX_COMPASS_PULL_ERR_RAD = Math.toRadians(60.0)
         /** About 110 steps/min: an average adult walking cadence. */
         const val TYPICAL_CADENCE_HZ = 1.8
         private const val MIN_STRIDE_NS = 800_000_000L
