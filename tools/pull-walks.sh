@@ -5,7 +5,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p recordings
-adb pull /sdcard/Android/data/com.lync.app/files/recordings/. recordings/
+ADB=$(command -v adb || echo "${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb")
+"$ADB" pull /sdcard/Android/data/com.lync.app/files/recordings/. recordings/
 ls -lh recordings/*.txt.gz
 if [[ "${1:-}" != "--no-replay" ]]; then
   JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@17} ./gradlew :app:testDebugUnitTest --tests '*RecordingReplayTest*' -q

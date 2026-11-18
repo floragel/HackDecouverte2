@@ -32,6 +32,13 @@ internal object ReplayOutput {
             val seen = gnss.map { g -> g.satellites.count { it.cn0DbHz > 0 } }
             appendLine("gnss: ${gnss.size} epochs, satellites seen median ${seen.sorted()[seen.size / 2]}, max C/N0 %.0f dB-Hz".format(Locale.ROOT, gnss.maxOf { g -> g.satellites.maxOfOrNull { it.cn0DbHz } ?: 0f }))
         }
+        if (gnss.isNotEmpty()) {
+            appendLine("sky (mean C/N0 by azimuth, dB-Hz; satellites heard through windows): " + skyByOctant(gnss))
+            for (m in rec.markers) {
+                val near = gnss.filter { kotlin.math.abs(it.tNs - m.tNs) <= 10_000_000_000L }
+                if (near.isNotEmpty()) appendLine("  around M${m.id}: " + skyByOctant(near))
+            }
+        }
         appendLine()
         appendLine("PDR %.1f m in ${r.steps.size} steps · GPS fixes used ${r.gpsFixesUsed} · learned stride ×%.2f".format(Locale.ROOT, r.distanceM, r.strideScale ?: Double.NaN))
         appendLine("found after: " + runs.joinToString(" ") { run -> run.firstFoundNs?.let { "%.0fs".format(Locale.ROOT, (it - h.startedNs) / 1e9) } ?: "never" } + "  (one per seed)")
@@ -47,6 +54,19 @@ internal object ReplayOutput {
             )
         }
         appendLine("(online / smoothed: median over ${runs.size} seeds)")
+    }
+
+    private val OCTANTS = listOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+
+    /** Research probe (GNSS "sky side"): which directions satellites are heard from, mean C/N0 per 45° sector. */
+    fun skyByOctant(epochs: List<RecEvent.Gnss>): String {
+        val sum = DoubleArray(8); val n = IntArray(8)
+        for (e in epochs) for (sat in e.satellites) {
+            if (sat.cn0DbHz <= 0f) continue
+            val k = (((sat.azimuthDeg + 22.5f) % 360f + 360f) % 360f / 45f).toInt().coerceIn(0, 7)
+            sum[k] += sat.cn0DbHz.toDouble(); n[k]++
+        }
+        return (0 until 8).joinToString(" ") { k -> "${OCTANTS[k]} ${if (n[k] == 0) "—" else "%.0f".format(Locale.ROOT, sum[k] / n[k])}" }
     }
 
     fun stepsCsv(r: ReplayResult, startNs: Long): String = buildString {

@@ -17,6 +17,12 @@ for the complete hackathon app:
     + live `/api/0.6/map` XML parser & disk cache via `OsmNetworkLoader`).
 - `sensor/`: `PdrSensorAdapter` + `GpsLocationSource` (automatic True-North alignment,
   zero manual angle calibration required).
+- `rec/` (Android-free): walk recording format (`RecordingWriter`/`RecordingReader`) and
+  `WalkReplay`, which runs a recorded walk through `SensorRouter` → `PdrTracker` →
+  `LocalizationController` exactly as the phone does. The phone side is `sensor/WalkRecorder`
+  (record button on the debug map, tap = ground-truth marker). `tools/pull-walks.sh` pulls the walks
+  into the git-ignored `recordings/`, then `RecordingReplayTest` writes `app/build/replay/<walk>/`
+  (report.txt, steps.csv, walk.svg). Research directions: `docs/research/`.
 - `ui/`: Thin test harness UI + GPU-cached `FloorVectorRenderer` over `IndoorNavigationBackend`.
 
 ## Build / test
