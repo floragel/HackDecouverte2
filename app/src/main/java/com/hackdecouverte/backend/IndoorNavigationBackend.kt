@@ -14,6 +14,8 @@ import com.hackdecouverte.map.FloorPlan
 import com.hackdecouverte.map.FloorVectorPlan
 import com.hackdecouverte.map.GeoOrigin
 import com.hackdecouverte.map.JunctionMatcher
+import com.hackdecouverte.map.loadIndoorMap
+import com.hackdecouverte.loc.LocEstimate
 import com.hackdecouverte.map.MapAnchor
 import com.hackdecouverte.map.NavigationRoute
 import com.hackdecouverte.map.NodeKey
@@ -104,7 +106,11 @@ data class NavigationSnapshot(
     /** True once a street-level pressure was captured outdoors near the building. */
     val hasStreetPressureReference: Boolean = false,
     /** Last corridor junction that re-anchored the dot (see [JunctionMatcher]), for telemetry. */
-    val lastJunctionId: String? = null
+    val lastJunctionId: String? = null,
+    /** Map localization (developer switch for now): zones, state, a sample of particles. */
+    val localizationEnabled: Boolean = false,
+    val localization: LocEstimate? = null,
+    val localizationParticles: List<PointM> = emptyList()
 )
 
 class IndoorNavigationBackend(
@@ -126,6 +132,15 @@ class IndoorNavigationBackend(
     private var latestPressureHpa: Double? = null
     private var latestPressureNs: Long = Long.MIN_VALUE
     private val junctions = JunctionMatcher()
+
+    /** Map localization (spec §6.3), behind a developer switch until plan 2. */
+    private val localization = LocalizationController({ floorId ->
+        floorId.removePrefix("MB-").toIntOrNull()?.let { n ->
+            loadIndoorMap(n) { path -> runCatching { appContext.assets.open(path) }.getOrNull() }
+        }
+    })
+    private var localizationEnabled = false
+    private var localizationStartingFor: String? = null
 
     private val adapter = PdrSensorAdapter(
         context = appContext,
@@ -212,7 +227,7 @@ class IndoorNavigationBackend(
         tracker.corridorConstraint = { localPos, localTheta ->
             val plan = userFloorId?.let(buildingGraph::floor)
             val anc = anchor
-            if (plan != null && anc != null && !inVerticalTransit) {
+            if (plan != null && anc != null && !inVerticalTransit && !localizationEnabled) {
                 plan.matchCorridor(anc.toMap(localPos), anc.mapHeading(localTheta))?.let {
                     CorridorConstraintResult(
                         projectedLocalPos = anc.fromMap(it.projectedPointM),
@@ -244,7 +259,12 @@ class IndoorNavigationBackend(
                     )
                 }
                 persistGaitIfUpdated(pdrState)
-                matchJunction(pdrState)
+                if (localizationEnabled) {
+                    if (pdrState.canStart) startWithSavedOrDefaultStepLength() // the PDR starts by itself (spec §6.1)
+                    localization.onPdrState(pdrState)
+                } else {
+                    matchJunction(pdrState)
+                }
                 _state.value = buildSnapshot(pdrState)
             }
         }
@@ -666,7 +686,7 @@ class IndoorNavigationBackend(
         // Only apply position drift correction when using GPS start OR outdoor high-precision GNSS (<= 4.5 m)
         val anc = anchor
         val allowPositionNudge = usingGpsStart || fix.accuracyM <= HIGH_PRECISION_OUTDOOR_GPS_M
-        if (allowPositionNudge && anc != null && fix.eastNorthM.norm() <= MAX_CAMPUS_RADIUS_M) {
+        if (allowPositionNudge && anc != null && fix.eastNorthM.norm() <= MAX_CAMPUS_RADIUS_M && !localizationEnabled) {
             tracker.onExternalFix(anc.fromMap(fix.eastNorthM), fix.accuracyM)
         }
         _state.value = buildSnapshot(tracker.state.value)
@@ -724,7 +744,40 @@ class IndoorNavigationBackend(
         val computed = MapAnchor(currentFloorOriginM, psi)
         anchor = computed
         val corridorAxis = uPlan?.dominantCorridorAxisRad ?: 0.0
-        tracker.mapAxisBaseLocal = wrapAnglePi(corridorAxis - computed.psiRad)
+        // With map localization the anchor is not trusted: heading stabilization uses learned axes only.
+        tracker.mapAxisBaseLocal = if (localizationEnabled) null else wrapAnglePi(corridorAxis - computed.psiRad)
+        if (localizationEnabled && userFloorId != null && localization.floorId != userFloorId) startLocalization()
+    }
+
+    /**
+     * Developer switch for map localization (plan 1). On: the PDR starts by itself, its plan-based
+     * corrections (corridor pull, junction landmarks, GPS nudge, map axis) are off, and every PDR
+     * state feeds the filter. Off: everything is as before.
+     */
+    fun setLocalizationEnabled(enabled: Boolean) {
+        if (enabled == localizationEnabled) return
+        localizationEnabled = enabled
+        if (enabled) {
+            val s = tracker.state.value
+            if (s.canStart) startWithSavedOrDefaultStepLength()
+        } else {
+            localization.stop()
+            localizationStartingFor = null
+        }
+        recomputeAnchor()
+        _state.value = buildSnapshot(tracker.state.value)
+    }
+
+    private fun startLocalization() {
+        val floorId = userFloorId ?: return
+        if (localizationStartingFor == floorId) return
+        localizationStartingFor = floorId
+        scope.launch {
+            val ok = withContext(Dispatchers.Default) { localization.prepare(floorId) }
+            if (ok && localizationEnabled && userFloorId == floorId) localization.start(floorId)
+            if (localizationStartingFor == floorId) localizationStartingFor = null
+            _state.value = buildSnapshot(tracker.state.value)
+        }
     }
 
     private fun persistGaitIfUpdated(s: PdrState) {
@@ -815,7 +868,10 @@ class IndoorNavigationBackend(
             savedStepLengthM = savedStepLengthM,
             altitudeFloor = if (latestPressureHpa != null || altitudeFloors.hasStreetReference) estimateAltitudeFloor() else null,
             hasStreetPressureReference = altitudeFloors.hasStreetReference,
-            lastJunctionId = junctions.lastJunctionId
+            lastJunctionId = junctions.lastJunctionId,
+            localizationEnabled = localizationEnabled,
+            localization = if (localizationEnabled) localization.estimate else null,
+            localizationParticles = if (localizationEnabled) localization.samplePositions(MAX_PARTICLES_SHOWN) else emptyList()
         )
     }
 
@@ -915,6 +971,7 @@ class IndoorNavigationBackend(
         private const val SETTLING_DELAY_MS = 2_000L
         private const val DEFAULT_FLOOR_ID = "MB-2"
         private const val MAX_CAMPUS_RADIUS_M = 350.0
+        private const val MAX_PARTICLES_SHOWN = 400
         private const val NEAR_CONNECTOR_BARO_RADIUS_M = 7.0
         private const val HIGH_PRECISION_OUTDOOR_GPS_M = 4.5
         private const val STREET_REFERENCE_MAX_ACCURACY_M = 15.0
