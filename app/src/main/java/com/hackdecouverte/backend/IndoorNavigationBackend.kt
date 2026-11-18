@@ -8,6 +8,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.hackdecouverte.map.BuildingGraph
+import com.hackdecouverte.map.IndoorSite
 import com.hackdecouverte.map.DestinationItem
 import com.hackdecouverte.map.FloorNode
 import com.hackdecouverte.map.FloorPlan
@@ -69,6 +70,8 @@ data class NearbyVerticalOptions(
 
 data class NavigationSnapshot(
     val pdr: PdrState = PdrState(),
+    /** Building being navigated (its floors, its place on Earth). */
+    val site: IndoorSite = IndoorSite.MB,
     val geoOrigin: GeoOrigin = GeoOrigin.MB_ELEVATOR_CORE,
     val osmSurroundings: OsmSurroundings? = null,
     val floors: List<FloorPlan> = emptyList(),
@@ -116,7 +119,8 @@ data class NavigationSnapshot(
 
 class IndoorNavigationBackend(
     context: Context,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    val site: IndoorSite = IndoorSite.MB
 ) {
     private val appContext = context.applicationContext
 
@@ -136,8 +140,8 @@ class IndoorNavigationBackend(
 
     /** Map localization (spec §6.3), behind a developer switch until plan 2. */
     private val localization = LocalizationController({ floorId ->
-        floorId.removePrefix("MB-").toIntOrNull()?.let { n ->
-            loadIndoorMap(n) { path -> runCatching { appContext.assets.open(path) }.getOrNull() }
+        buildingGraph.floor(floorId)?.let { plan ->
+            loadIndoorMap(plan) { path -> runCatching { appContext.assets.open(path) }.getOrNull() }
         }
     })
     private var localizationEnabled = false
@@ -156,7 +160,7 @@ class IndoorNavigationBackend(
 
     private val gpsSource = GpsLocationSource(
         context = appContext,
-        origin = GeoOrigin.MB_ELEVATOR_CORE,
+        origin = site.origin,
         onFix = ::handleGpsFix
     )
 
@@ -176,13 +180,13 @@ class IndoorNavigationBackend(
             null
         }
 
-    private var geoOrigin: GeoOrigin = GeoOrigin.MB_ELEVATOR_CORE
+    private var geoOrigin: GeoOrigin = site.origin
     private var osmSurroundings: OsmSurroundings? = null
     private val floorVectors = LinkedHashMap<String, FloorVectorPlan>()
 
-    private var buildingGraph = BuildingGraph(loadBundledFloors(appContext))
+    private var buildingGraph = BuildingGraph(loadBundledFloors(appContext, site.floorsDir))
     private var userFloorId: String? =
-        buildingGraph.floor(DEFAULT_FLOOR_ID)?.floorId ?: buildingGraph.floors.firstOrNull()?.floorId
+        buildingGraph.floor(site.defaultFloorId)?.floorId ?: buildingGraph.floors.firstOrNull()?.floorId
     private var viewedFloorId: String? = userFloorId
 
     private var startPose: NodeKey? = null
@@ -240,7 +244,7 @@ class IndoorNavigationBackend(
             }
         }
 
-        scope.launch {
+        if (site.osmSurroundings) scope.launch {
             osmLoader.loadInitial(geoOrigin)?.let { loadedOsm ->
                 osmSurroundings = loadedOsm
                 _state.value = buildSnapshot(tracker.state.value)
@@ -293,6 +297,7 @@ class IndoorNavigationBackend(
     }
 
     fun refreshOsmSurroundingsFromNetwork(radiusM: Double = 280.0) {
+        if (!site.osmSurroundings) return
         val targetOrigin = geoOrigin
         scope.launch {
             osmLoader.fetchLiveSurroundings(targetOrigin, radiusM)?.let { fresh ->
@@ -360,6 +365,7 @@ class IndoorNavigationBackend(
      * Explicit outdoor GPS origin action (only when explicitly requested by the user).
      */
     fun useGpsAsStartOrigin(): Boolean {
+        if (!site.gpsPositionTrusted) return false
         val fix = latestGpsFix ?: return false
         if (fix.eastNorthM.norm() > MAX_CAMPUS_RADIUS_M) return false
         startPose = null
@@ -675,7 +681,7 @@ class IndoorNavigationBackend(
         // Outdoors next to MB with a clean fix: this pressure is the street level for the altitude floor estimate
         val distFromCoreM = fix.eastNorthM.norm()
         val pressure = latestPressureHpa
-        if (pressure != null && fix.accuracyM <= STREET_REFERENCE_MAX_ACCURACY_M &&
+        if (site.gpsPositionTrusted && pressure != null && fix.accuracyM <= STREET_REFERENCE_MAX_ACCURACY_M &&
             distFromCoreM in STREET_REFERENCE_MIN_DIST_M..STREET_REFERENCE_MAX_DIST_M
         ) {
             altitudeFloors.captureStreetReference(latestPressureNs, pressure)
@@ -687,7 +693,7 @@ class IndoorNavigationBackend(
         // Only apply position drift correction when using GPS start OR outdoor high-precision GNSS (<= 4.5 m)
         val anc = anchor
         val allowPositionNudge = usingGpsStart || fix.accuracyM <= HIGH_PRECISION_OUTDOOR_GPS_M
-        if (allowPositionNudge && anc != null && fix.eastNorthM.norm() <= MAX_CAMPUS_RADIUS_M && !localizationEnabled) {
+        if (site.gpsPositionTrusted && allowPositionNudge && anc != null && fix.eastNorthM.norm() <= MAX_CAMPUS_RADIUS_M && !localizationEnabled) {
             tracker.onExternalFix(anc.fromMap(fix.eastNorthM), fix.accuracyM)
         }
         _state.value = buildSnapshot(tracker.state.value)
@@ -837,6 +843,7 @@ class IndoorNavigationBackend(
 
         return NavigationSnapshot(
             pdr = pdr,
+            site = site,
             geoOrigin = geoOrigin,
             osmSurroundings = osmSurroundings,
             floors = buildingGraph.floors,
@@ -971,7 +978,6 @@ class IndoorNavigationBackend(
         private const val KEY_LAST_STEP_LENGTH = "last_step_length"
         private const val KEY_LAST_CADENCE = "last_cadence_hz"
         private const val SETTLING_DELAY_MS = 2_000L
-        private const val DEFAULT_FLOOR_ID = "MB-2"
         private const val MAX_CAMPUS_RADIUS_M = 350.0
         private const val MAX_PARTICLES_SHOWN = 400
         private const val NEAR_CONNECTOR_BARO_RADIUS_M = 7.0
@@ -981,13 +987,13 @@ class IndoorNavigationBackend(
         private const val STREET_REFERENCE_MAX_DIST_M = 160.0
         private const val ENTRANCE_SNAP_MIN_DIST_M = 15.0
 
-        fun loadBundledFloors(context: Context): List<FloorPlan> {
+        fun loadBundledFloors(context: Context, floorsDir: String = IndoorSite.MB.floorsDir): List<FloorPlan> {
             val loaded = ArrayList<FloorPlan>()
             runCatching {
-                val extra = context.assets.list("floors").orEmpty().sorted()
+                val extra = context.assets.list(floorsDir).orEmpty().sorted()
                 for (file in extra) {
-                    if (!file.endsWith(".json")) continue
-                    context.assets.open("floors/$file").use { planStream ->
+                    if (!file.startsWith("floorplan-") || !file.endsWith(".json")) continue
+                    context.assets.open("$floorsDir/$file").use { planStream ->
                         val plan = FloorPlan.parse(planStream)
                         if (loaded.none { it.floorId == plan.floorId }) {
                             loaded.add(plan)
@@ -995,7 +1001,7 @@ class IndoorNavigationBackend(
                     }
                 }
             }
-            if (loaded.isEmpty()) {
+            if (loaded.isEmpty() && floorsDir == IndoorSite.MB.floorsDir) {
                 runCatching {
                     context.assets.open("floorplan.json").use { loaded.add(FloorPlan.parse(it)) }
                 }

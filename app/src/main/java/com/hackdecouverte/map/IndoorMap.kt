@@ -124,10 +124,14 @@ object IndoorMapBuilder {
  * Null when the SVG or the graph is missing.
  */
 fun loadIndoorMap(floorNumber: Int, open: (String) -> InputStream?): IndoorMap? {
-    val svg = open(String.format("floor-plans/MB/MB-floor-%02d.svg", floorNumber)) ?: return null
     val graph = open("floors/floorplan-MB-$floorNumber.json") ?: return null
-    val vector = svg.use { FloorVectorPlan.parseSvg("MB-$floorNumber", it) }
-    val plan = graph.use { FloorPlan.parse(it) }
-    val overlay = open("maps/MB-$floorNumber-overlay.json")?.use { MapOverlay.parse(it.bufferedReader().readText()) }
+    return loadIndoorMap(graph.use { FloorPlan.parse(it) }, open)
+}
+
+/** Any building: walls from the plan's own SVG (`svg_asset`), overlay from `maps/<floorId>-overlay.json`. */
+fun loadIndoorMap(plan: FloorPlan, open: (String) -> InputStream?): IndoorMap? {
+    val svg = plan.svgAsset?.let(open) ?: return null
+    val vector = svg.use { FloorVectorPlan.parseSvg(plan.floorId, it) }
+    val overlay = open("maps/${plan.floorId}-overlay.json")?.use { MapOverlay.parse(it.bufferedReader().readText()) }
     return IndoorMapBuilder.build(vector, plan, overlay)
 }
