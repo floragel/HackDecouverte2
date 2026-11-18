@@ -18,6 +18,8 @@ data class LocParams(
     val resampleEssRatio: Double = 0.5,
     val recoveryFraction: Double = 0.02,
     val recoveryRadiusM: Double = 15.0,
+    /** × the heading noise for stride-averaged steps (pocket, swinging hand): their headings are looser. */
+    val bodyCarryNoiseScale: Double = 2.0,
     /** Steps kept for the walk traced back (Zee's backward propagation); the computer replay keeps whole walks. */
     val historySteps: Int = 300
 )

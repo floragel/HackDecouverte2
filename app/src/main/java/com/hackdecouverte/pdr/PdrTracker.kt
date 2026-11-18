@@ -20,7 +20,9 @@ class PdrTracker(
     calibrationDistanceM: Double = 5.0,
     milestoneIntervalM: Double = 5.0,
     private val antiShakeEnabled: Boolean = false,
-    corridorAssistInitial: Boolean = false
+    corridorAssistInitial: Boolean = false,
+    /** How the phone is carried; built from the tuning (CarryMonitor.from) by the app and the replay. */
+    carry: CarryMonitor = CarryMonitor()
 ) {
     private val calibrationDistanceM = calibrationDistanceM
     private val milestoneTracker = MilestoneTracker(milestoneIntervalM)
@@ -33,7 +35,7 @@ class PdrTracker(
     var useTrueNorthReference: Boolean = false
 
     /** How the phone is carried (spec §6.6): heading window, shake filter and hold-change bridging. */
-    val carry = CarryMonitor().also { it.onHoldChanged = { t, d -> onHoldChanged(t, d) } }
+    val carry: CarryMonitor = carry.also { it.onHoldChanged = { t, d -> onHoldChanged(t, d) } }
 
     /**
      * Any way of holding the phone (map localization mode, where the filter learns the phone→walking
@@ -147,6 +149,15 @@ class PdrTracker(
      */
     var compassPullTauS: Double = 8.0
 
+    /** Compass and game headings further apart than this: the compass is ignored (tuning). */
+    var compassPullMaxErrDeg: Double = 60.0
+
+    /** Reference cadence when nothing was calibrated (any-hold mode; tuning). */
+    var typicalCadenceHz: Double = TYPICAL_CADENCE_HZ
+
+    /** × the stride used to average a rocking phone's heading (tuning). */
+    var strideWindowFactor: Double = 1.0
+
     private fun continuousCompassPull(timestampNs: Long): Double {
         val ref = referenceYaw ?: return 0.0
         val window = compassOffsets.filter { it.first in timestampNs - strideWindowNs()..timestampNs + 200_000_000L }
@@ -155,7 +166,7 @@ class PdrTracker(
         if (window.size < 2) return 0.0
         val offset = atan2Mean(window.map { it.second }) ?: return 0.0
         val err = angleDelta(ref, wrapAnglePi(-offset))
-        if (abs(err) > MAX_COMPASS_PULL_ERR_RAD) return 0.0
+        if (abs(err) > Math.toRadians(compassPullMaxErrDeg)) return 0.0
         return (err * minOf(1.0, dtS / compassPullTauS)).coerceIn(-MAX_HEADING_STEP_RAD, MAX_HEADING_STEP_RAD)
     }
 
@@ -296,9 +307,10 @@ class PdrTracker(
 
     /** One stride (2 steps) from the recent cadence, for averaging a rocking phone's heading. */
     private fun strideWindowNs(): Long {
-        if (recentIntervalsNs.isEmpty()) return DEFAULT_STRIDE_NS
-        val sorted = recentIntervalsNs.sorted()
-        return (2 * sorted[sorted.size / 2]).coerceIn(MIN_STRIDE_NS, MAX_STRIDE_NS)
+        val base = if (recentIntervalsNs.isEmpty()) DEFAULT_STRIDE_NS
+        else (2 * recentIntervalsNs.sorted()[recentIntervalsNs.size / 2]).coerceIn(MIN_STRIDE_NS, MAX_STRIDE_NS)
+        if (strideWindowFactor == 1.0) return base
+        return (base * strideWindowFactor).toLong().coerceIn(400_000_000L, 3_200_000_000L)
     }
 
     private fun headingWindowNs(turnRate: Double): Long = when {
@@ -782,7 +794,7 @@ class PdrTracker(
         // Any-hold (map localization, no calibration walk): the first steps of a walk are slow and the
         // detector doubles some in a pocket, so the base cadence must not be learned from them — a
         // typical walking cadence is the reference instead (the map learns the stride on top).
-        baseCadenceHz = cadenceHz?.takeIf { it.isFinite() && it in 0.6..3.6 } ?: if (anyHoldHeading) TYPICAL_CADENCE_HZ else null
+        baseCadenceHz = cadenceHz?.takeIf { it.isFinite() && it in 0.6..3.6 } ?: if (anyHoldHeading) typicalCadenceHz else null
         currentCadenceHz = null
         currentStepLengthM = lengthPerStepM
         recentIntervalsNs.clear()
@@ -1072,7 +1084,6 @@ class PdrTracker(
         private const val MAX_EXTERNAL_STEP_M = 0.08
         private const val MAX_HELD_STEPS = 32
         private const val DEFAULT_STRIDE_NS = 1_100_000_000L
-        private val MAX_COMPASS_PULL_ERR_RAD = Math.toRadians(60.0)
         /** About 110 steps/min: an average adult walking cadence. */
         const val TYPICAL_CADENCE_HZ = 1.8
         private const val MIN_STRIDE_NS = 800_000_000L

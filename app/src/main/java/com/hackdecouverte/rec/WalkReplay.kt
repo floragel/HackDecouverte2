@@ -12,7 +12,12 @@ import com.hackdecouverte.pdr.PdrTracker
 import com.hackdecouverte.pdr.PointM
 import com.hackdecouverte.pdr.SensorStatus
 import com.hackdecouverte.pdr.StepSource
+import com.hackdecouverte.pdr.CarryMonitor
 import com.hackdecouverte.sensor.SensorRouter
+import com.hackdecouverte.tuning.TuningParams
+import com.hackdecouverte.tuning.applyTuning
+import com.hackdecouverte.tuning.from
+import com.hackdecouverte.tuning.locParams
 import kotlin.random.Random
 
 /** One accepted PDR step during a replay: raw PDR position (local, True-North frame) and the map estimate after it. */
@@ -78,7 +83,9 @@ class WalkReplay(
     private val origin: GeoOrigin,
     private val mapProvider: (floorId: String) -> IndoorMap?,
     private val seed: Int = 1,
-    private val params: LocParams = LocParams(),
+    /** Trained settings (assets/tuning/params.json); [params] defaults to its filter part. */
+    private val tuning: TuningParams = TuningParams(),
+    private val params: LocParams = tuning.locParams(),
     /** False = replay as if there were no GPS at all (does the map alone find the walker?). */
     private val useGps: Boolean = true,
     /**
@@ -91,9 +98,10 @@ class WalkReplay(
     fun run(): ReplayResult {
         val h = recording.header
         var now = h.startedNs
-        val tracker = PdrTracker(clock = { now }, antiShakeEnabled = true, corridorAssistInitial = true).apply {
+        val tracker = PdrTracker(clock = { now }, antiShakeEnabled = true, corridorAssistInitial = true, carry = CarryMonitor.from(tuning.carry)).apply {
             useTrueNorthReference = true
             anyHoldHeading = true // localization mode: any way of holding the phone
+            applyTuning(tuning.pdr)
         }
         val source = runCatching { StepSource.valueOf(h.stepSource) }.getOrDefault(StepSource.HARDWARE)
         tracker.onSensorStatus(

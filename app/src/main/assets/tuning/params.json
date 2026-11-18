@@ -1,0 +1,33 @@
+{
+    "version": 1,
+    "provisional": false,
+    "trainedOn": [],
+    "pdr": {
+        "compassPullTauS": 8.0,
+        "compassPullMaxErrDeg": 60.0,
+        "walkAxisCorrection": true,
+        "walkAxisTau": 4.0,
+        "walkAxisMinRatio": 2.0,
+        "strideWindowFactor": 1.0,
+        "typicalCadenceHz": 1.8
+    },
+    "carry": {
+        "startDeg": 25.0,
+        "commitDeg": 35.0,
+        "settledDeg": 12.0,
+        "swingOnDeg": 9.0,
+        "swingOffDeg": 6.0
+    },
+    "filter": {
+        "maxParticles": 2000,
+        "minParticles": 300,
+        "headingNoiseDeg": 3.0,
+        "bodyCarryNoiseScale": 2.0,
+        "lengthNoise": 0.05,
+        "offsetDriftDeg": 0.5,
+        "scaleDrift": 0.005,
+        "wallFactor": 0.02,
+        "beta": 0.2,
+        "recoveryFraction": 0.02
+    }
+}

@@ -73,7 +73,7 @@ internal object WalkAnalysis {
         while (start + (windowS * 0.6 * 1e9).toLong() <= end) {
             val stop = minOf(end, start + (windowS * 1e9).toLong())
             for (gps in if (withoutGps) listOf(true, false) else listOf(true)) for (seed in seeds) {
-                val r = WalkReplay(rec, site.origin, mapProvider(site), seed, params, useGps = gps, windowStartNs = start, windowEndNs = stop).run()
+                val r = WalkReplay(rec, site.origin, mapProvider(site), seed, params = params, useGps = gps, windowStartNs = start, windowEndNs = stop).run()
                 val found = r.firstFoundNs
                 val errs = ArrayList<Double>()
                 val approx = ArrayList<Double>()

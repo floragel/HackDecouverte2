@@ -12,6 +12,12 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.hackdecouverte.loc.LocParams
+import com.hackdecouverte.pdr.CarryMonitor
+import com.hackdecouverte.tuning.Tuning
+import com.hackdecouverte.tuning.TuningParams
+import com.hackdecouverte.tuning.applyTuning
+import com.hackdecouverte.tuning.from
+import com.hackdecouverte.tuning.locParams
 import com.hackdecouverte.loc.LocZone
 import com.hackdecouverte.loc.LocState
 import com.hackdecouverte.map.BuildingGraph
@@ -156,12 +162,17 @@ class IndoorNavigationBackend(
 ) {
     private val appContext = context.applicationContext
 
+    /** Trained settings shipped with the app (defaults when the file is missing). */
+    private val tuning: TuningParams = Tuning.load { runCatching { appContext.assets.open(it) }.getOrNull() }
+
     val tracker = PdrTracker(
         clock = SystemClock::elapsedRealtimeNanos,
         antiShakeEnabled = true,
-        corridorAssistInitial = true
+        corridorAssistInitial = true,
+        carry = CarryMonitor.from(tuning.carry)
     ).apply {
         useTrueNorthReference = true
+        applyTuning(tuning.pdr)
     }
 
     private val floorTracker = FloorTransitionTracker()
@@ -1265,7 +1276,7 @@ class IndoorNavigationBackend(
      */
     private fun beginSearch(floorId: String, allowWarm: Boolean) {
         val (lo, hi) = strideMemory.prior(tracker.state.value.lengthPerStepM ?: strideMemory.learnedStepM)
-        localization.params = LocParams(strideScaleMin = lo, strideScaleMax = hi)
+        localization.params = tuning.locParams().copy(strideScaleMin = lo, strideScaleMax = hi)
         localization.start(floorId, freshSystemFix(), if (allowWarm) loadWarmStart(floorId) else null)
         foundSteps = 0
         learnedInRun = false
