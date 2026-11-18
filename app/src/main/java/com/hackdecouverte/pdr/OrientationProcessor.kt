@@ -58,10 +58,17 @@ fun worldVerticalFromRotationMatrix(r: DoubleArray): Triple<Double, Double, Doub
     Triple(r[6], r[7], r[8])
 
 class OrientationProcessor(
-    private val bufferNs: Long = 2_500_000_000L,
+    private val bufferNs: Long = 4_000_000_000L,
     private val meanWindowNs: Long = 150_000_000L,
     private val minHorizontalNorm: Double = 0.12
 ) {
+    /**
+     * Any hold (map localization): the twist about the vertical is a valid heading for every attitude
+     * but screen-down (twist norm ≥ 0.2, tilt ≲ 143°), so the phone may be upright or in a pocket.
+     * Off: the top of the phone must also point somewhat horizontally (phone held flat-ish).
+     */
+    var anyHold: Boolean = false
+
     private data class YawSample(val timestampNs: Long, val yaw: Double, val valid: Boolean)
 
     private val samples = ArrayDeque<YawSample>()
@@ -79,7 +86,7 @@ class OrientationProcessor(
         val sinYaw = r[1] - r[3]
         val cosYaw = r[0] + r[4]
         val twistNorm = hypot(sinYaw, cosYaw)
-        val valid = flatNorm >= minHorizontalNorm && twistNorm >= 0.2 &&
+        val valid = (anyHold || flatNorm >= minHorizontalNorm) && twistNorm >= 0.2 &&
             sinYaw.isFinite() && cosYaw.isFinite()
         if (timestampNs <= lastTimestampNs && samples.isNotEmpty()) return
         lastTimestampNs = timestampNs
@@ -141,6 +148,17 @@ class OrientationProcessor(
         }
         val dtS = (lastTs - firstTs) / 1e9
         return if (dtS >= 0.03) totalAbsRad / dtS else 0.0
+    }
+
+    /**
+     * Turn rate of the stride-averaged heading: change between the mean over the [windowNs] ending at
+     * [timestampNs] and the one ending half a window earlier. A phone rocking with the gait has a huge
+     * instantaneous turn rate while the walker goes straight; this one only sees real turns.
+     */
+    fun strideTurnRateRadPerSecAt(timestampNs: Long, windowNs: Long): Double {
+        val now = meanHeadingAt(timestampNs, windowNs) ?: return 0.0
+        val before = meanHeadingAt(timestampNs - windowNs / 2, windowNs) ?: return 0.0
+        return abs(angleDelta(before, now)) / (windowNs / 2 / 1e9)
     }
 
     fun clear() {

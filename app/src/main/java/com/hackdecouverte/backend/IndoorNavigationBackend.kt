@@ -2,9 +2,13 @@ package com.hackdecouverte.backend
 
 import android.Manifest
 import android.content.Context
+import android.content.IntentFilter
+import android.content.Intent
+import android.content.BroadcastReceiver
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.SystemClock
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.hackdecouverte.map.BuildingGraph
@@ -243,9 +247,26 @@ class IndoorNavigationBackend(
         val accessibleOnly: Boolean
     )
 
+    /** Screen on/off: a phone whose screen is off is not being read (no reading pose, see CarryMonitor). */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val on = intent.action == Intent.ACTION_SCREEN_ON
+            tracker.screenInteractive = on
+            recorder.note("screen", if (on) "on" else "off")
+        }
+    }
+
     init {
         adapter.onRawSample = recorder::onPipelineSample
         adapter.onRawAccuracy = recorder::onPipelineAccuracy
+        tracker.screenInteractive = (appContext.getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
+        runCatching {
+            ContextCompat.registerReceiver(
+                appContext, screenReceiver,
+                IntentFilter().apply { addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF) },
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        }
         pushSensorStatus()
         ensureUsableStepSource()
         recomputeAnchor()
@@ -816,6 +837,7 @@ class IndoorNavigationBackend(
         if (ok) {
             lastLoggedLiveStep = -1
             recorder.note("start", "phase=${s.phase} steps=${s.stepCount} localization=$localizationEnabled")
+            recorder.note("screen", if (tracker.screenInteractive) "on" else "off")
         }
         _state.value = buildSnapshot(tracker.state.value)
         return ok
@@ -857,6 +879,8 @@ class IndoorNavigationBackend(
     fun setLocalizationEnabled(enabled: Boolean) {
         if (enabled == localizationEnabled) return
         localizationEnabled = enabled
+        // Map localization learns the phone→walking angle, so the phone may be held any way (spec §6.6).
+        tracker.anyHoldHeading = enabled
         if (enabled) {
             localizationEnabledAtNs = SystemClock.elapsedRealtimeNanos()
             if (LocalizationController.shouldAutoStartPdr(tracker.state.value, 0L)) startWithSavedOrDefaultStepLength()

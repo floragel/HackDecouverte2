@@ -76,6 +76,7 @@ class WalkReplay(
         var now = h.startedNs
         val tracker = PdrTracker(clock = { now }, antiShakeEnabled = true, corridorAssistInitial = true).apply {
             useTrueNorthReference = true
+            anyHoldHeading = true // localization mode: any way of holding the phone
         }
         val source = runCatching { StepSource.valueOf(h.stepSource) }.getOrDefault(StepSource.HARDWARE)
         tracker.onSensorStatus(
@@ -167,6 +168,7 @@ class WalkReplay(
                     val s = tracker.state.value
                     pending += Pending(e, epoch, controller.stepsSinceStart, controller.estimate?.state, zone?.centerM, s.position, s.stepCount)
                 }
+                is RecEvent.Note -> if (e.name == "screen") tracker.screenInteractive = e.detail == "on"
                 else -> {}
             }
         }

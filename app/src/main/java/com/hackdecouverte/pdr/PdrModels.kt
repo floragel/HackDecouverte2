@@ -80,6 +80,16 @@ data class PdrState(
     val registrationFailed: Boolean = false,
     val corridorAssistEnabled: Boolean = false,
     val trueNorthAligned: Boolean = false,
+    /** How the phone is carried (any-hold mode only changes behaviour). */
+    val carryMode: CarryMode = CarryMode.STEADY,
+    /** The phone is being moved to a new hold: steps keep the last heading. */
+    val inHoldTransition: Boolean = false,
+    /** Hold changes bridged since the PDR's last reference (the map filter widens its angles at each). */
+    val holdChanges: Int = 0,
+    /** The heading is the walking direction ±~20° (the session started in a reading pose): the compass is a valid prior. */
+    val headingAligned: Boolean = true,
+    /** Steady, screen on, portrait: right now the phone points where the user walks. */
+    val readingPose: Boolean = false,
     val externalAccuracyM: Double? = null,
     val warnings: Set<PdrWarning> = emptySet()
 ) {

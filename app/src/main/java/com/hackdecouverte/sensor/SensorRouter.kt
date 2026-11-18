@@ -67,7 +67,9 @@ class SensorRouter(
                 val r = rotationMatrixFromVector(values, values.size)
                 val sinYaw = if (r != null) r[1] - r[3] else 0.0
                 val cosYaw = if (r != null) r[0] + r[4] else 0.0
-                if (r != null && hypot(r[1], r[4]) >= 0.12 && hypot(sinYaw, cosYaw) >= 0.2) {
+                // Any hold: the twist is the phone's heading for every attitude but screen-down (same rule as the game heading).
+                val flatEnough = tracker.anyHoldHeading || (r != null && hypot(r[1], r[4]) >= 0.12)
+                if (r != null && flatEnough && hypot(sinYaw, cosYaw) >= 0.2) {
                     val magAzimuthRad = atan2(sinYaw, cosYaw)
                     val trueAzimuthRad = wrapAnglePi(magAzimuthRad + Math.toRadians(magneticDeclinationDeg))
                     latestWorldAzimuthRad = trueAzimuthRad

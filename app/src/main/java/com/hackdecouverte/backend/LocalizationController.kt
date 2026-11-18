@@ -43,6 +43,7 @@ class LocalizationController(
     @Volatile private var filter: LocalizationFilter? = null
     private var lastPosition: PointM? = null
     private var lastStepCount = -1
+    private var lastHoldChanges = 0
 
     @Volatile var floorId: String? = null
         private set
@@ -172,7 +173,12 @@ class LocalizationController(
         val prevSteps = lastStepCount
         lastPosition = s.position
         lastStepCount = s.stepCount
-        if (!f.offsetKnown) f.compassAligned = s.trueNorthAligned
+        // The compass says where the phone points; that is where the user walks only in a reading pose.
+        if (!f.offsetKnown) f.compassAligned = s.trueNorthAligned && s.headingAligned
+        if (s.holdChanges != lastHoldChanges) {
+            if (s.holdChanges > lastHoldChanges) f.onHoldChanged()
+            lastHoldChanges = s.holdChanges
+        }
         if (prev == null || s.stepCount < prevSteps) return
         val dx = s.position.x - prev.x
         val dy = s.position.y - prev.y

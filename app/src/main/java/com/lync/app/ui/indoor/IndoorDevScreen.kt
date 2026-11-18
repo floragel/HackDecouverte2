@@ -64,6 +64,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hackdecouverte.PdrViewModel
 import com.hackdecouverte.backend.NavigationSnapshot
 import com.hackdecouverte.loc.LocState
+import com.hackdecouverte.pdr.CarryMode
 import com.hackdecouverte.pdr.PdrPhase
 import com.hackdecouverte.ui.CalibrationScreen
 import com.hackdecouverte.ui.DebugLayer
@@ -312,6 +313,14 @@ private fun DebugStatus(snapshot: NavigationSnapshot) {
                 (snapshot.localizationSystemCircle?.let { " · disque ${it.second.roundToInt()} m" } ?: "")
         )
         add("PDR : ${snapshot.pdr.phase} · ${snapshot.pdr.stepCount} pas · ${fmt(snapshot.pdr.distanceM, 1)} m · étage ${snapshot.userFloorId ?: "—"}")
+        val p = snapshot.pdr
+        val carry = when {
+            p.inHoldTransition -> "changement de tenue…"
+            p.carryMode == CarryMode.SWINGING -> "balancé (poche, main qui balance)"
+            p.readingPose -> "en main, écran regardé"
+            else -> "stable (main, poche de veste, sac)"
+        }
+        add("Tenue : $carry · changements ${p.holdChanges} · cap = marche ${if (p.headingAligned) "oui" else "non (angle appris par la carte)"}")
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
         lines.forEach { Text(it, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = c.textMuted) }

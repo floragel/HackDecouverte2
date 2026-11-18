@@ -191,6 +191,24 @@ class LocalizationFilter(
         }
     }
 
+    /**
+     * The phone changed hold (spec §6.6). The PDR kept its heading continuous assuming the body did
+     * not turn meanwhile; in case it did, the angles widen: ±[HOLD_CHANGE_SIGMA_RAD] for most, a
+     * half-turn for [HOLD_FLIP_SHARE], and for [HOLD_AXIS_SHARE] one of the building's four main
+     * directions (a turn hidden by the change is usually a 90° corner). Positions stay where they are.
+     */
+    fun onHoldChanged() {
+        if (n == 0 || !offsetKnown) return
+        for (i in 0 until n) {
+            val u = random.nextDouble()
+            offset[i] = when {
+                u < HOLD_AXIS_SHARE -> map.dominantAxisRad + random.nextInt(4) * PI / 2 - lastHeadingRad + gaussian() * Math.toRadians(5.0)
+                u < HOLD_AXIS_SHARE + HOLD_FLIP_SHARE -> offset[i] + PI
+                else -> offset[i] + gaussian() * HOLD_CHANGE_SIGMA_RAD
+            }
+        }
+    }
+
     /** Phone angle with no corridor to go by: around 0 when the compass is trusted, else anything. */
     private fun freeOffset(): Double =
         if (compassAligned && random.nextDouble() >= COMPASS_DISTRUST_SHARE) gaussian() * COMPASS_SIGMA_RAD
@@ -487,6 +505,10 @@ class LocalizationFilter(
         val COMPASS_SIGMA_RAD = Math.toRadians(15.0)
         /** Hypotheses that ignore the compass anyway (a steel door or a magnet can turn it by 90°). */
         const val COMPASS_DISTRUST_SHARE = 0.1
+        /** Widening of the phone angles at a hold change (the bridge assumes the body did not turn). */
+        val HOLD_CHANGE_SIGMA_RAD = Math.toRadians(20.0)
+        const val HOLD_FLIP_SHARE = 0.05
+        const val HOLD_AXIS_SHARE = 0.16
         const val OUTSIDE_DISK_SHARE = 0.1
         /** Score memory: ~5 steps. */
         const val SCORE_KEEP = 0.8

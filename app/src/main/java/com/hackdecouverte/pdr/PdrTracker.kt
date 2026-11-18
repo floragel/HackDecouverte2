@@ -32,6 +32,35 @@ class PdrTracker(
     var mapAxisBaseLocal: Double? = null
     var useTrueNorthReference: Boolean = false
 
+    /** How the phone is carried (spec §6.6): heading window, shake filter and hold-change bridging. */
+    val carry = CarryMonitor().also { it.onHoldChanged = { t, d -> onHoldChanged(t, d) } }
+
+    /**
+     * Any way of holding the phone (map localization mode, where the filter learns the phone→walking
+     * angle): heading = the phone's twist about the vertical for any attitude but screen-down, a
+     * swinging phone's heading is averaged over a stride and its gait is not mistaken for shaking, and
+     * hold changes are bridged so the heading stays continuous. Off: phone held flat, as before.
+     */
+    var anyHoldHeading: Boolean = false
+        set(value) {
+            field = value
+            orientation.anyHold = value
+        }
+
+    /** Screen on/off (set by the app): a phone with its screen off is not in a reading pose. */
+    var screenInteractive: Boolean
+        get() = carry.screenInteractive
+        set(value) {
+            carry.screenInteractive = value
+        }
+
+    /** Sum of the phone-heading jumps of all bridged hold changes since the last reference. */
+    private var holdOffsetRad = 0.0
+    private var bridgedHoldChanges = 0
+    /** The heading is the walking direction ±~20° (started in a reading pose, bridged since). */
+    private var headingAligned = true
+    private var lastTheta: Double? = null
+
     private var verticalHoldActive = false
     private var verticalHoldSuppressed = false
     private val heldStepDeltas = ArrayList<PointM>()
@@ -87,7 +116,48 @@ class PdrTracker(
 
     fun onRotationVector(timestampNs: Long, values: FloatArray, size: Int = values.size) {
         orientation.onRotationVector(timestampNs, values, size)
+        rotationMatrixFromVector(values, size)?.let { carry.onRotation(timestampNs, it) }
         publish()
+    }
+
+    /** A new hold has settled: keep the heading continuous (the body is assumed not to have turned meanwhile). */
+    private fun onHoldChanged(@Suppress("UNUSED_PARAMETER") tNs: Long, deltaTwistRad: Double) {
+        if (!anyHoldHeading) return
+        alignmentPending = false // the pose at the start is gone: whatever was decided stays
+        holdOffsetRad = wrapAnglePi(holdOffsetRad + deltaTwistRad)
+        bridgedHoldChanges++
+        recentStepYaws.clear() // the raw phone heading jumped: straightness starts over
+    }
+
+    private val swinging: Boolean
+        get() = anyHoldHeading && carry.mode == CarryMode.SWINGING
+
+    /** One stride (2 steps) from the recent cadence, for averaging a rocking phone's heading. */
+    private fun strideWindowNs(): Long {
+        if (recentIntervalsNs.isEmpty()) return DEFAULT_STRIDE_NS
+        val sorted = recentIntervalsNs.sorted()
+        return (2 * sorted[sorted.size / 2]).coerceIn(MIN_STRIDE_NS, MAX_STRIDE_NS)
+    }
+
+    private fun headingWindowNs(turnRate: Double): Long = when {
+        swinging -> strideWindowNs()
+        turnRate > 0.8 -> 60_000_000L
+        else -> 150_000_000L
+    }
+
+    private fun turnRateAt(timestampNs: Long): Double =
+        if (swinging) orientation.strideTurnRateRadPerSecAt(timestampNs, strideWindowNs())
+        else orientation.turnRateRadPerSecAt(timestampNs)
+
+    /** Reading pose not known yet (the carry monitor needs 1 s of data): decided at the first evaluation. */
+    private var alignmentPending = false
+
+    /** A new reference heading: hold bridging starts over from the current hold. */
+    private fun onNewReference() {
+        holdOffsetRad = 0.0
+        lastTheta = null
+        alignmentPending = anyHoldHeading && carry.up == null
+        headingAligned = !anyHoldHeading || carry.readingPose
     }
 
     fun onSensorStatus(status: SensorStatus) {
@@ -126,6 +196,7 @@ class PdrTracker(
     }
 
     fun onLinearAccelerationMagnitude(timestampNs: Long, magnitudeMss: Double) {
+        if (swinging) return // a pocket or a swinging hand jolts at every heel strike: that is walking, not shaking
         if (magnitudeMss.isFinite() && magnitudeMss >= SHAKE_ACCEL_THRESHOLD_MSS) {
             lastShakeNs = max(lastShakeNs, timestampNs)
             pendingGaitStepNs = Long.MIN_VALUE
@@ -147,7 +218,8 @@ class PdrTracker(
         highConfidence: Boolean = true
     ) {
         if (!trueAzimuthRad.isFinite()) return
-        val gameYaw = orientation.meanHeadingAt(timestampNs, 80_000_000L)
+        // Same instant for both phone headings; a rocking phone moves too fast for an 80 ms average.
+        val gameYaw = orientation.meanHeadingAt(timestampNs, if (swinging) 25_000_000L else 80_000_000L)
             ?: orientation.lastValidYaw
             ?: return
         val sampleOffset = wrapAnglePi(trueAzimuthRad - gameYaw)
@@ -156,9 +228,7 @@ class PdrTracker(
             trueNorthOffsetRad = sampleOffset
         } else if (phase != PdrPhase.TRACKING) {
             trueNorthOffsetRad = wrapAnglePi(prev + angleDelta(prev, sampleOffset) * 0.25)
-        } else if (useTrueNorthReference && highConfidence &&
-            orientation.turnRateRadPerSecAt(timestampNs) < 0.35
-        ) {
+        } else if (useTrueNorthReference && highConfidence && turnRateAt(timestampNs) < 0.35) {
             trueNorthOffsetRad = wrapAnglePi(prev + angleDelta(prev, sampleOffset) * 0.05)
             val ref = referenceYaw
             if (ref != null) {
@@ -179,10 +249,12 @@ class PdrTracker(
      */
     fun onTrueNorthBearingFromGps(timestampNs: Long, gpsTrueNorthRad: Double) {
         if (!gpsTrueNorthRad.isFinite()) return
+        // The GPS course is the walking direction: only comparable with the phone heading when that is it.
+        if (anyHoldHeading && (!headingAligned || swinging)) return
         val gameYaw = orientation.meanHeadingAt(timestampNs, 250_000_000L)
             ?: orientation.lastValidYaw
             ?: return
-        val gpsOffset = wrapAnglePi(gpsTrueNorthRad - gameYaw)
+        val gpsOffset = wrapAnglePi(gpsTrueNorthRad - (gameYaw - holdOffsetRad))
         val prev = trueNorthOffsetRad
         trueNorthOffsetRad = if (prev == null) {
             gpsOffset
@@ -258,9 +330,10 @@ class PdrTracker(
                     timestampNs - previousAccepted
                 }
                 if (antiShakeEnabled) {
-                    val shaken = lastShakeNs != Long.MIN_VALUE &&
+                    // A phone in a pocket or a swinging hand jolts and spins at every step: that is gait, not shaking.
+                    val shaken = !swinging && lastShakeNs != Long.MIN_VALUE &&
                         abs(timestampNs - lastShakeNs) <= SHAKE_COOLDOWN_NS
-                    val turnRateNow = orientation.turnRateRadPerSecAt(timestampNs)
+                    val turnRateNow = if (swinging) 0.0 else orientation.turnRateRadPerSecAt(timestampNs)
                     if (shaken || turnRateNow > MAX_SPIN_SHAKE_RAD_S) {
                         pendingGaitStepNs = Long.MIN_VALUE
                         droppedSteps++
@@ -301,8 +374,8 @@ class PdrTracker(
 
     private fun advanceStepAt(timestampNs: Long, intervalNs: Long?): Boolean {
         val length = lengthPerStepM
-        val turnRate = orientation.turnRateRadPerSecAt(timestampNs)
-        val windowNs = if (turnRate > 0.8) 60_000_000L else 150_000_000L
+        val turnRate = turnRateAt(timestampNs)
+        val windowNs = headingWindowNs(turnRate)
         val mean = orientation.meanHeadingAt(timestampNs, windowNs)
             ?: orientation.meanHeadingAt(timestampNs)
         var reference = referenceYaw
@@ -315,7 +388,9 @@ class PdrTracker(
         lastTrackedStepNs = timestampNs
         intervalNs?.let(::recordInterval)
         val straight = updateStraightness(mean, turnRate)
-        var theta = wrapAnglePi(mean - reference)
+        // While the phone is being moved to a new hold its heading means nothing: keep the last one.
+        val frozen = lastTheta?.takeIf { anyHoldHeading && carry.inTransition }
+        var theta = frozen ?: wrapAnglePi(mean - reference - holdOffsetRad)
 
         if (useTrueNorthReference && straight && pendingTrueNorthDriftRad != 0.0) {
             reference = wrapAnglePi(reference + pendingTrueNorthDriftRad)
@@ -332,6 +407,7 @@ class PdrTracker(
             }
         }
         learnAxisBase(theta, straight)
+        lastTheta = theta
 
         val dynamicLength = length * dynamicStepFactor()
         currentStepLengthM = dynamicLength
@@ -498,6 +574,7 @@ class PdrTracker(
             else -> endReference
         }
         lengthPerStepM = length
+        onNewReference()
         stepLengthManual = false
         startGaitModel(calibrationCadenceHz())
         resetTraceInternal()
@@ -546,6 +623,7 @@ class PdrTracker(
         if (!usable(stepSource)) return false
         val reference = resolveStartReferenceYaw(clock()) ?: return false
         referenceYaw = reference
+        onNewReference()
         lengthPerStepM = lengthM
         stepLengthManual = true
         startGaitModel(cadenceHz)
@@ -562,6 +640,7 @@ class PdrTracker(
         if (!sensorStatus.rotationAvailable || sensorStatus.registrationFailed) return false
         val reference = resolveStartReferenceYaw(clock()) ?: return false
         referenceYaw = reference
+        onNewReference()
         resetTraceInternal()
         sessionCutoffNs = max(maxStepTimestampSeenNs, clock())
         publish()
@@ -626,6 +705,7 @@ class PdrTracker(
 
     fun onSensorFrameRestart() {
         orientation.clear()
+        carry.reset()
         referenceYaw = null
         trueNorthOffsetRad = null
         pendingTrueNorthDriftRad = 0.0
@@ -653,6 +733,7 @@ class PdrTracker(
         if (!sensorStatus.rotationAvailable || sensorStatus.registrationFailed) return false
         val reference = resolveStartReferenceYaw(clock()) ?: return false
         referenceYaw = reference
+        onNewReference()
         resetTraceInternal()
         sessionCutoffNs = max(maxStepTimestampSeenNs, clock())
         warnings.remove(PdrWarning.SESSION_INTERRUPTED)
@@ -721,13 +802,17 @@ class PdrTracker(
     }
 
     private fun publish() {
+        if (alignmentPending && carry.up != null) {
+            alignmentPending = false
+            headingAligned = carry.readingPose
+        }
         val now = clock()
-        val mean = orientation.meanHeadingAt(now)
+        val mean = if (swinging) orientation.meanHeadingAt(now, strideWindowNs()) else orientation.meanHeadingAt(now)
         val reference = referenceYaw
         val tnOffset = trueNorthOffsetRad
         if (mean != null) {
             if (reference != null) {
-                displayedHeading = wrapAnglePi(mean - reference)
+                displayedHeading = wrapAnglePi(mean - reference - holdOffsetRad)
             } else if (useTrueNorthReference && tnOffset != null) {
                 displayedHeading = wrapAnglePi(mean + tnOffset)
             }
@@ -759,6 +844,11 @@ class PdrTracker(
             registrationFailed = sensorStatus.registrationFailed,
             corridorAssistEnabled = corridorAssistEnabled,
             trueNorthAligned = useTrueNorthReference && tnOffset != null,
+            carryMode = carry.mode,
+            inHoldTransition = anyHoldHeading && carry.inTransition,
+            holdChanges = bridgedHoldChanges,
+            headingAligned = headingAligned,
+            readingPose = carry.readingPose,
             externalAccuracyM = externalAccuracyM,
             warnings = warnings.toSet()
         )
@@ -797,6 +887,9 @@ class PdrTracker(
         private const val MAX_EXTERNAL_PULL_M = 1.5
         private const val MAX_EXTERNAL_STEP_M = 0.08
         private const val MAX_HELD_STEPS = 32
+        private const val DEFAULT_STRIDE_NS = 1_100_000_000L
+        private const val MIN_STRIDE_NS = 800_000_000L
+        private const val MAX_STRIDE_NS = 1_600_000_000L
 
         /** Junction (landmark) correction: bounded like the other corrections. */
         const val MAX_LANDMARK_STEP_M = 0.20
