@@ -40,6 +40,22 @@ class RecordingReplayTest {
 
     private val sweep = System.getProperty("sweep") == "true"
 
+    /** Walk with a traced route: PDR metrics and filter runs against it (A3), in truth-eval.txt. */
+    private fun writeTruthEval(name: String, rec: Recording, route: com.hackdecouverte.rec.truth.TruthRoute) {
+        val ds = com.hackdecouverte.rec.train.Datasets.of(name, rec, route, IndoorSite.byId(rec.header.siteId))
+        val t = com.hackdecouverte.tuning.TuningParams()
+        val pdr = com.hackdecouverte.rec.train.WalkEval.pdr(ds, t)
+        val modes = listOf(com.hackdecouverte.rec.train.StartMode.KNOWN_START to 1..3, com.hackdecouverte.rec.train.StartMode.COLD_GPS to 1..3, com.hackdecouverte.rec.train.StartMode.COLD_NO_GPS to 1..2)
+        val runs = com.hackdecouverte.rec.train.WalkEval.parallel(modes.flatMap { (m, seeds) -> seeds.map { s -> { com.hackdecouverte.rec.train.WalkEval.filter(ds, t, m, s) } } })
+        val text = buildString {
+            appendLine("# $name — against the traced route")
+            appendLine("PDR: route %.2f m · walls %.1f /100 m · loop %s · counted/real %.2f".format(java.util.Locale.ROOT, pdr.routeDtwM, pdr.wallCrossingsPer100m, pdr.closurePct?.let { "%.1f %%".format(java.util.Locale.ROOT, it) } ?: "—", pdr.distanceRatio))
+            for (r in runs) appendLine(r.toString())
+        }
+        File("build/replay/$name/truth-eval.txt").writeText(text)
+        println(text)
+    }
+
     @Test
     fun replayRecordedWalks() {
         write("synthetic-corridor", SyntheticWalk.stanislasNorthWestAndBack(IndoorSite.STANISLAS.origin))
@@ -53,6 +69,7 @@ class RecordingReplayTest {
             val name = f.name.removeSuffix(".txt.gz")
             write(name, rec)
             println(WalkAnalysis.write(name, rec, File("build/replay/$name"), sweep))
+            com.hackdecouverte.rec.truth.TruthTrack.load(f)?.let { route -> writeTruthEval(name, rec, route) }
         }
     }
 }

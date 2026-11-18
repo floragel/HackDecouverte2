@@ -36,9 +36,9 @@ internal object WalkAnalysis {
     private val maps = HashMap<String, IndoorMap?>()
 
     fun mapProvider(site: IndoorSite): (String) -> IndoorMap? = { floorId ->
-        maps.getOrPut("${site.id}/$floorId") {
+        synchronized(maps) { maps.getOrPut("${site.id}/$floorId") {
             MapTestSupport.open(site.floorPlanAsset(floorId))?.let { loadIndoorMap(FloorPlan.parse(it)) { p -> MapTestSupport.open(p) } }
-        }
+        } }
     }
 
     fun full(rec: Recording, site: IndoorSite, params: LocParams = LocParams()): ReplayResult =

@@ -2,6 +2,7 @@ package com.hackdecouverte.rec
 
 import com.hackdecouverte.backend.LocalizationController
 import com.hackdecouverte.backend.SystemFix
+import com.hackdecouverte.backend.WarmStart
 import com.hackdecouverte.loc.LocParams
 import com.hackdecouverte.loc.LocParticle
 import com.hackdecouverte.loc.LocState
@@ -93,7 +94,11 @@ class WalkReplay(
      * the sensors up: orientation buffer, compass); markers outside are ignored. Null = the whole walk.
      */
     private val windowStartNs: Long? = null,
-    private val windowEndNs: Long? = null
+    private val windowEndNs: Long? = null,
+    /** Start the search from these zones (e.g. the known start of a traced walk) instead of cold. */
+    private val startHint: WarmStart? = null,
+    /** Called after every PDR step with the time and the controller (support measurements). */
+    private val stepObserver: ((tNs: Long, controller: LocalizationController) -> Unit)? = null
 ) {
     fun run(): ReplayResult {
         val h = recording.header
@@ -149,7 +154,7 @@ class WalkReplay(
             if (!started) {
                 started = true
                 val fix = latestFix?.takeIf { useGps && now - it.timeNs <= SYSTEM_FIX_MAX_AGE_NS }
-                controller.start(h.floorId, fix)
+                controller.start(h.floorId, fix, startHint)
             }
             if (LocalizationController.shouldAutoStartPdr(tracker.state.value, now - startGate)) {
                 tracker.startWithManualStepLength(h.stepLengthM, h.cadenceHz)
@@ -174,6 +179,7 @@ class WalkReplay(
                 val est = controller.estimate
                 val zone = est?.zones?.firstOrNull()
                 steps += ReplayStep(now, s.stepCount, s.position, est?.state, zone?.centerM, zone?.radiusM, controller.stepsSinceStart, epoch)
+                stepObserver?.invoke(now, controller)
                 if (firstFoundNs == null && est?.state == LocState.FOUND) firstFoundNs = now
             }
         }

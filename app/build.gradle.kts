@@ -70,3 +70,11 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation(libs.kotlinx.coroutines.test)
 }
+
+// Replay / training switches reach the unit-test JVM: ./gradlew … -Dtrain=true
+tasks.withType<Test>().configureEach {
+    listOf("train", "accept", "sweep", "loop", "guess", "replay", "bake").forEach { k ->
+        System.getProperty(k)?.let { systemProperty(k, it) }
+    }
+    maxHeapSize = "4g"
+}
