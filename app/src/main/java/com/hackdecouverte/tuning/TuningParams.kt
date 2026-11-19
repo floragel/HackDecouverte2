@@ -35,7 +35,12 @@ data class PdrTuning(
     val pivotFullRateSpanRadS: Double = 1.0,
     val pivotMinQuality: Double = 0.2,
     /** Compass samples ignored while |B| is off its expected value by more than this fraction. */
-    val magGateTolerance: Double = 0.15
+    val magGateTolerance: Double = 0.15,
+    /**
+     * Keep the heading continuous across a detected hold change. Off: both real walks traced better
+     * without it (most pocket "hold changes" were false and it erased the turns made meanwhile).
+     */
+    val holdBridging: Boolean = false
 )
 
 @Serializable
@@ -115,6 +120,7 @@ fun PdrTracker.applyTuning(t: PdrTuning) {
     pivotFullRateSpanRadS = t.pivotFullRateSpanRadS
     pivotMinQuality = t.pivotMinQuality
     magGateTolerance = t.magGateTolerance
+    holdBridgingEnabled = t.holdBridging
 }
 
 fun CarryMonitor.Companion.from(t: CarryTuning): CarryMonitor =

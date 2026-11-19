@@ -28,6 +28,19 @@ class TuningParamsTest {
         assertEquals("v3 (4 marches)", TuningParams(version = 3, trainedOn = listOf("a", "b", "c", "d")).label())
     }
 
+    /**
+     * Both real walks trace better without hold bridging (route DTW 1.65 → 1.52 m and 5.50 → 3.57 m): most
+     * detected hold changes in a pocket are false and bridging erased the turns made meanwhile.
+     */
+    @Test
+    fun holdBridgingIsOffByDefaultAndTunable() {
+        val t = com.hackdecouverte.pdr.PdrTracker(clock = { 0L })
+        t.applyTuning(TuningParams().pdr)
+        assertEquals(false, t.holdBridgingEnabled)
+        t.applyTuning(PdrTuning(holdBridging = true))
+        assertEquals(true, t.holdBridgingEnabled)
+    }
+
     @Test
     fun missingOrBrokenFileGivesDefaults() {
         assertEquals(TuningParams(), Tuning.load { null })

@@ -830,7 +830,10 @@ class PdrTracker(
         // Any-hold (map localization, no calibration walk): the first steps of a walk are slow and the
         // detector doubles some in a pocket, so the base cadence must not be learned from them — a
         // typical walking cadence is the reference instead (the map learns the stride on top).
-        baseCadenceHz = cadenceHz?.takeIf { it.isFinite() && it in 0.6..3.6 } ?: if (anyHoldHeading) typicalCadenceHz else null
+        // A saved cadence outside normal walking (a slow start persisted from an earlier session: 1.22 Hz on
+        // the second real walk, steps lengthened ×1.18) is not a reference in any-hold mode either.
+        val plausible = if (anyHoldHeading) ANY_HOLD_BASE_CADENCE_HZ else 0.6..3.6
+        baseCadenceHz = cadenceHz?.takeIf { it.isFinite() && it in plausible } ?: if (anyHoldHeading) typicalCadenceHz else null
         currentCadenceHz = null
         currentStepLengthM = lengthPerStepM
         recentIntervalsNs.clear()
@@ -1127,6 +1130,9 @@ class PdrTracker(
         private const val DEFAULT_STRIDE_NS = 1_100_000_000L
         /** About 110 steps/min: an average adult walking cadence. */
         const val TYPICAL_CADENCE_HZ = 1.8
+
+        /** Saved base cadences accepted in any-hold mode (normal walking). */
+        val ANY_HOLD_BASE_CADENCE_HZ = 1.5..2.4
         private const val MIN_STRIDE_NS = 800_000_000L
         private const val MAX_STRIDE_NS = 1_600_000_000L
 
