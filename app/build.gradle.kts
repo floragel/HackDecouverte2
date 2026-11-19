@@ -73,7 +73,7 @@ dependencies {
 
 // Replay / training switches reach the unit-test JVM: ./gradlew … -Dtrain=true
 tasks.withType<Test>().configureEach {
-    listOf("train", "accept", "sweep", "loop", "guess", "replay", "bake").forEach { k ->
+    listOf("train", "accept", "sweep", "loop", "guess", "replay", "bake", "traj").forEach { k ->
         System.getProperty(k)?.let { systemProperty(k, it) }
     }
     maxHeapSize = "4g"

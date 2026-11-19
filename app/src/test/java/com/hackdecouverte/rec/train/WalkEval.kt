@@ -106,6 +106,11 @@ object WalkEval {
 
     fun pdr(ds: Dataset, tuning: TuningParams, corridorAssist: Boolean = true): PdrMetrics {
         val run = pdrRun(ds.recording, tuning, corridorAssist)
+        return trajectoryMetrics(ds, run, tuning)
+    }
+
+    /** Same metrics for any dead-reckoned trajectory (PDR, or an external one such as a neural network's). */
+    fun trajectoryMetrics(ds: Dataset, run: PdrRun, tuning: TuningParams = TuningParams()): PdrMetrics {
         val pts = listOf(PointM(0.0, 0.0)) + run.steps.map { it.second }
         val (dtw, rotDeg, k) = TruthEval.score(pts, ds.route.path)
         val routeLen = ds.route.path.zipWithNext().sumOf { (a, b) -> a.distanceTo(b) }
