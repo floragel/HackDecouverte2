@@ -140,7 +140,10 @@ object WalkEval {
     private fun arcAt(track: List<TruthPoint>, tNs: Long): Double? =
         track.lastOrNull { it.tNs <= tNs }?.arcM ?: track.firstOrNull()?.takeIf { it.tNs >= tNs }?.arcM
 
-    fun filter(ds: Dataset, tuning: TuningParams, mode: StartMode, seed: Int): FilterRun {
+    fun filter(
+        ds: Dataset, tuning: TuningParams, mode: StartMode, seed: Int,
+        externalPosition: ((Long) -> PointM?)? = null, externalTrueNorth: Boolean = false
+    ): FilterRun {
         val start = ds.route.path[0]
         val supports = ArrayList<Pair<Long, Double>>()
         val observer = { tNs: Long, c: LocalizationController ->
@@ -155,7 +158,9 @@ object WalkEval {
             ds.recording, ds.site.origin, WalkAnalysis.mapProvider(ds.site, tuning.filter.graphDoorWidthM), seed, tuning,
             useGps = mode == StartMode.COLD_GPS,
             startHint = if (mode == StartMode.KNOWN_START) WarmStart(listOf(LocZone(start, 1.0, 1.0, 0.0)), 0.0) else null,
-            stepObserver = observer
+            stepObserver = observer,
+            externalPosition = externalPosition,
+            externalTrueNorth = externalTrueNorth
         ).run()
         val errs = r.steps.map { st -> st to (TruthTrack.positionAt(ds.track, st.tNs)?.let { q -> st.estimate?.distanceTo(q) }) }
         val firstCorrectFound = errs.firstOrNull { (st, e) -> st.state == LocState.FOUND && e != null && e <= CORRECT_M }?.first

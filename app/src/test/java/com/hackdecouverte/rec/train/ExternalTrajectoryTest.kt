@@ -24,6 +24,16 @@ class ExternalTrajectoryTest {
             val o = rows.first().second
             return PdrRun(rows.drop(1).map { (t, p) -> t to PointM(p.x - o.x, p.y - o.y) }, dist)
         }
+
+        /** Position at a time, linear between rows; null outside the trajectory. */
+        fun positionAt(run: PdrRun, tNs: Long): PointM? {
+            val s = run.steps
+            if (s.isEmpty() || tNs < s.first().first || tNs > s.last().first) return null
+            val i = s.binarySearchBy(tNs) { it.first }.let { if (it >= 0) return s[it].second else -it - 1 }
+            val (t0, a) = s[i - 1]; val (t1, b) = s[i]
+            val k = (tNs - t0).toDouble() / (t1 - t0)
+            return PointM(a.x + k * (b.x - a.x), a.y + k * (b.y - a.y))
+        }
     }
 
     @Test
@@ -46,6 +56,31 @@ class ExternalTrajectoryTest {
             }
             for ((label, m) in rows) sb.append("%-24s %-13s %13.2f %12.1f %7s %18.2f\n".format(
                 ds.name, label, m.routeDtwM, m.wallCrossingsPer100m, m.closurePct?.let { "%.1f".format(it) } ?: "—", m.distanceRatio))
+        }
+        // The same sources through the map filter (default settings): known start 3 seeds, cold 3 + 2.
+        sb.append("\nThrough the map filter (defaults)\nwalk                     source        known med/p90 (m)  support lost  cold FOUND right  wrong FOUND  cold end err (m)\n")
+        for (ds in Datasets.loadAll()) {
+            val sources = mutableListOf<Triple<String, ((Long) -> PointM?)?, Boolean>>(Triple("PDR", null, false))
+            dir!!.listFiles { f -> f.name.startsWith(ds.name + ".") && f.name.endsWith(".csv") }.orEmpty().sorted().forEach { f ->
+                val run = read(f)
+                sources += Triple(f.name.removePrefix(ds.name + ".").removeSuffix(".csv"), { t: Long -> positionAt(run, t) }, f.name.contains("+north"))
+            }
+            for ((label, ext, north) in sources) {
+                val jobs = (1..3).map { s -> { WalkEval.filter(ds, TuningParams(), StartMode.KNOWN_START, s, ext, north) } } +
+                    (1..3).map { s -> { WalkEval.filter(ds, TuningParams(), StartMode.COLD_GPS, s, ext, north) } } +
+                    (1..2).map { s -> { WalkEval.filter(ds, TuningParams(), StartMode.COLD_NO_GPS, s, ext, north) } }
+                val runs = WalkEval.parallel(jobs)
+                val k = runs.filter { it.mode == StartMode.KNOWN_START }
+                val c = runs.filter { it.mode != StartMode.KNOWN_START }
+                fun f(v: Double?) = v?.let { "%.1f".format(it) } ?: "—"
+                sb.append("%-24s %-13s %17s %13s %17s %12s %17s\n".format(
+                    ds.name, label,
+                    f(k.mapNotNull { it.trackErrMedianM }.takeIf { it.isNotEmpty() }?.average()) + " / " + f(k.mapNotNull { it.trackErrP90M }.takeIf { it.isNotEmpty() }?.average()),
+                    "${k.count { it.supportLostAtS != null }}/3",
+                    "${c.count { it.foundAfterM != null }}/5" + (c.mapNotNull { it.foundAfterM }.takeIf { it.isNotEmpty() }?.let { " (%.0f m)".format(it.average()) } ?: ""),
+                    "%.0f %%".format(c.map { it.falseFoundShare }.average() * 100),
+                    f(c.mapNotNull { it.endErrM }.average())))
+            }
         }
         File("build/replay/external-trajectories.txt").writeText(sb.toString())
     }

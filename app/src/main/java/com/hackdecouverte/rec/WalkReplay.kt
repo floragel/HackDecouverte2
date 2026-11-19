@@ -98,7 +98,14 @@ class WalkReplay(
     /** Start the search from these zones (e.g. the known start of a traced walk) instead of cold. */
     private val startHint: WarmStart? = null,
     /** Called after every PDR step with the time and the controller (support measurements). */
-    private val stepObserver: ((tNs: Long, controller: LocalizationController) -> Unit)? = null
+    private val stepObserver: ((tNs: Long, controller: LocalizationController) -> Unit)? = null,
+    /**
+     * Research: the dead-reckoned position at a time from another source (e.g. a neural network's
+     * trajectory), used instead of the PDR's at each PDR step; [externalTrueNorth] says whether that
+     * source's frame is true North (else the filter learns the offset, as for an unaligned PDR).
+     */
+    private val externalPosition: ((tNs: Long) -> PointM?)? = null,
+    private val externalTrueNorth: Boolean = false
 ) {
     fun run(): ReplayResult {
         val h = recording.header
@@ -166,7 +173,8 @@ class WalkReplay(
             if (s.holdChanges > (lastState?.holdChanges ?: 0)) holdTimes += now
             val prevSteps = lastState?.stepCount
             lastState = s
-            controller.onPdrState(s)
+            val ext = externalPosition?.invoke(now)
+            controller.onPdrState(if (ext == null) s else s.copy(position = ext, trueNorthAligned = externalTrueNorth))
             if (controller.stepsSinceStart < lastStepsSinceStart) epoch++
             lastStepsSinceStart = controller.stepsSinceStart
             val tr = controller.tracedPath()
