@@ -22,12 +22,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.environ.get("RONIN_CODE", os.path.join(HERE, "code", "source")))
 from model_resnet1d import BasicBlock1D, FCOutputModule, ResNet1D  # noqa: E402
 
-TYPE_ACC, TYPE_GYRO, TYPE_GAME_RV = 1, 4, 15
+TYPE_ACC, TYPE_GYRO, TYPE_GAME_RV, TYPE_RV = 1, 4, 15, 11
 RATE_HZ, WINDOW, STEP = 200, 200, 10
 
 
 def read_walk(path):
-    acc, gyro, rv = [], [], []
+    acc, gyro, rv, mag_rv = [], [], [], []
     with gzip.open(path, "rt") as f:
         f.readline()  # JSON header
         for line in f:
@@ -35,11 +35,35 @@ def read_walk(path):
                 continue
             p = line.rstrip("\n").split(",")
             typ = int(p[1])
-            if typ not in (TYPE_ACC, TYPE_GYRO, TYPE_GAME_RV):
+            if typ not in (TYPE_ACC, TYPE_GYRO, TYPE_GAME_RV, TYPE_RV):
                 continue
-            row = [int(p[2])] + [float(v) for v in p[6:]]
-            (acc if typ == TYPE_ACC else gyro if typ == TYPE_GYRO else rv).append(row)
-    return [np.array(sorted(a, key=lambda r: r[0])) for a in (acc, gyro, rv)]
+            row = [int(p[2])] + [float(v) for v in p[6:]][:4]
+            {TYPE_ACC: acc, TYPE_GYRO: gyro, TYPE_GAME_RV: rv, TYPE_RV: mag_rv}[typ].append(row)
+    return [np.array(sorted(a, key=lambda r: r[0])) for a in (acc, gyro, rv, mag_rv)]
+
+
+def yaw_of(rv):
+    """Heading (rad) of a rotation vector series: twist about the world vertical."""
+    q = rv_to_quat(rv[:, 1:5])
+    a = quaternion.as_float_array(q)
+    w, x, y, z = a[:, 0], a[:, 1], a[:, 2], a[:, 3]
+    return np.arctan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+
+
+def compass_offset(ts, rv, mag_rv, window_s=20.0):
+    """Compass yaw − gyro yaw, median over a sliding window (the gyro drifts, the compass is noisy)."""
+    if len(mag_rv) < 10:
+        return np.zeros(len(ts))
+    g = np.unwrap(yaw_of(rv)); m = np.unwrap(yaw_of(mag_rv))
+    d = np.interp(mag_rv[:, 0], rv[:, 0], g)
+    off = np.angle(np.exp(1j * (m - d)))
+    out = np.empty(len(ts))
+    half = window_s * 1e9 / 2
+    for i, t in enumerate(ts):
+        sel = np.abs(mag_rv[:, 0] - t) <= half
+        o = off[sel] if sel.any() else off
+        out[i] = np.angle(np.mean(np.exp(1j * o)))
+    return out
 
 
 def rv_to_quat(v):
@@ -84,14 +108,20 @@ def model(arch, path):
     return net.eval()
 
 
-def run(walk, out, model_path=None, arch="resnet18"):
-    acc, gyro, rv = read_walk(walk)
+def run(walk, out, model_path=None, arch="resnet18", compass=False):
+    acc, gyro, rv, mag_rv = read_walk(walk)
     ts, feat = features(acc, gyro, rv)
     net = model(arch, model_path)
     ends = np.arange(WINDOW, len(ts), STEP)
     batch = np.stack([feat[e - WINDOW:e].T for e in ends])
     with torch.no_grad():
         vel = torch.cat([net(torch.from_numpy(batch[i:i + 512])) for i in range(0, len(batch), 512)]).numpy()
+    if compass:
+        # Same correction as the PDR's compass pull: rotate each velocity by the drift of the gyro heading.
+        off = compass_offset(ts[ends], rv, mag_rv)
+        c, sn = np.cos(off), np.sin(off)
+        # Velocity (x, y) in a z-up frame; a heading offset rotates it about z.
+        vel = np.stack([c * vel[:, 0] - sn * vel[:, 1], sn * vel[:, 0] + c * vel[:, 1]], axis=1)
     dt = STEP / RATE_HZ
     pos = np.vstack([[0.0, 0.0], np.cumsum(vel * dt, axis=0)])
     t_out = np.concatenate([[ts[ends[0] - STEP]], ts[ends]])
@@ -111,5 +141,6 @@ if __name__ == "__main__":
     ap.add_argument("out")
     ap.add_argument("--model")
     ap.add_argument("--arch", default="resnet18")
+    ap.add_argument("--compass", action="store_true", help="correct the gyro heading drift with the compass")
     a = ap.parse_args()
-    run(a.walk, a.out, a.model, a.arch)
+    run(a.walk, a.out, a.model, a.arch, a.compass)
