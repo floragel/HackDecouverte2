@@ -21,7 +21,6 @@ import torch
 HERE = os.path.dirname(os.path.abspath(__file__))
 # RoNIN code (GPL-3.0, github.com/Sachini/ronin) is kept outside this repository.
 sys.path.insert(0, os.environ.get("RONIN_CODE", os.path.join(HERE, "code", "source")))
-from model_resnet1d import BasicBlock1D, FCOutputModule, ResNet1D  # noqa: E402
 
 TYPE_ACC, TYPE_MAG, TYPE_GYRO, TYPE_GAME_RV, TYPE_RV = 1, 2, 4, 15, 11
 RATE_HZ, WINDOW, STEP = 200, 200, 10
@@ -119,6 +118,7 @@ def features(acc, gyro, rv):
 
 
 def model(arch, path):
+    from model_resnet1d import BasicBlock1D, FCOutputModule, ResNet1D  # RoNIN code, imported only when used
     fc = {"fc_dim": 512, "in_dim": WINDOW // 32 + 1, "dropout": 0.5, "trans_planes": 128}
     blocks = {"resnet18": [2, 2, 2, 2], "resnet50": [3, 4, 6, 3]}[arch]
     if arch == "resnet50":
