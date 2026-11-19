@@ -1,49 +1,51 @@
 {
-    "version": 2,
+    "version": 3,
     "provisional": true,
     "trainedOn": [
-        "STAN-1_20261118-150346"
+        "STAN-1_20261118-150346",
+        "STAN-1_20261118-193742"
     ],
     "pdr": {
-        "compassPullTauS": 6.0192407107271,
-        "compassPullMaxErrDeg": 55.246676797752876,
+        "compassPullTauS": 23.18696468272259,
+        "compassPullMaxErrDeg": 24.51266780798652,
         "walkAxisCorrection": true,
-        "walkAxisTau": 7.525224672593612,
-        "walkAxisMinRatio": 1.2450785333601213,
-        "strideWindowFactor": 0.808415932648205,
+        "walkAxisTau": 10.109819371020173,
+        "walkAxisMinRatio": 1.6729019688421658,
+        "strideWindowFactor": 0.5945858316362777,
         "typicalCadenceHz": 1.8,
-        "pivotTurnRateRadS": 0.7938305845550705,
+        "pivotTurnRateRadS": 1.1129371720065755,
         "pivotFullRateSpanRadS": 1.0,
         "pivotMinQuality": 0.2,
-        "magGateTolerance": 0.12060413404987971
+        "magGateTolerance": 0.11373650450975546,
+        "holdBridging": false
     },
     "carry": {
         "startDeg": 25.0,
         "commitDeg": 35.0,
         "settledDeg": 12.0,
-        "swingOnDeg": 11.143883378982306,
-        "swingOffDeg": 7.466401863918145
+        "swingOnDeg": 5.012213569255195,
+        "swingOffDeg": 3.358183091400981
     },
     "filter": {
         "maxParticles": 2000,
         "minParticles": 300,
-        "headingNoiseDeg": 4.834981785679896,
-        "bodyCarryNoiseScale": 1.1014988092744535,
-        "lengthNoise": 0.09099287494883157,
-        "offsetDriftDeg": 2.133903237444926,
-        "scaleDrift": 0.023098253076679995,
-        "wallFactor": 0.02701369729049832,
-        "beta": 0.19851037572606584,
-        "recoveryFraction": 0.04123604135837425,
+        "headingNoiseDeg": 6.135577070304029,
+        "bodyCarryNoiseScale": 1.5506605091935348,
+        "lengthNoise": 0.05732943064956508,
+        "offsetDriftDeg": 1.1723407420404168,
+        "scaleDrift": 0.012221940487285674,
+        "wallFactor": 0.05721033190349008,
+        "beta": 0.47890550483226124,
+        "recoveryFraction": 0.006240803950109706,
         "foundWeight": 0.9,
-        "foundRadiusM": 3.631007319453572,
+        "foundRadiusM": 2.660805942838767,
         "approxWeight": 0.6,
         "approxRadiusM": 8.0,
         "goodStepsToTrust": 10,
         "badStepLikelihood": 0.05,
-        "lostRecoveryShare": 0.3213856696963673,
-        "doorWallFactor": 0.07181012229509104,
-        "doorSoftRadiusM": 0.564429298962495,
-        "graphDoorWidthM": 1.0
+        "lostRecoveryShare": 0.5018643456793008,
+        "doorWallFactor": 0.18311946041439864,
+        "doorSoftRadiusM": 0.47868221469511674,
+        "graphDoorWidthM": 1.4
     }
 }
